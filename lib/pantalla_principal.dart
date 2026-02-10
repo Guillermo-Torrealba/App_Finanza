@@ -2234,34 +2234,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required String etiqueta,
     String? inicial,
   }) async {
-    final controller = TextEditingController(text: inicial ?? '');
-    final value = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(titulo),
-          content: TextField(
-            controller: controller,
-            decoration: InputDecoration(labelText: etiqueta),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Guardar'),
-            ),
-          ],
+        return _DialogoTexto(
+          titulo: titulo,
+          etiqueta: etiqueta,
+          inicial: inicial,
         );
       },
     );
-    controller.dispose();
-    if (value == null || value.trim().isEmpty) {
-      return null;
-    }
-    return value.trim();
   }
 
   Future<int?> _pedirEntero({
@@ -2269,38 +2251,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required String etiqueta,
     int? inicial,
   }) async {
-    final controller = TextEditingController(
-      text: inicial == null ? '' : inicial.toString(),
-    );
-    final value = await showDialog<int?>(
+    return showDialog<int>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(titulo),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(labelText: etiqueta),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final parsed = int.tryParse(controller.text.trim());
-                Navigator.pop(context, parsed);
-              },
-              child: const Text('Guardar'),
-            ),
-          ],
+        return _DialogoEntero(
+          titulo: titulo,
+          etiqueta: etiqueta,
+          inicial: inicial,
         );
       },
     );
-    controller.dispose();
-    return value;
   }
 
   Future<void> _agregarCuenta() async {
@@ -3648,6 +3608,124 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           },
         );
       },
+    );
+  }
+}
+
+class _DialogoTexto extends StatefulWidget {
+  final String titulo;
+  final String etiqueta;
+  final String? inicial;
+
+  const _DialogoTexto({
+    required this.titulo,
+    required this.etiqueta,
+    this.inicial,
+  });
+
+  @override
+  State<_DialogoTexto> createState() => _DialogoTextoState();
+}
+
+class _DialogoTextoState extends State<_DialogoTexto> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.inicial ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.titulo),
+      content: TextField(
+        controller: _controller,
+        decoration: InputDecoration(labelText: widget.etiqueta),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final text = _controller.text.trim();
+            if (text.isEmpty) {
+              Navigator.pop(context, null);
+            } else {
+              Navigator.pop(context, text);
+            }
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DialogoEntero extends StatefulWidget {
+  final String titulo;
+  final String etiqueta;
+  final int? inicial;
+
+  const _DialogoEntero({
+    required this.titulo,
+    required this.etiqueta,
+    this.inicial,
+  });
+
+  @override
+  State<_DialogoEntero> createState() => _DialogoEnteroState();
+}
+
+class _DialogoEnteroState extends State<_DialogoEntero> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.inicial == null ? '' : widget.inicial.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.titulo),
+      content: TextField(
+        controller: _controller,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: InputDecoration(labelText: widget.etiqueta),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final parsed = int.tryParse(_controller.text.trim());
+            Navigator.pop(context, parsed);
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
     );
   }
 }

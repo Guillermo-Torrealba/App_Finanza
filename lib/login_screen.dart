@@ -51,13 +51,16 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text.trim(),
         );
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => PantallaPrincipal(
-                settingsController: widget.settingsController,
+          await widget.settingsController.loadFromCloud();
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => PantallaPrincipal(
+                  settingsController: widget.settingsController,
+                ),
               ),
-            ),
-          );
+            );
+          }
         }
       }
     } on AuthException catch (e) {

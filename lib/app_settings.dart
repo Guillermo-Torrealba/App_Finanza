@@ -341,32 +341,43 @@ class SettingsController extends ChangeNotifier {
     _biometricAvailable = await _resolveBiometrics();
 
     // Sync with cloud if logged in
-    await _loadFromCloud();
+    await loadFromCloud();
 
     _ready = true;
     notifyListeners();
   }
 
   Future<void> _saveSettings() async {
-    await _preferences.setString(_settingsKey, jsonEncode(_settings.toJson()));
-    await _syncToCloud();
-  }
-
-  Future<void> _syncToCloud() async {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) return;
     try {
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': session.user.id,
-        'updated_at': DateTime.now().toIso8601String(),
-        'settings': _settings.toJson(),
-      });
-    } catch (_) {
-      // Ignore sync errors for now
+      await _preferences.setString(
+        _settingsKey,
+        jsonEncode(_settings.toJson()),
+      );
+      // Fire-and-forget sync
+      syncToCloud();
+    } catch (e, stack) {
+      debugPrint('Error saving settings: $e\n$stack');
     }
   }
 
-  Future<void> _loadFromCloud() async {
+  Future<void> syncToCloud() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+    try {
+      await Supabase.instance.client
+          .from('profiles')
+          .upsert({
+            'id': session.user.id,
+            'updated_at': DateTime.now().toIso8601String(),
+            'settings': _settings.toJson(),
+          })
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Ignore sync errors
+    }
+  }
+
+  Future<void> loadFromCloud() async {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) return;
     try {
@@ -393,8 +404,12 @@ class SettingsController extends ChangeNotifier {
 
   void _apply(AppSettings updated) {
     _settings = updated;
-    notifyListeners();
-    unawaited(_saveSettings());
+    try {
+      notifyListeners();
+    } catch (e, stack) {
+      debugPrint('Error in notifyListeners (UI Rebuild?): $e\n$stack');
+    }
+    _saveSettings(); // Fire-and-forget inside
   }
 
   void setThemeMode(String value) =>
