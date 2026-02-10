@@ -42,11 +42,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   bool _bloqueada = false;
   bool _desbloqueando = false;
   DateTime? _pausedAt;
+  List<String> _cuentasSeleccionadas = [];
 
   final List<String> _titulosPestanas = const [
     'Mis Finanzas Cloud',
     'Analisis',
-    'Historial',
+    'Crédito',
     'Ajustes',
   ];
 
@@ -56,11 +57,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     WidgetsBinding.instance.addObserver(this);
     widget.settingsController.addListener(_onSettingsChanged);
     _cuentaController.text = widget.settingsController.settings.defaultAccount;
+    _cuentasSeleccionadas = List<String>.from(
+      widget.settingsController.settings.activeAccounts,
+    );
     _programarBloqueoInicial();
   }
 
   @override
   void dispose() {
+    widget.settingsController.removeListener(_onSettingsChanged);
     WidgetsBinding.instance.removeObserver(this);
     widget.settingsController.removeListener(_onSettingsChanged);
     _itemController.dispose();
@@ -82,15 +87,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   void _onSettingsChanged() {
+    if (!mounted) return;
     final settings = widget.settingsController.settings;
-    if (_cuentaController.text.trim().isEmpty) {
+
+    // Validar cuenta por defecto en controller
+    if (_cuentaController.text.trim().isEmpty ||
+        !settings.activeAccounts.contains(_cuentaController.text)) {
       _cuentaController.text = settings.defaultAccount;
     }
-    if (!settings.lockEnabled && _bloqueada && mounted) {
-      setState(() {
+
+    // Limpiar selección de cuentas eliminadas
+    setState(() {
+      _cuentasSeleccionadas.removeWhere(
+        (acc) => !settings.activeAccounts.contains(acc),
+      );
+
+      // Si se desbloqueó desde ajustes
+      if (!settings.lockEnabled && _bloqueada) {
         _bloqueada = false;
-      });
-    }
+      }
+    });
   }
 
   void _programarBloqueoInicial() {
@@ -219,9 +235,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return result ?? false;
   }
 
-  List<String> get _categoriasActivas =>
-      widget.settingsController.settings.activeCategories;
-
   IconData obtenerIcono(String categoria) {
     final value = categoria.toLowerCase();
     if (value.contains('comida')) return Icons.restaurant;
@@ -299,6 +312,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   int calcularSaldo(List<Map<String, dynamic>> movimientos) {
     var saldo = 0;
     for (final mov in movimientos) {
+      // Excluir transacciones de crédito del saldo líquido
+      if (mov['metodo_pago'] == 'Credito') continue;
+
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         saldo += monto;
@@ -674,14 +690,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: _indicePestana == 0
-          ? _construirPaginaInicio()
-          : _indicePestana == 1
-          ? _construirPaginaAnalisis()
-          : _indicePestana == 2
-          ? const Center(child: Text('Proximamente: Historial detallado'))
-          : _construirPaginaAjustes(),
-      floatingActionButton: _indicePestana == 0 && !_bloqueada
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _stream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final todosLosDatos = snapshot.data!;
+
+          return _indicePestana == 0
+              ? _construirPaginaInicio(todosLosDatos)
+              : _indicePestana == 1
+              ? _construirPaginaAnalisis(todosLosDatos)
+              : _indicePestana == 2
+              ? _construirPaginaCredito(todosLosDatos)
+              : _construirPaginaAjustes();
+        },
+      ),
+      floatingActionButton: !_bloqueada
           ? FloatingActionButton(
               onPressed: () => _mostrarDialogo(),
               child: const Icon(Icons.add),
@@ -719,13 +748,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const Spacer(flex: 3), // Gran espacio central
             IconButton(
               icon: Icon(
-                _indicePestana == 2 ? Icons.history : Icons.history_outlined,
+                _indicePestana == 2
+                    ? Icons.credit_card
+                    : Icons.credit_card_outlined,
                 color: _indicePestana == 2
                     ? Theme.of(context).colorScheme.primary
                     : Colors.grey,
               ),
               onPressed: () => setState(() => _indicePestana = 2),
-              tooltip: 'Historial',
+              tooltip: 'Crédito',
             ),
             const Spacer(),
             IconButton(
@@ -798,424 +829,68 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
-  Widget _construirPaginaInicio() {
+  Widget _construirPaginaInicio(List<Map<String, dynamic>> todosLosDatos) {
     final compacto = widget.settingsController.settings.compactMode;
     final margin = compacto ? 12.0 : 16.0;
     final padding = compacto ? 12.0 : 16.0;
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    // Filtrar por cuentas seleccionadas
+    final datosFiltrados = todosLosDatos.where((mov) {
+      final cuenta = (mov['cuenta'] ?? '').toString();
+      return _cuentasSeleccionadas.contains(cuenta);
+    }).toList();
 
-        final todosLosDatos = snapshot.data!;
-        final saldoTotalGlobal = calcularSaldo(todosLosDatos);
-        final alertas = _generarAlertas(todosLosDatos);
+    final saldoTotalGlobal = calcularSaldo(datosFiltrados);
 
-        final datosDelMes = todosLosDatos.where((mov) {
-          final fechaMov = DateTime.parse(mov['fecha']);
-          return fechaMov.year == _mesVisualizado.year &&
-              fechaMov.month == _mesVisualizado.month;
-        }).toList();
+    final datosDelMes = datosFiltrados.where((mov) {
+      final fechaMov = DateTime.parse(mov['fecha']);
+      return fechaMov.year == _mesVisualizado.year &&
+          fechaMov.month == _mesVisualizado.month;
+    }).toList();
 
-        var ingresoMes = 0;
-        var gastoMes = 0;
-        for (final mov in datosDelMes) {
-          final monto = (mov['monto'] as num? ?? 0).toInt();
-          if (mov['tipo'] == 'Ingreso') {
-            ingresoMes += monto;
-          } else {
-            gastoMes += monto;
-          }
-        }
-        final totalNetoMes = ingresoMes - gastoMes;
-        final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
+    var ingresoMes = 0;
+    var gastoMes = 0;
+    for (final mov in datosDelMes) {
+      final monto = (mov['monto'] as num? ?? 0).toInt();
+      if (mov['tipo'] == 'Ingreso') {
+        ingresoMes += monto;
+      } else {
+        gastoMes += monto;
+      }
+    }
+    final totalNetoMes = ingresoMes - gastoMes;
+    final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
 
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  if (alertas.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(margin, 0, margin, 12),
-                      child: Column(
-                        children: alertas.map(_tarjetaAlerta).toList(),
-                      ),
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(
+                  children: [
+                    _selectorCuentas(),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Saldo Total Disponible',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Saldo Total Disponible',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                        Text(
-                          _textoMonto(saldoTotalGlobal),
-                          style: TextStyle(
-                            fontSize: 44,
-                            fontWeight: FontWeight.w900,
-                            color: saldoTotalGlobal >= 0
-                                ? Colors.teal.shade800
-                                : Colors.red.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    margin: EdgeInsets.symmetric(horizontal: margin),
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.chevron_left),
-                          onPressed: () => _cambiarMes(-1),
-                        ),
-                        Text(
-                          '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.chevron_right),
-                          onPressed: () => _cambiarMes(1),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    margin: EdgeInsets.all(margin),
-                    padding: EdgeInsets.all(padding),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(12),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _construirResumen(
-                          'Ingresos',
-                          ingresoMes,
-                          Colors.green,
-                          Icons.arrow_upward,
-                        ),
-                        Container(
-                          height: 40,
-                          width: 1,
-                          color: Colors.grey.shade200,
-                        ),
-                        _construirResumen(
-                          'Gastos',
-                          gastoMes,
-                          Colors.red,
-                          Icons.arrow_downward,
-                        ),
-                        Container(
-                          height: 40,
-                          width: 1,
-                          color: Colors.grey.shade200,
-                        ),
-                        _construirResumen(
-                          'Total Mes',
-                          totalNetoMes,
-                          Colors.teal,
-                          Icons.summarize,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (gastoMes > 0) ...[
-                    const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 5,
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Gastos por Categoria',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Container(
-                      margin: EdgeInsets.symmetric(
-                        horizontal: margin,
-                        vertical: 8,
-                      ),
-                      padding: EdgeInsets.all(padding),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: desgloseCategorias.map((catData) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          obtenerIcono(
-                                            catData['categoria'] as String,
-                                          ),
-                                          size: 18,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          catData['categoria'] as String,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      _textoMonto(catData['monto'] as int),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: catData['porcentaje'] as double,
-                                    backgroundColor: Colors.grey.shade100,
-                                    color: Colors.teal.shade300,
-                                    minHeight: 8,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                    Text(
+                      _textoMonto(saldoTotalGlobal),
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w900,
+                        color: saldoTotalGlobal >= 0
+                            ? Colors.teal.shade800
+                            : Colors.red.shade800,
                       ),
                     ),
                   ],
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Movimientos',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (datosDelMes.isEmpty)
-              const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Text(
-                      'Sin movimientos',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ),
                 ),
-              )
-            else
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final item = datosDelMes[index];
-                  final esIngreso = item['tipo'] == 'Ingreso';
-                  final categoria = (item['categoria'] ?? 'Varios').toString();
-                  final fechaItem = DateTime.parse(item['fecha']);
-
-                  return Container(
-                    margin: EdgeInsets.symmetric(
-                      horizontal: margin,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Dismissible(
-                      key: Key(item['id'].toString()),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade400,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        alignment: Alignment.centerRight,
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 20),
-                          child: Icon(Icons.delete, color: Colors.white),
-                        ),
-                      ),
-                      onDismissed: (_) async {
-                        await supabase
-                            .from('gastos')
-                            .delete()
-                            .eq('id', item['id']);
-                      },
-                      child: ListTile(
-                        onTap: () => _mostrarDialogo(itemParaEditar: item),
-                        leading: CircleAvatar(
-                          backgroundColor: esIngreso
-                              ? Colors.green.shade50
-                              : Colors.red.shade50,
-                          child: Icon(
-                            esIngreso
-                                ? Icons.arrow_upward
-                                : obtenerIcono(categoria),
-                            color: esIngreso ? Colors.green : Colors.red,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          (item['item'] ?? 'Sin nombre').toString(),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          '${fechaItem.day} de ${obtenerNombreMes(fechaItem.month)} · ${(item['cuenta'] ?? '-').toString()}',
-                        ),
-                        trailing: Text(
-                          _textoMonto(item['monto'] as num),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: esIngreso
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }, childCount: datosDelMes.length),
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 90)),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _construirPaginaAnalisis() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final settings = widget.settingsController.settings;
-        final todosLosDatos = snapshot.data!;
-        final datosDelMes = todosLosDatos.where((mov) {
-          final fechaMov = DateTime.parse(mov['fecha']);
-          return fechaMov.year == _mesVisualizado.year &&
-              fechaMov.month == _mesVisualizado.month;
-        }).toList();
-
-        final resumenMes = _calcularResumenMes(todosLosDatos, _mesVisualizado);
-        final ingresoMes = resumenMes['ingresos'] ?? 0;
-        final gastoMes = resumenMes['gastos'] ?? 0;
-        final flujoMes = resumenMes['flujo'] ?? 0;
-        final tasaAhorro = ingresoMes > 0 ? (flujoMes / ingresoMes) : 0.0;
-
-        final hoy = DateTime.now();
-        final diasDelMes = DateUtils.getDaysInMonth(
-          _mesVisualizado.year,
-          _mesVisualizado.month,
-        );
-        final esMesActual =
-            hoy.year == _mesVisualizado.year &&
-            hoy.month == _mesVisualizado.month;
-        var diasTranscurridos = diasDelMes;
-        if (esMesActual) {
-          diasTranscurridos = hoy.day.clamp(1, diasDelMes);
-        }
-        final gastoDiarioPromedio = gastoMes / diasTranscurridos;
-        final ingresoDiarioPromedio = ingresoMes / diasTranscurridos;
-        final proyeccionIngreso = (ingresoDiarioPromedio * diasDelMes).round();
-        final proyeccionGasto = (gastoDiarioPromedio * diasDelMes).round();
-        final proyeccionFlujo = proyeccionIngreso - proyeccionGasto;
-
-        final serieFlujo = _calcularSerieFlujoCaja(todosLosDatos, meses: 6);
-        var sumaFlujo = 0;
-        var maxAbsFlujo = 1.0;
-        for (final punto in serieFlujo) {
-          final flujo = punto['flujo'] as int;
-          sumaFlujo += flujo;
-          final absFlujo = flujo.abs().toDouble();
-          if (absFlujo > maxAbsFlujo) {
-            maxAbsFlujo = absFlujo;
-          }
-        }
-        final flujoPromedio6Meses = (sumaFlujo / serieFlujo.length).round();
-
-        final categoriaTop = _obtenerCategoriaTop(datosDelMes);
-        final nombreCategoriaTop = categoriaTop['categoria'] as String;
-        final montoCategoriaTop = categoriaTop['monto'] as int;
-        final porcentajeCategoriaTop = categoriaTop['porcentaje'] as double;
-
-        final presupuestoGlobal = settings.globalMonthlyBudget;
-        final consumoPresupuesto =
-            presupuestoGlobal != null && presupuestoGlobal > 0
-            ? gastoMes / presupuestoGlobal
-            : null;
-        final cumplimientoMetaAhorro =
-            settings.savingsTargetPercent <= 0 || ingresoMes <= 0
-            ? null
-            : (tasaAhorro * 100) / settings.savingsTargetPercent;
-        final alertas = _generarAlertas(todosLosDatos);
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (alertas.isNotEmpty) ...[
-                ...alertas.map(_tarjetaAlerta),
-                const SizedBox(height: 8),
-              ],
               Container(
+                margin: EdgeInsets.symmetric(horizontal: margin),
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -1232,7 +907,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Text(
                       '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
                       style: const TextStyle(
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1243,155 +918,518 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _tarjetaAnalisis(
-                titulo: 'Flujo de caja del mes',
-                valor: _textoMonto(flujoMes),
-                descripcion:
-                    'Ingresos ${_textoMonto(ingresoMes)} | Gastos ${_textoMonto(gastoMes)}',
-                icono: Icons.waterfall_chart,
-                color: flujoMes >= 0 ? Colors.teal : Colors.red,
-              ),
-              const SizedBox(height: 12),
-              _tarjetaAnalisis(
-                titulo: 'Tasa de ahorro',
-                valor: '${(tasaAhorro * 100).toStringAsFixed(1)}%',
-                descripcion: ingresoMes > 0
-                    ? 'Porcentaje de ingreso que queda como ahorro'
-                    : 'Sin ingresos para calcular tasa',
-                icono: Icons.savings_outlined,
-                color: tasaAhorro >= 0 ? Colors.green : Colors.red,
-              ),
-              const SizedBox(height: 12),
-              _tarjetaAnalisis(
-                titulo: 'Proyeccion de cierre',
-                valor: _textoMonto(proyeccionFlujo),
-                descripcion:
-                    'Proyeccion mensual basada en promedio diario actual',
-                icono: Icons.trending_up,
-                color: proyeccionFlujo >= 0 ? Colors.teal : Colors.red,
-              ),
-              const SizedBox(height: 12),
-              _tarjetaAnalisis(
-                titulo: 'Gasto diario promedio',
-                valor: _textoMonto(gastoDiarioPromedio.round()),
-                descripcion:
-                    'Calculado sobre $diasTranscurridos dia(s) del periodo',
-                icono: Icons.calendar_view_day,
-                color: Colors.orange.shade700,
-              ),
-              const SizedBox(height: 12),
-              _tarjetaAnalisis(
-                titulo: 'Categoria con mayor gasto',
-                valor: nombreCategoriaTop,
-                descripcion:
-                    '${_textoMonto(montoCategoriaTop)} (${(porcentajeCategoriaTop * 100).toStringAsFixed(1)}% del gasto)',
-                icono: Icons.label_important_outline,
-                color: Colors.indigo,
-              ),
-              if (consumoPresupuesto != null) ...[
-                const SizedBox(height: 12),
-                _tarjetaAnalisis(
-                  titulo: 'Consumo de presupuesto global',
-                  valor: '${(consumoPresupuesto * 100).toStringAsFixed(1)}%',
-                  descripcion:
-                      'Presupuesto ${_textoMonto(presupuestoGlobal!, ocultable: false)}',
-                  icono: Icons.account_balance_wallet_outlined,
-                  color: consumoPresupuesto < 0.8
-                      ? Colors.green
-                      : consumoPresupuesto < 1
-                      ? Colors.orange
-                      : Colors.red,
-                ),
-              ],
-              if (cumplimientoMetaAhorro != null) ...[
-                const SizedBox(height: 12),
-                _tarjetaAnalisis(
-                  titulo: 'Meta de ahorro',
-                  valor:
-                      '${(cumplimientoMetaAhorro * 100).toStringAsFixed(1)}% cumplida',
-                  descripcion:
-                      'Objetivo: ${settings.savingsTargetPercent.toStringAsFixed(1)}%',
-                  icono: Icons.flag_outlined,
-                  color: cumplimientoMetaAhorro >= 1
-                      ? Colors.green
-                      : Colors.orange,
-                ),
-              ],
-              const SizedBox(height: 16),
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                margin: EdgeInsets.all(margin),
+                padding: EdgeInsets.all(padding),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha(10),
+                      color: Colors.black.withAlpha(12),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    const Text(
-                      'Tendencia de flujo (ultimos 6 meses)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    _construirResumen(
+                      'Ingresos',
+                      ingresoMes,
+                      Colors.green,
+                      Icons.arrow_upward,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Flujo promedio: ${_textoMonto(flujoPromedio6Meses)}',
-                      style: TextStyle(color: Colors.grey.shade700),
+                    Container(
+                      height: 40,
+                      width: 1,
+                      color: Colors.grey.shade200,
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      height: 120,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: serieFlujo.map((punto) {
-                          final flujo = punto['flujo'] as int;
-                          final altura = ((flujo.abs() / maxAbsFlujo) * 70) + 8;
-                          final color = flujo >= 0
-                              ? Colors.green.shade400
-                              : Colors.red.shade400;
-                          return Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Container(
-                                  width: 16,
-                                  height: altura,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  _mesCorto(punto['mes'] as DateTime),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                    _construirResumen(
+                      'Gastos',
+                      gastoMes,
+                      Colors.red,
+                      Icons.arrow_downward,
+                    ),
+                    Container(
+                      height: 40,
+                      width: 1,
+                      color: Colors.grey.shade200,
+                    ),
+                    _construirResumen(
+                      'Total Mes',
+                      totalNetoMes,
+                      Colors.teal,
+                      Icons.summarize,
                     ),
                   ],
                 ),
               ),
+              if (gastoMes > 0) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Gastos por Categoria',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  margin: EdgeInsets.symmetric(horizontal: margin, vertical: 8),
+                  padding: EdgeInsets.all(padding),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: desgloseCategorias.map((catData) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      obtenerIcono(
+                                        catData['categoria'] as String,
+                                      ),
+                                      size: 18,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      catData['categoria'] as String,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  _textoMonto(catData['monto'] as int),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: catData['porcentaje'] as double,
+                                backgroundColor: Colors.grey.shade100,
+                                color: Colors.teal.shade300,
+                                minHeight: 8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Movimientos',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ),
+        if (datosDelMes.isEmpty)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: Text(
+                  'Sin movimientos',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = datosDelMes[index];
+              final esIngreso = item['tipo'] == 'Ingreso';
+              final categoria = (item['categoria'] ?? 'Varios').toString();
+              final fechaItem = DateTime.parse(item['fecha']);
+
+              return Container(
+                margin: EdgeInsets.symmetric(horizontal: margin, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Dismissible(
+                  key: Key(item['id'].toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade400,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.centerRight,
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 20),
+                      child: Icon(Icons.delete, color: Colors.white),
+                    ),
+                  ),
+                  onDismissed: (_) async {
+                    await supabase.from('gastos').delete().eq('id', item['id']);
+                  },
+                  child: ListTile(
+                    onTap: () => _mostrarDialogo(itemParaEditar: item),
+                    leading: CircleAvatar(
+                      backgroundColor: esIngreso
+                          ? Colors.green.shade50
+                          : Colors.red.shade50,
+                      child: Icon(
+                        esIngreso
+                            ? Icons.arrow_upward
+                            : obtenerIcono(categoria),
+                        color: esIngreso ? Colors.green : Colors.red,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      (item['item'] ?? 'Sin nombre').toString(),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${fechaItem.day} de ${obtenerNombreMes(fechaItem.month)} · ${(item['cuenta'] ?? '-').toString()}',
+                    ),
+                    trailing: Text(
+                      _textoMonto(item['monto'] as num),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: esIngreso
+                            ? Colors.green.shade700
+                            : Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }, childCount: datosDelMes.length),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 90)),
+      ],
+    );
+  }
+
+  Widget _selectorCuentas() {
+    final accounts = widget.settingsController.settings.activeAccounts;
+    final allSelected =
+        _cuentasSeleccionadas.length == accounts.length &&
+        _cuentasSeleccionadas.toSet().containsAll(accounts);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FilterChip(
+              label: const Text('Todas'),
+              selected: allSelected,
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    _cuentasSeleccionadas = List.from(accounts);
+                  } else {
+                    // Si deseleccionamos "Todas", ¿qué hacemos?
+                    // Quizás dejar solo la por defecto o ninguna?
+                    // Dejar ninguna podría mostrar "Sin movimientos".
+                    _cuentasSeleccionadas.clear();
+                  }
+                });
+              },
+            ),
+          ),
+          ...accounts.map((account) {
+            final isSelected = _cuentasSeleccionadas.contains(account);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: FilterChip(
+                label: Text(account),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _cuentasSeleccionadas.add(account);
+                    } else {
+                      _cuentasSeleccionadas.remove(account);
+                    }
+                  });
+                },
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirPaginaAnalisis(List<Map<String, dynamic>> todosLosDatos) {
+    // StreamBuilder removed
+    final settings = widget.settingsController.settings;
+    final datosDelMes = todosLosDatos.where((mov) {
+      final fechaMov = DateTime.parse(mov['fecha']);
+      return fechaMov.year == _mesVisualizado.year &&
+          fechaMov.month == _mesVisualizado.month;
+    }).toList();
+
+    final resumenMes = _calcularResumenMes(todosLosDatos, _mesVisualizado);
+    final ingresoMes = resumenMes['ingresos'] ?? 0;
+    final gastoMes = resumenMes['gastos'] ?? 0;
+    final flujoMes = resumenMes['flujo'] ?? 0;
+    final tasaAhorro = ingresoMes > 0 ? (flujoMes / ingresoMes) : 0.0;
+
+    final hoy = DateTime.now();
+    final diasDelMes = DateUtils.getDaysInMonth(
+      _mesVisualizado.year,
+      _mesVisualizado.month,
+    );
+    final esMesActual =
+        hoy.year == _mesVisualizado.year && hoy.month == _mesVisualizado.month;
+    var diasTranscurridos = diasDelMes;
+    if (esMesActual) {
+      diasTranscurridos = hoy.day.clamp(1, diasDelMes);
+    }
+    final gastoDiarioPromedio = gastoMes / diasTranscurridos;
+    final ingresoDiarioPromedio = ingresoMes / diasTranscurridos;
+    final proyeccionIngreso = (ingresoDiarioPromedio * diasDelMes).round();
+    final proyeccionGasto = (gastoDiarioPromedio * diasDelMes).round();
+    final proyeccionFlujo = proyeccionIngreso - proyeccionGasto;
+
+    final serieFlujo = _calcularSerieFlujoCaja(todosLosDatos, meses: 6);
+    var sumaFlujo = 0;
+    var maxAbsFlujo = 1.0;
+    for (final punto in serieFlujo) {
+      final flujo = punto['flujo'] as int;
+      sumaFlujo += flujo;
+      final absFlujo = flujo.abs().toDouble();
+      if (absFlujo > maxAbsFlujo) {
+        maxAbsFlujo = absFlujo;
+      }
+    }
+    final flujoPromedio6Meses = (sumaFlujo / serieFlujo.length).round();
+
+    final categoriaTop = _obtenerCategoriaTop(datosDelMes);
+    final nombreCategoriaTop = categoriaTop['categoria'] as String;
+    final montoCategoriaTop = categoriaTop['monto'] as int;
+    final porcentajeCategoriaTop = categoriaTop['porcentaje'] as double;
+
+    final presupuestoGlobal = settings.globalMonthlyBudget;
+    final consumoPresupuesto =
+        presupuestoGlobal != null && presupuestoGlobal > 0
+        ? gastoMes / presupuestoGlobal
+        : null;
+    final cumplimientoMetaAhorro =
+        settings.savingsTargetPercent <= 0 || ingresoMes <= 0
+        ? null
+        : (tasaAhorro * 100) / settings.savingsTargetPercent;
+    final alertas = _generarAlertas(todosLosDatos);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (alertas.isNotEmpty) ...[
+            ...alertas.map(_tarjetaAlerta),
+            const SizedBox(height: 8),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => _cambiarMes(-1),
+                ),
+                Text(
+                  '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () => _cambiarMes(1),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _tarjetaAnalisis(
+            titulo: 'Flujo de caja del mes',
+            valor: _textoMonto(flujoMes),
+            descripcion:
+                'Ingresos ${_textoMonto(ingresoMes)} | Gastos ${_textoMonto(gastoMes)}',
+            icono: Icons.waterfall_chart,
+            color: flujoMes >= 0 ? Colors.teal : Colors.red,
+          ),
+          const SizedBox(height: 12),
+          _tarjetaAnalisis(
+            titulo: 'Tasa de ahorro',
+            valor: '${(tasaAhorro * 100).toStringAsFixed(1)}%',
+            descripcion: ingresoMes > 0
+                ? 'Porcentaje de ingreso que queda como ahorro'
+                : 'Sin ingresos para calcular tasa',
+            icono: Icons.savings_outlined,
+            color: tasaAhorro >= 0 ? Colors.green : Colors.red,
+          ),
+          const SizedBox(height: 12),
+          _tarjetaAnalisis(
+            titulo: 'Proyeccion de cierre',
+            valor: _textoMonto(proyeccionFlujo),
+            descripcion: 'Proyeccion mensual basada en promedio diario actual',
+            icono: Icons.trending_up,
+            color: proyeccionFlujo >= 0 ? Colors.teal : Colors.red,
+          ),
+          const SizedBox(height: 12),
+          _tarjetaAnalisis(
+            titulo: 'Gasto diario promedio',
+            valor: _textoMonto(gastoDiarioPromedio.round()),
+            descripcion:
+                'Calculado sobre $diasTranscurridos dia(s) del periodo',
+            icono: Icons.calendar_view_day,
+            color: Colors.orange.shade700,
+          ),
+          const SizedBox(height: 12),
+          _tarjetaAnalisis(
+            titulo: 'Categoria con mayor gasto',
+            valor: nombreCategoriaTop,
+            descripcion:
+                '${_textoMonto(montoCategoriaTop)} (${(porcentajeCategoriaTop * 100).toStringAsFixed(1)}% del gasto)',
+            icono: Icons.label_important_outline,
+            color: Colors.indigo,
+          ),
+          if (consumoPresupuesto != null) ...[
+            const SizedBox(height: 12),
+            _tarjetaAnalisis(
+              titulo: 'Consumo de presupuesto global',
+              valor: '${(consumoPresupuesto * 100).toStringAsFixed(1)}%',
+              descripcion:
+                  'Presupuesto ${_textoMonto(presupuestoGlobal!, ocultable: false)}',
+              icono: Icons.account_balance_wallet_outlined,
+              color: consumoPresupuesto < 0.8
+                  ? Colors.green
+                  : consumoPresupuesto < 1
+                  ? Colors.orange
+                  : Colors.red,
+            ),
+          ],
+          if (cumplimientoMetaAhorro != null) ...[
+            const SizedBox(height: 12),
+            _tarjetaAnalisis(
+              titulo: 'Meta de ahorro',
+              valor:
+                  '${(cumplimientoMetaAhorro * 100).toStringAsFixed(1)}% cumplida',
+              descripcion:
+                  'Objetivo: ${settings.savingsTargetPercent.toStringAsFixed(1)}%',
+              icono: Icons.flag_outlined,
+              color: cumplimientoMetaAhorro >= 1 ? Colors.green : Colors.orange,
+            ),
+          ],
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tendencia de flujo (ultimos 6 meses)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Flujo promedio: ${_textoMonto(flujoPromedio6Meses)}',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 120,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: serieFlujo.map((punto) {
+                      final flujo = punto['flujo'] as int;
+                      final altura = ((flujo.abs() / maxAbsFlujo) * 70) + 8;
+                      final color = flujo >= 0
+                          ? Colors.green.shade400
+                          : Colors.red.shade400;
+                      return Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              width: 16,
+                              height: altura,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _mesCorto(punto['mes'] as DateTime),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1490,6 +1528,67 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         ),
       ],
     );
+  }
+
+  Future<void> _ajustarSaldoCuenta(String cuenta) async {
+    try {
+      final List<dynamic> response = await supabase
+          .from('gastos')
+          .select('monto, tipo')
+          .eq('cuenta', cuenta);
+
+      var saldoActual = 0;
+      for (final mov in response) {
+        final monto = (mov['monto'] as num? ?? 0).toInt();
+        if (mov['tipo'] == 'Ingreso') {
+          saldoActual += monto;
+        } else {
+          saldoActual -= monto;
+        }
+      }
+
+      if (!mounted) return;
+
+      final nuevoSaldoStr = await _pedirTexto(
+        titulo: 'Ajustar saldo: $cuenta',
+        etiqueta:
+            'Nuevo saldo (Actual: ${_textoMonto(saldoActual, ocultable: false)})',
+        inicial: saldoActual.toString(),
+      );
+
+      if (nuevoSaldoStr == null) return;
+
+      final nuevoSaldo = _parseMonto(nuevoSaldoStr);
+
+      if (nuevoSaldo == saldoActual) return;
+
+      final diferencia = nuevoSaldo - saldoActual;
+      final esIngreso = diferencia > 0;
+      final montoAjuste = diferencia.abs();
+      final fechaStr = DateTime.now().toIso8601String().split('T').first;
+
+      await supabase.from('gastos').insert({
+        'user_id': supabase.auth.currentUser!.id,
+        'fecha': fechaStr,
+        'item': 'Ajuste',
+        'monto': montoAjuste,
+        'categoria': 'Ajuste',
+        'cuenta': cuenta,
+        'tipo': esIngreso ? 'Ingreso' : 'Gasto',
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saldo ajustado correctamente')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al ajustar saldo: $e')));
+      }
+    }
   }
 
   Widget _construirPaginaAjustes() {
@@ -1680,6 +1779,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           },
                         ),
                         IconButton(
+                          tooltip: 'Ajustar saldo',
+                          icon: const Icon(
+                            Icons.account_balance_wallet_outlined,
+                          ),
+                          onPressed: () => _ajustarSaldoCuenta(account),
+                        ),
+                        IconButton(
                           tooltip: 'Editar',
                           icon: const Icon(Icons.edit_outlined),
                           onPressed: () => _editarCuenta(account),
@@ -1823,11 +1929,90 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
                 Slider(
                   min: 0,
-                  max: 60,
-                  divisions: 60,
+                  max: 100,
+                  divisions: 50,
                   value: settings.savingsTargetPercent,
                   label: '${settings.savingsTargetPercent.toStringAsFixed(1)}%',
                   onChanged: widget.settingsController.setSavingsTargetPercent,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _seccionAjustes(
+              titulo: 'Ajustes de Crédito',
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Día de facturación tarjeta'),
+                  subtitle: Text('Día ${settings.creditCardBillingDay}'),
+                  trailing: SizedBox(
+                    width: 170,
+                    child: Slider(
+                      value: settings.creditCardBillingDay.toDouble(),
+                      min: 1,
+                      max: 31,
+                      divisions: 30,
+                      label: settings.creditCardBillingDay.toString(),
+                      onChanged: (value) {
+                        widget.settingsController.setCreditCardBillingDay(
+                          value.round(),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Día de vencimiento tarjeta'),
+                  subtitle: Text('Día ${settings.creditCardDueDay}'),
+                  trailing: SizedBox(
+                    width: 170,
+                    child: Slider(
+                      value: settings.creditCardDueDay.toDouble(),
+                      min: 1,
+                      max: 31,
+                      divisions: 30,
+                      label: settings.creditCardDueDay.toString(),
+                      onChanged: (value) {
+                        widget.settingsController.setCreditCardDueDay(
+                          value.round(),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Créditos de Consumo',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                ...settings.consumptionCredits.map((credit) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(credit['name']),
+                    subtitle: Text(
+                      '${formatoMoneda(credit['amount'])} - ${credit['installments']} cuotas',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () {
+                        widget.settingsController.removeConsumptionCredit(
+                          credit['id'],
+                        );
+                      },
+                    ),
+                  );
+                }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _agregarCreditoConsumo,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Agregar crédito'),
+                  ),
                 ),
               ],
             ),
@@ -2124,7 +2309,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       etiqueta: 'Nombre de cuenta',
     );
     if (value == null) return;
-    widget.settingsController.addAccount(value);
+
+    try {
+      widget.settingsController.addAccount(value);
+      if (mounted) {
+        _mostrarSnack('Cuenta agregada: $value');
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarSnack('Error al agregar cuenta: $e');
+      }
+    }
   }
 
   Future<void> _editarCuenta(String actual) async {
@@ -2430,7 +2625,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final esEdicion = itemParaEditar != null;
     DateTime fechaSeleccionadaEnDialogo;
 
-    final categoriasDisponibles = [..._categoriasActivas];
+    final categoriasDisponibles = [
+      ...widget.settingsController.settings.activeCategories,
+    ];
     if (categoriasDisponibles.isEmpty) {
       categoriasDisponibles.add('Varios');
     }
@@ -2440,6 +2637,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
 
     String cuentaSeleccionada;
+    bool esCredito = false;
+
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
       _montoController.text = (itemParaEditar['monto'] ?? '').toString();
@@ -2457,6 +2656,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         cuentasDisponibles.add(cuentaSeleccionada);
       }
       _cuentaController.text = cuentaSeleccionada;
+
+      final metodo = (itemParaEditar['metodo_pago'] ?? 'Debito').toString();
+      esCredito = metodo == 'Credito';
     } else {
       _itemController.clear();
       _montoController.clear();
@@ -2464,6 +2666,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       _categoriaSeleccionada = categoriasDisponibles.first;
       cuentaSeleccionada = settings.defaultAccount;
       _cuentaController.text = cuentaSeleccionada;
+      esCredito = false;
     }
 
     showDialog<void>(
@@ -2471,6 +2674,65 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
+            Future<void> guardarNuevo(String tipo, DateTime fecha) async {
+              final montoStr = _montoController.text.trim();
+              if (montoStr.isEmpty) return;
+              final monto = int.tryParse(montoStr) ?? 0;
+
+              final item = _itemController.text.trim();
+              final categoria = _categoriaSeleccionada ?? 'Varios';
+              final metodo = esCredito ? 'Credito' : 'Debito';
+
+              try {
+                await supabase.from('gastos').insert({
+                  'user_id': supabase.auth.currentUser!.id,
+                  'fecha': fecha.toIso8601String(),
+                  'item': item.isEmpty ? 'Sin nombre' : item,
+                  'monto': monto,
+                  'categoria': categoria,
+                  'cuenta': cuentaSeleccionada,
+                  'tipo': tipo,
+                  'metodo_pago': metodo,
+                });
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                if (mounted)
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            }
+
+            Future<void> actualizarExistente(int id, DateTime fecha) async {
+              final montoStr = _montoController.text.trim();
+              if (montoStr.isEmpty) return;
+              final monto = int.tryParse(montoStr) ?? 0;
+
+              final item = _itemController.text.trim();
+              final categoria = _categoriaSeleccionada ?? 'Varios';
+              final metodo = esCredito ? 'Credito' : 'Debito';
+
+              try {
+                await supabase
+                    .from('gastos')
+                    .update({
+                      'fecha': fecha.toIso8601String(),
+                      'item': item.isEmpty ? 'Sin nombre' : item,
+                      'monto': monto,
+                      'categoria': categoria,
+                      'cuenta': cuentaSeleccionada,
+                      'metodo_pago': metodo,
+                    })
+                    .eq('id', id);
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                if (mounted)
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            }
+
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
@@ -2572,6 +2834,42 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       },
                     ),
                     const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Text(
+                          'Método de pago:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: SegmentedButton<bool>(
+                            segments: const [
+                              ButtonSegment<bool>(
+                                value: false,
+                                label: Text('Débito'),
+                                icon: Icon(Icons.account_balance_wallet),
+                              ),
+                              ButtonSegment<bool>(
+                                value: true,
+                                label: Text('Crédito'),
+                                icon: Icon(Icons.credit_card),
+                              ),
+                            ],
+                            selected: {esCredito},
+                            onSelectionChanged: (Set<bool> newSelection) {
+                              setStateDialog(() {
+                                esCredito = newSelection.first;
+                              });
+                            },
+                            style: ButtonStyle(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
                     TextField(
                       controller: _montoController,
                       decoration: InputDecoration(
@@ -2620,6 +2918,731 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     child: const Text('Ingreso'),
                   ),
                 ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _construirPaginaCredito(List<Map<String, dynamic>> todosLosDatos) {
+    final settings = widget.settingsController.settings;
+    final now = DateTime.now();
+    final billingDay = settings.creditCardBillingDay;
+    final dueDay = settings.creditCardDueDay;
+
+    // --- Lógica de Ciclos de Tarjeta ---
+    // Calculamos el cutoff del mes actual
+    final cutoffThisMonth = DateTime(now.year, now.month, billingDay);
+
+    // Si hoy es después del corte, el ciclo actual empezó el día siguiente al corte (BillingDay + 1)
+    // y termina el próximo BillingDay.
+    // Si hoy es antes del corte, el ciclo actual empezó el mes pasado.
+
+    DateTime cycleStart;
+    DateTime cycleEnd;
+    DateTime lastCycleStart;
+    DateTime lastCycleEnd;
+
+    if (now.isAfter(cutoffThisMonth)) {
+      // Estamos en el ciclo que cierra el mes que viene
+      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
+      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
+
+      lastCycleEnd = cutoffThisMonth;
+      lastCycleStart = DateTime(
+        now.year,
+        now.month - 1,
+        billingDay,
+      ).add(const Duration(days: 1));
+    } else {
+      // Estamos en el ciclo que cierra este mes
+      cycleEnd = cutoffThisMonth;
+      cycleStart = DateTime(
+        now.year,
+        now.month - 1,
+        billingDay,
+      ).add(const Duration(days: 1));
+
+      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
+      lastCycleStart = DateTime(
+        now.year,
+        now.month - 2,
+        billingDay,
+      ).add(const Duration(days: 1));
+    }
+
+    final creditExpenses = todosLosDatos
+        .where(
+          (m) =>
+              (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
+              (m['tipo'] == 'Gasto'),
+        )
+        .toList();
+
+    int calcularTotal(List<dynamic> movimientos, DateTime start, DateTime end) {
+      var total = 0;
+      for (final m in movimientos) {
+        final d = DateTime.parse(m['fecha']);
+        // start <= d <= end
+        // Simplificación: check year/month/day comparisons or just logic
+        // Usando compareTo para asegurar
+        if (!d.isBefore(start) && !d.isAfter(end)) {
+          total += (m['monto'] as num).toInt();
+        }
+      }
+      return total;
+    }
+
+    // Nota: cycleStart es inclusive, cycleEnd es inclusive (el día de corte entra)
+    // Ajustar lógica de "isBefore" / "isAfter"
+    // isBefore(start) falsificará si es == start? No. isBefore es estricto.
+    // !isBefore(start) -> >= start
+    // !isAfter(end) -> <= end
+
+    // Ajuste fino de fechas a inicio/fin de día
+    final curStart = DateTime(
+      cycleStart.year,
+      cycleStart.month,
+      cycleStart.day,
+    );
+    final curEnd = DateTime(
+      cycleEnd.year,
+      cycleEnd.month,
+      cycleEnd.day,
+      23,
+      59,
+      59,
+    );
+
+    final lastStart = DateTime(
+      lastCycleStart.year,
+      lastCycleStart.month,
+      lastCycleStart.day,
+    );
+    final lastEnd = DateTime(
+      lastCycleEnd.year,
+      lastCycleEnd.month,
+      lastCycleEnd.day,
+      23,
+      59,
+      59,
+    );
+
+    final porFacturar = calcularTotal(creditExpenses, curStart, curEnd);
+    final facturado = calcularTotal(creditExpenses, lastStart, lastEnd);
+
+    // --- Fin Lógica ---
+
+    // Calcular fechas para el mes visualizado
+    final firstDayOfMonth = DateTime(
+      _mesVisualizado.year,
+      _mesVisualizado.month,
+      1,
+    );
+    final daysInMonth = DateUtils.getDaysInMonth(
+      firstDayOfMonth.year,
+      firstDayOfMonth.month,
+    );
+
+    // Offset para empezar el calendario en el día correcto de la semana (Lunes=1)
+    // DateTime.weekday devuelve 1 para Lunes, 7 para Domingo.
+    // Si queremos empezar en Lunes, el offset es weekday - 1.
+    // Si queremos empezar en Domingo, y weekday es 7 (Dom), offset 0. Si es 1 (Lun), offset 1.
+    // Asumiremos inicio Lunes por simplicidad o configurar según settings.
+    final startingWeekday = firstDayOfMonth.weekday;
+    final offset = startingWeekday - 1;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Tarjetas de Resumen
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.indigo.shade100),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Por Facturar',
+                        style: TextStyle(color: Colors.indigo),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _textoMonto(porFacturar),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                      Text(
+                        '${curStart.day}/${curStart.month} - ${curEnd.day}/${curEnd.month}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.indigo.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.orange.shade100),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Facturado',
+                        style: TextStyle(color: Colors.deepOrange),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _textoMonto(facturado),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                      Text(
+                        '${lastStart.day}/${lastStart.month} - ${lastEnd.day}/${lastEnd.month}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.deepOrange.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => _cambiarMes(-1),
+                ),
+                Text(
+                  '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () => _cambiarMes(1),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Calendario
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Cabecera días semana
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+                      .map(
+                        (d) => Text(
+                          d,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                  ),
+                  itemCount: daysInMonth + offset,
+                  itemBuilder: (context, index) {
+                    if (index < offset) {
+                      return const SizedBox();
+                    }
+                    final day = index - offset + 1;
+                    final date = DateTime(
+                      _mesVisualizado.year,
+                      _mesVisualizado.month,
+                      day,
+                    );
+
+                    bool isBilling = day == billingDay;
+                    bool isDue = day == dueDay;
+                    bool isToday =
+                        date.year == now.year &&
+                        date.month == now.month &&
+                        date.day == now.day;
+
+                    // Chequear si hay créditos que se pagan hoy
+                    final creditosHoy = settings.consumptionCredits.where((c) {
+                      final paymentDay = c['paymentDay'] as int;
+                      // Verificar si el crédito está activo en esta fecha
+                      final start = DateTime.parse(c['startDate']);
+                      final end = DateTime(
+                        start.year,
+                        start.month + (c['installments'] as int),
+                        start.day,
+                      );
+                      return day == paymentDay &&
+                          !date.isBefore(start) &&
+                          date.isBefore(end);
+                    }).toList();
+
+                    final hasCreditPayment = creditosHoy.isNotEmpty;
+
+                    Color? bgColor;
+                    Color textColor = Colors.black87;
+
+                    if (isToday) {
+                      bgColor = Colors.blue.shade50;
+                      textColor = Colors.blue.shade900;
+                    }
+                    if (isBilling) {
+                      bgColor = Colors.indigo.shade100;
+                      textColor = Colors.indigo.shade900;
+                    }
+                    if (isDue) {
+                      bgColor = Colors.red.shade100;
+                      textColor = Colors.red.shade900;
+                    }
+                    if (hasCreditPayment) {
+                      // Si coincide con otros eventos, mostramos indicador visual extra o color mezclado
+                      // Prioridad visual: Vencimiento > Facturación > Crédito
+                      if (!isDue && !isBilling) {
+                        bgColor = Colors.green.shade100;
+                        textColor = Colors.green.shade900;
+                      }
+                    }
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        shape: BoxShape.circle,
+                        border: isToday
+                            ? Border.all(color: Colors.blue, width: 2)
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Text(
+                            '$day',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          if (hasCreditPayment)
+                            Positioned(
+                              bottom: 4,
+                              child: Container(
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade700,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _leyendaCalendario(Colors.indigo.shade100, 'Facturación'),
+                    _leyendaCalendario(Colors.red.shade100, 'Vencimiento'),
+                    _leyendaCalendario(Colors.green.shade100, 'Crédito'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          const Text(
+            'Próximos eventos',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          _construirEventosDelMes(settings, daysInMonth),
+
+          const SizedBox(height: 24),
+          const Text(
+            'Créditos de Consumo',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          if (settings.consumptionCredits.isEmpty)
+            const Text(
+              'No hay créditos activos',
+              style: TextStyle(color: Colors.grey),
+            )
+          else
+            ...settings.consumptionCredits.map(
+              (c) => _tarjetaCreditoConsumo(c),
+            ),
+
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _leyendaCalendario(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _construirEventosDelMes(AppSettings settings, int daysInMonth) {
+    final eventos = <Map<String, dynamic>>[];
+
+    // Facturación
+    if (settings.creditCardBillingDay <= daysInMonth) {
+      eventos.add({
+        'day': settings.creditCardBillingDay,
+        'title': 'Cierre de facturación',
+        'color': Colors.indigo,
+        'icon': Icons.receipt_long,
+      });
+    }
+
+    // Vencimiento
+    if (settings.creditCardDueDay <= daysInMonth) {
+      eventos.add({
+        'day': settings.creditCardDueDay,
+        'title': 'Vencimiento tarjeta',
+        'color': Colors.red,
+        'icon': Icons.warning_amber_rounded,
+      });
+    }
+
+    // Créditos
+    for (final c in settings.consumptionCredits) {
+      final payDay = c['paymentDay'] as int;
+      if (payDay <= daysInMonth) {
+        final start = DateTime.parse(c['startDate']);
+        final end = DateTime(
+          start.year,
+          start.month + (c['installments'] as int),
+          start.day,
+        );
+        final current = DateTime(
+          _mesVisualizado.year,
+          _mesVisualizado.month,
+          payDay,
+        );
+
+        if (!current.isBefore(start) && current.isBefore(end)) {
+          // Calcular número de cuota
+          // Aproximación simple meses
+          int cuota =
+              (current.year - start.year) * 12 +
+              current.month -
+              start.month +
+              1;
+          if (start.day > payDay)
+            cuota--; // Ajuste si el día de pago es menor al inicio
+          if (cuota < 1) cuota = 1;
+
+          eventos.add({
+            'day': payDay,
+            'title': '${c['name']} (Cuota $cuota/${c['installments']})',
+            'monto': c['amount'],
+            'color': Colors.green,
+            'icon': Icons.account_balance,
+          });
+        }
+      }
+    }
+
+    eventos.sort((a, b) => (a['day'] as int).compareTo(b['day'] as int));
+
+    return Column(
+      children: eventos.map((e) {
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: (e['color'] as Color).withAlpha(30),
+              child: Icon(
+                e['icon'] as IconData,
+                color: e['color'] as Color,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              e['title'] as String,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            trailing: e.containsKey('monto')
+                ? Text(
+                    _textoMonto(e['monto'] as int),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )
+                : Text(
+                    'Día ${e['day']}',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _tarjetaCreditoConsumo(Map<String, dynamic> credit) {
+    // Calculos
+    final start = DateTime.parse(credit['startDate']);
+    final totalCuotas = credit['installments'] as int;
+    final montoCuota = credit['amount'] as int;
+
+    // Cuotas pagadas aprox
+    final now = DateTime.now();
+    int cuotasPagadas = (now.year - start.year) * 12 + now.month - start.month;
+    if (now.day < (credit['paymentDay'] as int)) cuotasPagadas--;
+    if (cuotasPagadas < 0) cuotasPagadas = 0;
+    if (cuotasPagadas > totalCuotas) cuotasPagadas = totalCuotas;
+
+    final progreso = cuotasPagadas / totalCuotas;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                credit['name'],
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _textoMonto(montoCuota),
+                  style: TextStyle(
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Cuota $cuotasPagadas de $totalCuotas',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progreso,
+              backgroundColor: Colors.grey.shade100,
+              color: Colors.teal,
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Próximo pago: día ${credit['paymentDay']}',
+            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _agregarCreditoConsumo() async {
+    final nameCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    final installmentsCtrl = TextEditingController();
+    final paymentDayCtrl = TextEditingController();
+    DateTime? startDate;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateSB) {
+            return AlertDialog(
+              title: const Text('Nuevo Crédito'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre (ej. Crédito Coche)',
+                      ),
+                    ),
+                    TextField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Monto Cuota',
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    TextField(
+                      controller: installmentsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Total Cuotas',
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    TextField(
+                      controller: paymentDayCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Día de pago (1-31)',
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: Text(
+                        startDate == null
+                            ? 'Seleccionar fecha inicio'
+                            : 'Inicio: ${startDate!.toLocal().toString().split(' ')[0]}',
+                      ),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setStateSB(() => startDate = picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (nameCtrl.text.isEmpty ||
+                        amountCtrl.text.isEmpty ||
+                        installmentsCtrl.text.isEmpty ||
+                        paymentDayCtrl.text.isEmpty ||
+                        startDate == null) {
+                      return;
+                    }
+
+                    final credit = {
+                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                      'name': nameCtrl.text.trim(),
+                      'amount': int.parse(amountCtrl.text.trim()),
+                      'installments': int.parse(installmentsCtrl.text.trim()),
+                      'paymentDay': int.parse(
+                        paymentDayCtrl.text.trim(),
+                      ).clamp(1, 31),
+                      'startDate': startDate!.toIso8601String(),
+                    };
+
+                    widget.settingsController.addConsumptionCredit(credit);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Guardar'),
+                ),
               ],
             );
           },

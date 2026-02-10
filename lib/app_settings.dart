@@ -35,6 +35,9 @@ class AppSettings {
     required this.lockEnabled,
     required this.biometricEnabled,
     required this.autoLockMinutes,
+    required this.creditCardBillingDay,
+    required this.creditCardDueDay,
+    required this.consumptionCredits,
   });
 
   final String themeMode;
@@ -61,6 +64,9 @@ class AppSettings {
   final bool lockEnabled;
   final bool biometricEnabled;
   final int autoLockMinutes;
+  final int creditCardBillingDay;
+  final int creditCardDueDay;
+  final List<Map<String, dynamic>> consumptionCredits;
 
   static const _unset = Object();
 
@@ -104,6 +110,9 @@ class AppSettings {
       lockEnabled: false,
       biometricEnabled: false,
       autoLockMinutes: 1,
+      creditCardBillingDay: 5,
+      creditCardDueDay: 15,
+      consumptionCredits: [],
     );
   }
 
@@ -132,6 +141,9 @@ class AppSettings {
     bool? lockEnabled,
     bool? biometricEnabled,
     int? autoLockMinutes,
+    int? creditCardBillingDay,
+    int? creditCardDueDay,
+    List<Map<String, dynamic>>? consumptionCredits,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -163,6 +175,9 @@ class AppSettings {
       lockEnabled: lockEnabled ?? this.lockEnabled,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+      creditCardBillingDay: creditCardBillingDay ?? this.creditCardBillingDay,
+      creditCardDueDay: creditCardDueDay ?? this.creditCardDueDay,
+      consumptionCredits: consumptionCredits ?? this.consumptionCredits,
     );
   }
 
@@ -192,6 +207,9 @@ class AppSettings {
       'lockEnabled': lockEnabled,
       'biometricEnabled': biometricEnabled,
       'autoLockMinutes': autoLockMinutes,
+      'creditCardBillingDay': creditCardBillingDay,
+      'creditCardDueDay': creditCardDueDay,
+      'consumptionCredits': consumptionCredits,
     };
   }
 
@@ -244,6 +262,17 @@ class AppSettings {
       autoLockMinutes:
           (json['autoLockMinutes'] as num?)?.toInt() ??
           defaults.autoLockMinutes,
+      creditCardBillingDay:
+          (json['creditCardBillingDay'] as num?)?.toInt() ??
+          defaults.creditCardBillingDay,
+      creditCardDueDay:
+          (json['creditCardDueDay'] as num?)?.toInt() ??
+          defaults.creditCardDueDay,
+      consumptionCredits:
+          (json['consumptionCredits'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          defaults.consumptionCredits,
     );
   }
 
@@ -587,6 +616,36 @@ class SettingsController extends ChangeNotifier {
       _apply(_settings.copyWith(biometricEnabled: value));
   void setAutoLockMinutes(int value) =>
       _apply(_settings.copyWith(autoLockMinutes: value));
+  void setCreditCardBillingDay(int value) =>
+      _apply(_settings.copyWith(creditCardBillingDay: value.clamp(1, 31)));
+  void setCreditCardDueDay(int value) =>
+      _apply(_settings.copyWith(creditCardDueDay: value.clamp(1, 31)));
+  void addConsumptionCredit(Map<String, dynamic> credit) {
+    final current = List<Map<String, dynamic>>.from(
+      _settings.consumptionCredits,
+    );
+    current.add(credit);
+    _apply(_settings.copyWith(consumptionCredits: current));
+  }
+
+  void removeConsumptionCredit(String id) {
+    final current = List<Map<String, dynamic>>.from(
+      _settings.consumptionCredits,
+    );
+    current.removeWhere((c) => c['id'] == id);
+    _apply(_settings.copyWith(consumptionCredits: current));
+  }
+
+  void updateConsumptionCredit(String id, Map<String, dynamic> credit) {
+    final current = List<Map<String, dynamic>>.from(
+      _settings.consumptionCredits,
+    );
+    final index = current.indexWhere((c) => c['id'] == id);
+    if (index != -1) {
+      current[index] = credit;
+      _apply(_settings.copyWith(consumptionCredits: current));
+    }
+  }
 
   Future<void> resetSettings() async {
     _settings = AppSettings.defaults();
