@@ -660,7 +660,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
         ],
-        App_Finanzas,
       ),
     );
   }
