@@ -28,6 +28,7 @@ class AppSettings {
     required this.archivedIncomeCategories,
     required this.globalMonthlyBudget,
     required this.categoryBudgets,
+    required this.categoryEmojis,
     required this.savingsTargetPercent,
     required this.enableBudgetAlerts,
     required this.enableCashflowAlerts,
@@ -61,6 +62,7 @@ class AppSettings {
   final List<String> archivedIncomeCategories;
   final int? globalMonthlyBudget;
   final Map<String, int> categoryBudgets;
+  final Map<String, String> categoryEmojis;
   final double savingsTargetPercent;
   final bool enableBudgetAlerts;
   final bool enableCashflowAlerts;
@@ -121,6 +123,7 @@ class AppSettings {
       archivedIncomeCategories: [],
       globalMonthlyBudget: null,
       categoryBudgets: {},
+      categoryEmojis: {},
       savingsTargetPercent: 20,
       enableBudgetAlerts: true,
       enableCashflowAlerts: true,
@@ -156,6 +159,7 @@ class AppSettings {
     List<String>? archivedIncomeCategories,
     Object? globalMonthlyBudget = _unset,
     Map<String, int>? categoryBudgets,
+    Map<String, String>? categoryEmojis,
     double? savingsTargetPercent,
     bool? enableBudgetAlerts,
     bool? enableCashflowAlerts,
@@ -193,6 +197,7 @@ class AppSettings {
           ? this.globalMonthlyBudget
           : globalMonthlyBudget as int?,
       categoryBudgets: categoryBudgets ?? this.categoryBudgets,
+      categoryEmojis: categoryEmojis ?? this.categoryEmojis,
       savingsTargetPercent: savingsTargetPercent ?? this.savingsTargetPercent,
       enableBudgetAlerts: enableBudgetAlerts ?? this.enableBudgetAlerts,
       enableCashflowAlerts: enableCashflowAlerts ?? this.enableCashflowAlerts,
@@ -234,6 +239,7 @@ class AppSettings {
       'archivedIncomeCategories': archivedIncomeCategories,
       'globalMonthlyBudget': globalMonthlyBudget,
       'categoryBudgets': categoryBudgets,
+      'categoryEmojis': categoryEmojis,
       'savingsTargetPercent': savingsTargetPercent,
       'enableBudgetAlerts': enableBudgetAlerts,
       'enableCashflowAlerts': enableCashflowAlerts,
@@ -283,6 +289,7 @@ class AppSettings {
           defaults.archivedIncomeCategories,
       globalMonthlyBudget: (json['globalMonthlyBudget'] as num?)?.toInt(),
       categoryBudgets: _asIntMap(json['categoryBudgets']),
+      categoryEmojis: _asStringMap(json['categoryEmojis']),
       savingsTargetPercent:
           (json['savingsTargetPercent'] as num?)?.toDouble() ??
           defaults.savingsTargetPercent,
@@ -344,6 +351,17 @@ class AppSettings {
       if (raw is num) {
         map[key] = raw.toInt();
       }
+    }
+    return map;
+  }
+
+  static Map<String, String> _asStringMap(dynamic value) {
+    if (value is! Map) {
+      return {};
+    }
+    final map = <String, String>{};
+    for (final entry in value.entries) {
+      map[entry.key.toString()] = entry.value.toString();
     }
     return map;
   }
@@ -599,11 +617,16 @@ class SettingsController extends ChangeNotifier {
     if (budgets.containsKey(oldValue)) {
       budgets[category] = budgets.remove(oldValue)!;
     }
+    final emojis = Map<String, String>.from(_settings.categoryEmojis);
+    if (emojis.containsKey(oldValue)) {
+      emojis[category] = emojis.remove(oldValue)!;
+    }
     _apply(
       _settings.copyWith(
         activeCategories: _dedupe(active),
         archivedCategories: _dedupe(archived),
         categoryBudgets: budgets,
+        categoryEmojis: emojis,
       ),
     );
   }
@@ -660,6 +683,16 @@ class SettingsController extends ChangeNotifier {
       budgets[category] = value;
     }
     _apply(_settings.copyWith(categoryBudgets: budgets));
+  }
+
+  void setCategoryEmoji(String category, String? emoji) {
+    final emojis = Map<String, String>.from(_settings.categoryEmojis);
+    if (emoji == null || emoji.isEmpty) {
+      emojis.remove(category);
+    } else {
+      emojis[category] = emoji;
+    }
+    _apply(_settings.copyWith(categoryEmojis: emojis));
   }
 
   void setSavingsTargetPercent(double value) =>

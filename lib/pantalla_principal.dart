@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app_settings.dart';
 import 'finance_alert.dart';
 import 'login_screen.dart';
+import 'pantalla_recurrentes.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -44,6 +45,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   DateTime? _pausedAt;
   List<String> _cuentasSeleccionadas = [];
   bool _mostrarPorcentaje = false;
+  List<Map<String, dynamic>> _recurrentes = [];
+
+  // Search & sort state
+  final _busquedaController = TextEditingController();
+  String _textoBusqueda = '';
+  String _ordenamiento =
+      'fecha_desc'; // fecha_desc, fecha_asc, monto_desc, monto_asc
+  bool _ordenamientoVisible = false;
+  String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
 
   final List<String> _titulosPestanas = const [
     'Mis Finanzas Cloud',
@@ -62,6 +72,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       widget.settingsController.settings.activeAccounts,
     );
     _programarBloqueoInicial();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chequearRecurrentes();
+      _cargarRecurrentes();
+    });
   }
 
   @override
@@ -72,6 +86,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     _itemController.dispose();
     _montoController.dispose();
     _cuentaController.dispose();
+    _busquedaController.dispose();
     super.dispose();
   }
 
@@ -264,6 +279,211 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return Icons.sell;
   }
 
+  /// Returns a Widget for the category: emoji Text if user set one,
+  /// otherwise the default Material Icon.
+  Widget _iconoCategoria(String categoria, {double size = 20, Color? color}) {
+    final emoji = widget.settingsController.settings.categoryEmojis[categoria];
+    if (emoji != null && emoji.isNotEmpty) {
+      return Text(emoji, style: TextStyle(fontSize: size));
+    }
+    return Icon(obtenerIcono(categoria), size: size, color: color);
+  }
+
+  static const _emojisDisponibles = [
+    // Comida y bebida
+    '🍔', '🍕', '🍣', '🍜', '🍩', '🥗', '🧁', '☕', '🍺', '🥤', '🍷',
+    // Compras y comercio
+    '🛒', '🛍️', '👗', '👟', '💄', '🎁', '💻', '📱', '🎮',
+    // Transporte
+    '🚗', '🚌', '✈️', '🚲', '⛽', '🚕', '🏍️',
+    // Hogar y servicios
+    '🏠', '💡', '🔧', '🧹', '📦', '🛋️',
+    // Salud y bienestar
+    '💊', '🏥', '🧘', '💆', '✂️', '🦷',
+    // Entretenimiento
+    '🎬', '🎵', '🎭', '⚽', '🏋️', '🎪', '🎯', '🎲',
+    // Dinero y finanzas
+    '💰', '💳', '🏦', '📈', '💵', '🪙', '💎',
+    // Educación y trabajo
+    '📚', '🎓', '💼', '✏️', '🖥️',
+    // Viajes
+    '🌴', '🏖️', '🗺️', '🧳', '🏔️',
+    // Mascotas y naturaleza
+    '🐶', '🐱', '🌿', '🌻',
+    // Otros
+    '❤️', '⭐', '🔥', '📌', '🎉', '🧾', '📋', '🔔',
+  ];
+
+  Future<String?> _elegirEmoji(String categoria) async {
+    final emojiActual =
+        widget.settingsController.settings.categoryEmojis[categoria];
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Emoji para "$categoria"'),
+          content: SizedBox(
+            width: 320,
+            height: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (emojiActual != null && emojiActual.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Actual: $emojiActual',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Quitar'),
+                          onPressed: () => Navigator.pop(context, ''),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          mainAxisSpacing: 4,
+                          crossAxisSpacing: 4,
+                        ),
+                    itemCount: _emojisDisponibles.length,
+                    itemBuilder: (context, index) {
+                      final emoji = _emojisDisponibles[index];
+                      final isSelected = emoji == emojiActual;
+                      return GestureDetector(
+                        onTap: () => Navigator.pop(context, emoji),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.teal.shade100
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isSelected
+                                ? Border.all(
+                                    color: Colors.teal.shade400,
+                                    width: 2,
+                                  )
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _mostrarEmojiCategoria(String categoria) async {
+    final result = await _elegirEmoji(categoria);
+    if (result == null) return; // cancelled
+    widget.settingsController.setCategoryEmoji(
+      categoria,
+      result.isEmpty ? null : result,
+    );
+  }
+
+  /// Animated bottom navigation icon with bounce & color transition
+  Widget _navIcon({
+    required IconData filled,
+    required IconData outlined,
+    required int index,
+    required String tooltip,
+  }) {
+    final isSelected = _indicePestana == index;
+    return IconButton(
+      icon: AnimatedScale(
+        scale: isSelected ? 1.15 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutBack,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          transitionBuilder: (child, animation) =>
+              FadeTransition(opacity: animation, child: child),
+          child: Icon(
+            isSelected ? filled : outlined,
+            key: ValueKey<bool>(isSelected),
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey,
+          ),
+        ),
+      ),
+      onPressed: () => setState(() => _indicePestana = index),
+      tooltip: tooltip,
+    );
+  }
+
+  Widget _chipOrden({
+    required String label,
+    required IconData icono,
+    required String valor,
+    required String descripcion,
+  }) {
+    final seleccionado = _ordenamiento == valor;
+    return Expanded(
+      child: Tooltip(
+        message: descripcion,
+        child: ChoiceChip(
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icono,
+                size: 14,
+                color: seleccionado ? Colors.white : Colors.grey.shade700,
+              ),
+              const SizedBox(width: 2),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: seleccionado ? Colors.white : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          selected: seleccionado,
+          selectedColor: Colors.teal.shade400,
+          backgroundColor: Colors.grey.shade100,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          showCheckmark: false,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          onSelected: (_) => setState(() => _ordenamiento = valor),
+        ),
+      ),
+    );
+  }
+
   String _simboloMoneda(String code) {
     switch (code) {
       case 'USD':
@@ -410,7 +630,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final agrupado = <String, int>{};
     var total = 0;
     for (final mov in movimientosDelMes) {
-      if (mov['tipo'] != 'Gasto') {
+      if (mov['tipo'] != 'Gasto' || mov['categoria'] == 'Transferencia') {
         continue;
       }
       final cat = (mov['categoria'] ?? 'Varios').toString();
@@ -436,6 +656,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresos = 0;
     var gastos = 0;
     for (final mov in movimientos) {
+      if (mov['categoria'] == 'Transferencia') continue;
       final fechaMov = DateTime.parse(mov['fecha']);
       if (fechaMov.year != mes.year || fechaMov.month != mes.month) {
         continue;
@@ -767,7 +988,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final scaffold = Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(_titulosPestanas[_indicePestana]),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: Text(
+            _titulosPestanas[_indicePestana],
+            key: ValueKey<int>(_indicePestana),
+          ),
+        ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -783,19 +1010,36 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           }
           final todosLosDatos = snapshot.data!;
 
-          return _indicePestana == 0
-              ? _construirPaginaInicio(todosLosDatos)
-              : _indicePestana == 1
-              ? _construirPaginaAnalisis(todosLosDatos)
-              : _indicePestana == 2
-              ? _construirPaginaCredito(todosLosDatos)
-              : _construirPaginaAjustes();
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            child: KeyedSubtree(
+              key: ValueKey<int>(_indicePestana),
+              child: _indicePestana == 0
+                  ? _construirPaginaInicio(todosLosDatos)
+                  : _indicePestana == 1
+                  ? _construirPaginaAnalisis(todosLosDatos)
+                  : _indicePestana == 2
+                  ? _construirPaginaCredito(todosLosDatos)
+                  : _construirPaginaAjustes(),
+            ),
+          );
         },
       ),
       floatingActionButton: !_bloqueada
-          ? FloatingActionButton(
-              onPressed: () => _mostrarDialogo(),
-              child: const Icon(Icons.add),
+          ? AnimatedScale(
+              scale: 1.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.elasticOut,
+              child: FloatingActionButton(
+                heroTag: 'fab_agregar',
+                onPressed: () => _mostrarDialogo(),
+                child: const Icon(Icons.add),
+              ),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -806,49 +1050,31 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           mainAxisSize: MainAxisSize.max,
           children: <Widget>[
             const SizedBox(width: 16),
-            IconButton(
-              icon: Icon(
-                _indicePestana == 0 ? Icons.home : Icons.home_outlined,
-                color: _indicePestana == 0
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey,
-              ),
-              onPressed: () => setState(() => _indicePestana = 0),
+            _navIcon(
+              filled: Icons.home,
+              outlined: Icons.home_outlined,
+              index: 0,
               tooltip: 'Inicio',
             ),
             const Spacer(),
-            IconButton(
-              icon: Icon(
-                _indicePestana == 1 ? Icons.pie_chart : Icons.pie_chart_outline,
-                color: _indicePestana == 1
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey,
-              ),
-              onPressed: () => setState(() => _indicePestana = 1),
+            _navIcon(
+              filled: Icons.pie_chart,
+              outlined: Icons.pie_chart_outline,
+              index: 1,
               tooltip: 'Analisis',
             ),
             const Spacer(flex: 3), // Gran espacio central
-            IconButton(
-              icon: Icon(
-                _indicePestana == 2
-                    ? Icons.credit_card
-                    : Icons.credit_card_outlined,
-                color: _indicePestana == 2
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey,
-              ),
-              onPressed: () => setState(() => _indicePestana = 2),
+            _navIcon(
+              filled: Icons.credit_card,
+              outlined: Icons.credit_card_outlined,
+              index: 2,
               tooltip: 'Crédito',
             ),
             const Spacer(),
-            IconButton(
-              icon: Icon(
-                _indicePestana == 3 ? Icons.settings : Icons.settings_outlined,
-                color: _indicePestana == 3
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey,
-              ),
-              onPressed: () => setState(() => _indicePestana = 3),
+            _navIcon(
+              filled: Icons.settings,
+              outlined: Icons.settings_outlined,
+              index: 3,
               tooltip: 'Ajustes',
             ),
             const SizedBox(width: 16),
@@ -933,6 +1159,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresoMes = 0;
     var gastoMes = 0;
     for (final mov in datosDelMes) {
+      if (mov['categoria'] == 'Transferencia') continue;
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         ingresoMes += monto;
@@ -942,6 +1169,43 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
     final totalNetoMes = ingresoMes - gastoMes;
     final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
+
+    // Apply search & sort
+    final query = _textoBusqueda.toLowerCase();
+    final movimientosFiltrados = datosDelMes.where((mov) {
+      // Type filter
+      if (_filtroTipo != 'Todos' && mov['tipo'] != _filtroTipo) return false;
+      // Text search
+      if (query.isEmpty) return true;
+      final item = (mov['item'] ?? '').toString().toLowerCase();
+      final cat = (mov['categoria'] ?? '').toString().toLowerCase();
+      final cuenta = (mov['cuenta'] ?? '').toString().toLowerCase();
+      return item.contains(query) ||
+          cat.contains(query) ||
+          cuenta.contains(query);
+    }).toList();
+
+    // Apply sort
+    switch (_ordenamiento) {
+      case 'fecha_asc':
+        movimientosFiltrados.sort(
+          (a, b) => (a['fecha'] as String).compareTo(b['fecha'] as String),
+        );
+      case 'monto_desc':
+        movimientosFiltrados.sort(
+          (a, b) =>
+              ((b['monto'] as num).abs()).compareTo((a['monto'] as num).abs()),
+        );
+      case 'monto_asc':
+        movimientosFiltrados.sort(
+          (a, b) =>
+              ((a['monto'] as num).abs()).compareTo((b['monto'] as num).abs()),
+        );
+      default: // fecha_desc
+        movimientosFiltrados.sort(
+          (a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String),
+        );
+    }
 
     return CustomScrollView(
       slivers: [
@@ -1108,10 +1372,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               children: [
                                 Row(
                                   children: [
-                                    Icon(
-                                      obtenerIcono(
-                                        catData['categoria'] as String,
-                                      ),
+                                    _iconoCategoria(
+                                      catData['categoria'] as String,
                                       size: 18,
                                       color: Colors.grey.shade700,
                                     ),
@@ -1151,27 +1413,211 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                 ),
               ],
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Movimientos',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              // ── Search & Sort Bar ──
+              Padding(
+                padding: EdgeInsets.fromLTRB(margin, 8, margin, 0),
+                child: TextField(
+                  controller: _busquedaController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar movimiento...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_textoBusqueda.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _busquedaController.clear();
+                              setState(() => _textoBusqueda = '');
+                            },
+                          ),
+                        IconButton(
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              _ordenamientoVisible
+                                  ? Icons.sort
+                                  : Icons.sort_outlined,
+                              key: ValueKey(_ordenamientoVisible),
+                              size: 20,
+                            ),
+                          ),
+                          onPressed: () => setState(
+                            () => _ordenamientoVisible = !_ordenamientoVisible,
+                          ),
+                          tooltip: 'Ordenar',
+                        ),
+                      ],
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
+                  onChanged: (v) => setState(() => _textoBusqueda = v),
+                ),
+              ),
+              // ── Type Filter ──
+              Padding(
+                padding: EdgeInsets.fromLTRB(margin, 10, margin, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'Todos',
+                        label: Text('Todos', style: TextStyle(fontSize: 13)),
+                        icon: Icon(Icons.list, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: 'Gasto',
+                        label: Text('Gastos', style: TextStyle(fontSize: 13)),
+                        icon: Icon(Icons.arrow_downward, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: 'Ingreso',
+                        label: Text('Ingresos', style: TextStyle(fontSize: 13)),
+                        icon: Icon(Icons.arrow_upward, size: 16),
+                      ),
+                    ],
+                    selected: {_filtroTipo},
+                    onSelectionChanged: (sel) =>
+                        setState(() => _filtroTipo = sel.first),
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: WidgetStatePropertyAll(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // ── Sort Chips ──
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: EdgeInsets.fromLTRB(margin, 10, margin, 0),
+                  child: Row(
+                    children: [
+                      _chipOrden(
+                        label: 'Fecha',
+                        icono: Icons.arrow_downward,
+                        valor: 'fecha_desc',
+                        descripcion: 'Más reciente',
+                      ),
+                      const SizedBox(width: 6),
+                      _chipOrden(
+                        label: 'Fecha',
+                        icono: Icons.arrow_upward,
+                        valor: 'fecha_asc',
+                        descripcion: 'Más antiguo',
+                      ),
+                      const SizedBox(width: 6),
+                      _chipOrden(
+                        label: 'Monto',
+                        icono: Icons.arrow_downward,
+                        valor: 'monto_desc',
+                        descripcion: 'Mayor',
+                      ),
+                      const SizedBox(width: 6),
+                      _chipOrden(
+                        label: 'Monto',
+                        icono: Icons.arrow_upward,
+                        valor: 'monto_asc',
+                        descripcion: 'Menor',
+                      ),
+                    ],
+                  ),
+                ),
+                crossFadeState: _ordenamientoVisible
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 250),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Movimientos',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (movimientosFiltrados.length != datosDelMes.length)
+                      Text(
+                        '${movimientosFiltrados.length} de ${datosDelMes.length}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-        if (datosDelMes.isEmpty)
-          const SliverToBoxAdapter(
+        if (movimientosFiltrados.isEmpty)
+          SliverToBoxAdapter(
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(40),
-                child: Text(
-                  'Sin movimientos',
-                  style: TextStyle(color: Colors.grey),
+                padding: const EdgeInsets.all(40),
+                child: Column(
+                  children: [
+                    Icon(
+                      _textoBusqueda.isNotEmpty
+                          ? Icons.search_off
+                          : Icons.inbox_outlined,
+                      size: 48,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _textoBusqueda.isNotEmpty
+                          ? 'Sin resultados para "$_textoBusqueda"'
+                          : 'Sin movimientos',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                    if (_textoBusqueda.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: TextButton(
+                          onPressed: () {
+                            _busquedaController.clear();
+                            setState(() => _textoBusqueda = '');
+                          },
+                          child: const Text('Limpiar búsqueda'),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1179,69 +1625,95 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         else
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = datosDelMes[index];
+              final item = movimientosFiltrados[index];
               final esIngreso = item['tipo'] == 'Ingreso';
               final categoria = (item['categoria'] ?? 'Varios').toString();
               final fechaItem = DateTime.parse(item['fecha']);
 
-              return Container(
-                margin: EdgeInsets.symmetric(horizontal: margin, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+              return TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: Duration(
+                  milliseconds: 350 + (index.clamp(0, 8) * 50),
                 ),
-                child: Dismissible(
-                  key: Key(item['id'].toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade400,
-                      borderRadius: BorderRadius.circular(12),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) {
+                  return Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: Offset(0, 20 * (1 - value)),
+                      child: child,
                     ),
-                    alignment: Alignment.centerRight,
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 20),
-                      child: Icon(Icons.delete, color: Colors.white),
-                    ),
+                  );
+                },
+                child: Container(
+                  margin: EdgeInsets.symmetric(horizontal: margin, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  onDismissed: (_) async {
-                    await supabase.from('gastos').delete().eq('id', item['id']);
-                  },
-                  child: ListTile(
-                    onTap: () => _mostrarDialogo(itemParaEditar: item),
-                    leading: CircleAvatar(
-                      backgroundColor: esIngreso
-                          ? Colors.green.shade50
-                          : Colors.red.shade50,
-                      child: Icon(
-                        esIngreso
-                            ? Icons.arrow_upward
-                            : obtenerIcono(categoria),
-                        color: esIngreso ? Colors.green : Colors.red,
-                        size: 20,
+                  child: Dismissible(
+                    key: Key(item['id'].toString()),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade400,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.centerRight,
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 20),
+                        child: Icon(Icons.delete, color: Colors.white),
                       ),
                     ),
-                    title: Text(
-                      (item['item'] ?? 'Sin nombre').toString(),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      '${fechaItem.day} de ${obtenerNombreMes(fechaItem.month)} · ${(item['cuenta'] ?? '-').toString()}',
-                    ),
-                    trailing: Text(
-                      _textoMonto(item['monto'] as num),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: esIngreso
-                            ? Colors.green.shade700
-                            : Colors.red.shade700,
+                    onDismissed: (_) async {
+                      await supabase
+                          .from('gastos')
+                          .delete()
+                          .eq('id', item['id']);
+                    },
+                    child: ListTile(
+                      onTap: () => _mostrarDialogo(itemParaEditar: item),
+                      leading: Hero(
+                        tag: 'mov_${item['id']}',
+                        child: CircleAvatar(
+                          backgroundColor: esIngreso
+                              ? Colors.green.shade50
+                              : Colors.red.shade50,
+                          child: esIngreso
+                              ? Icon(
+                                  Icons.arrow_upward,
+                                  color: Colors.green,
+                                  size: 20,
+                                )
+                              : _iconoCategoria(
+                                  categoria,
+                                  color: Colors.red,
+                                  size: 20,
+                                ),
+                        ),
+                      ),
+                      title: Text(
+                        (item['item'] ?? 'Sin nombre').toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        '${fechaItem.day} de ${obtenerNombreMes(fechaItem.month)} · ${(item['cuenta'] ?? '-').toString()} · ${(item['metodo_pago'] ?? 'Débito').toString()}',
+                      ),
+                      trailing: Text(
+                        _textoMonto(item['monto'] as num),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: esIngreso
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                        ),
                       ),
                     ),
                   ),
                 ),
               );
-            }, childCount: datosDelMes.length),
+            }, childCount: movimientosFiltrados.length),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 90)),
       ],
@@ -1507,37 +1979,192 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: serieFlujo.map((punto) {
                       final flujo = punto['flujo'] as int;
+                      final ingresos = punto['ingresos'] as int;
+                      final gastos = punto['gastos'] as int;
+                      final mes = punto['mes'] as DateTime;
                       final altura = ((flujo.abs() / maxAbsFlujo) * 70) + 8;
                       final color = flujo >= 0
                           ? Colors.green.shade400
                           : Colors.red.shade400;
+                      final esSeleccionado =
+                          mes.year == _mesVisualizado.year &&
+                          mes.month == _mesVisualizado.month;
                       return Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Container(
-                              width: 16,
-                              height: altura,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(8),
+                        child: GestureDetector(
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => Container(
+                                margin: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.bar_chart,
+                                          color: color,
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${obtenerNombreMes(mes.month)} ${mes.year}',
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 24),
+                                    _filaDetalleBarra(
+                                      'Ingresos',
+                                      ingresos,
+                                      Colors.green.shade600,
+                                      Icons.arrow_upward,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _filaDetalleBarra(
+                                      'Gastos',
+                                      gastos,
+                                      Colors.red.shade600,
+                                      Icons.arrow_downward,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _filaDetalleBarra(
+                                      'Flujo neto',
+                                      flujo,
+                                      flujo >= 0
+                                          ? Colors.teal
+                                          : Colors.red.shade700,
+                                      Icons.waterfall_chart,
+                                    ),
+                                    const SizedBox(height: 18),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          setState(() {
+                                            _mesVisualizado = DateTime(
+                                              mes.year,
+                                              mes.month,
+                                            );
+                                          });
+                                        },
+                                        icon: const Icon(
+                                          Icons.calendar_month,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Ver este mes'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _mesCorto(punto['mes'] as DateTime),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade700,
+                            );
+                          },
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: esSeleccionado ? 22 : 16,
+                                height: altura,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: esSeleccionado
+                                      ? Border.all(
+                                          color: Colors.black26,
+                                          width: 2,
+                                        )
+                                      : null,
+                                  boxShadow: esSeleccionado
+                                      ? [
+                                          BoxShadow(
+                                            color: color.withAlpha(80),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 6),
+                              Text(
+                                _mesCorto(mes),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: esSeleccionado
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: esSeleccionado
+                                      ? Colors.black87
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }).toList(),
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filaDetalleBarra(
+    String titulo,
+    int monto,
+    Color color,
+    IconData icono,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(50)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icono, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            titulo,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            _textoMonto(monto),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],
@@ -1714,6 +2341,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           children: [
             _seccionAjustes(
               titulo: 'Apariencia',
+              icono: Icons.palette_outlined,
+
               children: [
                 DropdownButtonFormField<String>(
                   value: settings.themeMode,
@@ -1797,6 +2426,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Formato financiero',
+              icono: Icons.currency_exchange_outlined,
+
               children: [
                 DropdownButtonFormField<String>(
                   value: settings.currencyCode,
@@ -1869,6 +2500,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Cuentas',
+              icono: Icons.account_balance_wallet_outlined,
+
               children: [
                 ...settings.activeAccounts.map((account) {
                   final isDefault = account == settings.defaultAccount;
@@ -1948,12 +2581,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Categorias',
+              icono: Icons.category_outlined,
+
               children: [
                 ...settings.activeCategories.map((category) {
                   final budget = settings.categoryBudgets[category];
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(obtenerIcono(category)),
+                    leading: GestureDetector(
+                      onTap: () => _mostrarEmojiCategoria(category),
+                      child: _iconoCategoria(category, size: 24),
+                    ),
                     title: Text(category),
                     subtitle: budget != null
                         ? Text('Presupuesto: ${formatoMoneda(budget)}')
@@ -1961,6 +2599,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     trailing: Wrap(
                       spacing: 4,
                       children: [
+                        IconButton(
+                          tooltip: 'Emoji',
+                          icon: const Icon(Icons.emoji_emotions_outlined),
+                          onPressed: () => _mostrarEmojiCategoria(category),
+                        ),
                         IconButton(
                           tooltip: 'Editar',
                           icon: const Icon(Icons.edit_outlined),
@@ -2018,7 +2661,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Presupuesto y metas',
+              icono: Icons.pie_chart_outline,
               children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.repeat, color: Colors.purple.shade700),
+                  ),
+                  title: const Text('Gastos Recurrentes'),
+                  subtitle: const Text('Netflix, Alquiler, Seguros...'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GestionarRecurrentesScreen(
+                          settingsController: widget.settingsController,
+                        ),
+                      ),
+                    ).then((_) => _cargarRecurrentes());
+                  },
+                ),
+                const Divider(),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Presupuesto global mensual'),
@@ -2052,6 +2721,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Ajustes de Crédito',
+              icono: Icons.credit_card_outlined,
+
               children: [
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -2163,6 +2834,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Alertas tecnicas in-app',
+              icono: Icons.notifications_active_outlined,
+
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -2226,6 +2899,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Seguridad',
+              icono: Icons.security_outlined,
+
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -2294,6 +2969,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             const SizedBox(height: 12),
             _seccionAjustes(
               titulo: 'Datos y mantenimiento',
+              icono: Icons.storage_rounded,
+
               children: [
                 FilledButton.tonalIcon(
                   onPressed: _exportarMovimientosCsv,
@@ -2344,31 +3021,41 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   Widget _seccionAjustes({
     required String titulo,
     required List<Widget> children,
+    IconData? icono,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // En modo oscuro usamos un gris oscuro (surface) y en claro blanco
+    final bgColor = isDark
+        ? Theme.of(context).colorScheme.surfaceContainerHighest
+        : Colors.white;
+    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: bgColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(12),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        side: BorderSide(color: borderColor),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: icono != null
+              ? Icon(icono, color: Theme.of(context).colorScheme.primary)
+              : null,
+          title: Text(
             titulo,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          backgroundColor: bgColor,
+          collapsedBackgroundColor: bgColor,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          children: children,
+        ),
       ),
     );
   }
@@ -2432,8 +3119,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       etiqueta: 'Nombre',
       inicial: actual,
     );
-    if (value == null) return;
+    if (value == null || value.trim() == actual) return;
+
+    // 1. Rename in settings (local + cloud sync)
     widget.settingsController.renameAccount(actual, value);
+
+    // 2. Update all existing transactions in Supabase
+    try {
+      await supabase
+          .from('gastos')
+          .update({'cuenta': value.trim()})
+          .eq('cuenta', actual);
+      if (mounted) {
+        _mostrarSnack('Cuenta renombrada: $actual → ${value.trim()}');
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarSnack(
+          'Cuenta renombrada en ajustes, pero error al actualizar movimientos: $e',
+        );
+      }
+    }
   }
 
   Future<void> _agregarCategoria() async {
@@ -2616,7 +3322,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           .select()
           .order('fecha', ascending: true);
 
-      final csv = StringBuffer('fecha,item,monto,categoria,cuenta,tipo\n');
+      final csv = StringBuffer(
+        'fecha,item,monto,categoria,cuenta,tipo,metodo_pago\n',
+      );
       for (final row in rows) {
         final fecha = (row['fecha'] ?? '').toString();
         final item = _csvEscape((row['item'] ?? '').toString());
@@ -2624,7 +3332,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         final categoria = _csvEscape((row['categoria'] ?? '').toString());
         final cuenta = _csvEscape((row['cuenta'] ?? '').toString());
         final tipo = _csvEscape((row['tipo'] ?? '').toString());
-        csv.writeln('$fecha,$item,$monto,$categoria,$cuenta,$tipo');
+        final metodoPago = _csvEscape((row['metodo_pago'] ?? '').toString());
+        csv.writeln('$fecha,$item,$monto,$categoria,$cuenta,$tipo,$metodoPago');
       }
 
       final tempDir = await getTemporaryDirectory();
@@ -2809,6 +3518,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                _tarjetaTipo(
+                  icono: Icons.swap_horiz_rounded,
+                  titulo: 'Transferencia',
+                  color: Colors.blue,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _mostrarFormulario(tipo: 'Transferencia');
+                  },
+                ),
               ],
             ),
           );
@@ -2823,8 +3542,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required MaterialColor color,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
+    return _ScaleTap(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 28),
@@ -2865,6 +3583,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final settings = widget.settingsController.settings;
     final esEdicion = itemParaEditar != null;
     final esGasto = tipo == 'Gasto';
+    final esTransferencia = tipo == 'Transferencia';
 
     DateTime fechaSeleccionada;
 
@@ -2881,6 +3600,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
 
     String cuentaSeleccionada;
+    String? cuentaDestinoSeleccionada;
     String? categoriaSeleccionada;
     bool esCredito = false;
 
@@ -2911,10 +3631,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       fechaSeleccionada = DateTime.now();
       categoriaSeleccionada = categoriasDisponibles.first;
       cuentaSeleccionada = settings.defaultAccount;
+      if (esTransferencia && cuentasDisponibles.length > 1) {
+        cuentaDestinoSeleccionada = cuentasDisponibles.firstWhere(
+          (c) => c != cuentaSeleccionada,
+          orElse: () => cuentasDisponibles.last,
+        );
+      } else if (esTransferencia) {
+        cuentaDestinoSeleccionada = cuentaSeleccionada;
+      }
       esCredito = false;
     }
 
-    final colorTipo = esGasto ? Colors.red : Colors.green;
+    final colorTipo = esTransferencia
+        ? Colors.blue
+        : (esGasto ? Colors.red : Colors.green);
 
     showModalBottomSheet(
       context: context,
@@ -2928,6 +3658,56 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               if (montoStr.isEmpty) return;
               final monto = int.tryParse(montoStr) ?? 0;
               final item = _itemController.text.trim();
+
+              if (esTransferencia) {
+                if (cuentaDestinoSeleccionada == cuentaSeleccionada) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Las cuentas deben ser diferentes'),
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                try {
+                  // 1. Salida de Origen
+                  await supabase.from('gastos').insert({
+                    'user_id': supabase.auth.currentUser!.id,
+                    'fecha': fechaSeleccionada.toIso8601String(),
+                    'item':
+                        'Transf. a $cuentaDestinoSeleccionada', // Mejor descripción automática
+                    'monto': monto,
+                    'categoria': 'Transferencia',
+                    'cuenta': cuentaSeleccionada,
+                    'tipo': 'Gasto', // Para que reste saldo
+                    'metodo_pago': 'Debito',
+                  });
+
+                  // 2. Entrada a Destino
+                  await supabase.from('gastos').insert({
+                    'user_id': supabase.auth.currentUser!.id,
+                    'fecha': fechaSeleccionada.toIso8601String(),
+                    'item': 'Transf. desde $cuentaSeleccionada',
+                    'monto': monto,
+                    'categoria': 'Transferencia',
+                    'cuenta': cuentaDestinoSeleccionada, // Cuenta destino
+                    'tipo': 'Ingreso', // Para que sume saldo
+                    'metodo_pago': 'Debito',
+                  });
+
+                  if (mounted) Navigator.pop(context);
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al transferir: $e')),
+                    );
+                  }
+                }
+                return;
+              }
+
               final categoria =
                   categoriaSeleccionada ??
                   (esGasto ? 'Varios' : 'Otros Ingresos');
@@ -2945,7 +3725,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         'cuenta': cuentaSeleccionada,
                         'metodo_pago': metodo,
                       })
-                      .eq('id', itemParaEditar!['id'] as int);
+                      .eq('id', itemParaEditar['id'] as int);
                 } else {
                   await supabase.from('gastos').insert({
                     'user_id': supabase.auth.currentUser!.id,
@@ -2974,8 +3754,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ),
               child: Container(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: SingleChildScrollView(
@@ -3034,7 +3814,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.grey.shade50,
+                          fillColor:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade900
+                              : Colors.grey.shade50,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -3049,7 +3832,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.grey.shade50,
+                          fillColor:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade900
+                              : Colors.grey.shade50,
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
@@ -3059,48 +3845,51 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       const SizedBox(height: 14),
 
                       // Categoría label
-                      const Text(
-                        'Categoría',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                      if (!esTransferencia) ...[
+                        const Text(
+                          'Categoría',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 8),
 
-                      // Categorías como chips
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: categoriasDisponibles.map((cat) {
-                          final isSelected = categoriaSeleccionada == cat;
-                          return ChoiceChip(
-                            avatar: Icon(
-                              obtenerIcono(cat),
-                              size: 18,
-                              color: isSelected
-                                  ? Colors.white
-                                  : colorTipo.shade600,
-                            ),
-                            label: Text(cat),
-                            selected: isSelected,
-                            selectedColor: colorTipo.shade400,
-                            backgroundColor: Colors.grey.shade100,
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black87,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                            onSelected: (selected) {
-                              if (selected) {
-                                setStateSB(() => categoriaSeleccionada = cat);
-                              }
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: categoriasDisponibles.map((cat) {
+                            final isSelected = categoriaSeleccionada == cat;
+                            return ChoiceChip(
+                              avatar: _iconoCategoria(
+                                cat,
+                                size: 18,
+                                color: isSelected
+                                    ? Colors.white
+                                    : colorTipo.shade600,
+                              ),
+                              label: Text(cat),
+                              selected: isSelected,
+                              selectedColor: colorTipo.shade400,
+                              backgroundColor: Colors.grey.shade100,
+                              labelStyle: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.black87,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setStateSB(() => categoriaSeleccionada = cat);
+                                }
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
                       // Fecha y Cuenta
                       Row(
@@ -3144,7 +3933,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             child: DropdownButtonFormField<String>(
                               value: cuentaSeleccionada,
                               decoration: InputDecoration(
-                                labelText: 'Cuenta',
+                                labelText: esTransferencia
+                                    ? 'Cuenta Origen'
+                                    : 'Cuenta',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -3173,28 +3964,63 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       const SizedBox(height: 12),
 
-                      // Método de pago
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment<bool>(
-                            value: false,
-                            label: Text('Débito'),
-                            icon: Icon(Icons.account_balance_wallet, size: 18),
+                      if (esTransferencia) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: cuentaDestinoSeleccionada,
+                          decoration: InputDecoration(
+                            labelText: 'Cuenta Destino',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            isDense: true,
                           ),
-                          ButtonSegment<bool>(
-                            value: true,
-                            label: Text('Crédito'),
-                            icon: Icon(Icons.credit_card, size: 18),
-                          ),
-                        ],
-                        selected: {esCredito},
-                        onSelectionChanged: (s) =>
-                            setStateSB(() => esCredito = s.first),
-                        style: ButtonStyle(
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
+                          items: cuentasDisponibles
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(
+                                    c,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setStateSB(() => cuentaDestinoSeleccionada = value);
+                          },
                         ),
-                      ),
+                      ] else ...[
+                        const SizedBox(height: 12),
+                        // Método de pago
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment<bool>(
+                              value: false,
+                              label: Text('Débito'),
+                              icon: Icon(
+                                Icons.account_balance_wallet,
+                                size: 18,
+                              ),
+                            ),
+                            ButtonSegment<bool>(
+                              value: true,
+                              label: Text('Crédito'),
+                              icon: Icon(Icons.credit_card, size: 18),
+                            ),
+                          ],
+                          selected: {esCredito},
+                          onSelectionChanged: (s) =>
+                              setStateSB(() => esCredito = s.first),
+                          style: ButtonStyle(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
 
                       // Botón guardar
@@ -3510,9 +4336,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200,
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3540,7 +4370,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
@@ -3598,7 +4428,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     // Chequear si hay créditos que se pagan hoy
                     final creditosHoy = settings.consumptionCredits.where((c) {
                       final paymentDay = c['paymentDay'] as int;
-                      // Verificar si el crédito está activo en esta fecha
                       final start = DateTime.parse(c['startDate']);
                       final end = DateTime(
                         start.year,
@@ -3610,10 +4439,45 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           date.isBefore(end);
                     }).toList();
 
+                    // Chequear gastos recurrentes
+                    final recurrentesHoy = _recurrentes.where((r) {
+                      final start = DateTime.parse(r['fecha_proximo_pago']);
+                      final frecuencia = r['frecuencia'];
+
+                      // Solo mostramos desde la fecha programada en adelante
+                      // (O si está vencido, start es anterior a hoy, date es start o futuro)
+                      // Pero para visualizar recurrentes futuros, queremos ver proyecciones.
+                      // La lógica simple: si date >= start (ignorando hora) y coincide patrón.
+                      final dateDate = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                      );
+                      final startDate = DateTime(
+                        start.year,
+                        start.month,
+                        start.day,
+                      );
+
+                      if (dateDate.isBefore(startDate)) return false;
+
+                      if (frecuencia == 'Mensual') {
+                        return date.day == start.day;
+                      } else if (frecuencia == 'Semanal') {
+                        final diff = dateDate.difference(startDate).inDays;
+                        return diff % 7 == 0;
+                      } else if (frecuencia == 'Anual') {
+                        return date.month == start.month &&
+                            date.day == start.day;
+                      }
+                      return false;
+                    }).toList();
+
                     final hasCreditPayment = creditosHoy.isNotEmpty;
+                    final hasRecurring = recurrentesHoy.isNotEmpty;
 
                     Color? bgColor;
-                    Color textColor = Colors.black87;
+                    Color textColor = Theme.of(context).colorScheme.onSurface;
 
                     if (isToday) {
                       bgColor = Colors.blue.shade50;
@@ -3627,12 +4491,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       bgColor = Colors.red.shade100;
                       textColor = Colors.red.shade900;
                     }
-                    if (hasCreditPayment) {
-                      // Si coincide con otros eventos, mostramos indicador visual extra o color mezclado
-                      // Prioridad visual: Vencimiento > Facturación > Crédito
-                      if (!isDue && !isBilling) {
-                        bgColor = Colors.green.shade100;
-                        textColor = Colors.green.shade900;
+                    if (hasCreditPayment || hasRecurring) {
+                      // Keep simple background logic or mix
+                      if (!isDue && !isBilling && !isToday) {
+                        if (hasCreditPayment && !hasRecurring) {
+                          bgColor = Colors.green.shade100;
+                          textColor = Colors.green.shade900;
+                        } else if (hasRecurring && !hasCreditPayment) {
+                          bgColor = Colors.purple.shade100;
+                          textColor = Colors.purple.shade900;
+                        } else {
+                          // Ambos
+                          bgColor = Colors.amber.shade100;
+                          textColor = Colors.amber.shade900;
+                        }
                       }
                     }
 
@@ -3655,18 +4527,38 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               color: textColor,
                             ),
                           ),
-                          if (hasCreditPayment)
-                            Positioned(
-                              bottom: 4,
-                              child: Container(
-                                width: 4,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade700,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
+                          Positioned(
+                            bottom: 4,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasCreditPayment)
+                                  Container(
+                                    width: 4,
+                                    height: 4,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade700,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                if (hasRecurring)
+                                  Container(
+                                    width: 4,
+                                    height: 4,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade700,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
                     );
@@ -3679,6 +4571,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     _leyendaCalendario(Colors.indigo.shade100, 'Facturación'),
                     _leyendaCalendario(Colors.red.shade100, 'Vencimiento'),
                     _leyendaCalendario(Colors.green.shade100, 'Crédito'),
+                    _leyendaCalendario(Colors.purple.shade100, 'Recurrente'),
                   ],
                 ),
               ],
@@ -3729,10 +4622,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     return ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: Icon(
-                        obtenerIcono(m['categoria'] ?? ''),
-                        size: 20,
-                      ),
+                      leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
                       title: Text(m['item'] ?? 'Sin nombre'),
                       subtitle: Text(
                         '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
@@ -3783,10 +4673,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     return ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: Icon(
-                        obtenerIcono(m['categoria'] ?? ''),
-                        size: 20,
-                      ),
+                      leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
                       title: Text(m['item'] ?? 'Sin nombre'),
                       subtitle: Text(
                         '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
@@ -4132,6 +5019,154 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       },
     );
   }
+
+  Future<void> _chequearRecurrentes() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final response = await supabase
+          .from('gastos_programados')
+          .select()
+          .eq('user_id', user.id)
+          .eq('activo', true)
+          .lte('fecha_proximo_pago', DateTime.now().toIso8601String());
+
+      final List<Map<String, dynamic>> pendientes =
+          List<Map<String, dynamic>>.from(response);
+
+      if (pendientes.isEmpty) return;
+
+      if (!mounted) return;
+
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Gastos Recurrentes Pendientes'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Se encontraron los siguientes pagos vencidos:'),
+                const SizedBox(height: 10),
+                ...pendientes.map(
+                  (p) => ListTile(
+                    dense: true,
+                    leading: Icon(
+                      p['tipo'] == 'Ingreso'
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward,
+                      color: p['tipo'] == 'Ingreso' ? Colors.green : Colors.red,
+                    ),
+                    title: Text(p['item']),
+                    subtitle: Text(_textoMonto(p['monto'])),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Omitir por ahora'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Registrar Todos'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmar == true) {
+        for (final p in pendientes) {
+          // 1. Insertar movimiento
+          await supabase.from('gastos').insert({
+            'user_id': user.id,
+            'fecha': DateTime.now()
+                .toIso8601String(), // Se registra con fecha de HOY
+            'item': p['item'],
+            'monto': p['monto'],
+            'categoria': p['categoria'],
+            'cuenta': p['cuenta'],
+            'tipo': p['tipo'],
+          });
+
+          // 2. Calcular nueva fecha
+          final fechaActual = DateTime.parse(p['fecha_proximo_pago']);
+          DateTime nuevaFecha = fechaActual;
+          final frecuencia = p['frecuencia'];
+
+          if (frecuencia == 'Mensual') {
+            // Adds one month correctly handling end of month
+            final newMonth = fechaActual.month + 1;
+            final year = fechaActual.year + (newMonth > 12 ? 1 : 0);
+            final month = newMonth > 12 ? 1 : newMonth;
+            final day = fechaActual.day;
+            // Handle overflow (e.g., Jan 31 -> Feb 28)
+            final daysInNextMonth = DateUtils.getDaysInMonth(year, month);
+            nuevaFecha = DateTime(
+              year,
+              month,
+              day > daysInNextMonth ? daysInNextMonth : day,
+            );
+          } else if (frecuencia == 'Semanal') {
+            nuevaFecha = fechaActual.add(const Duration(days: 7));
+          } else if (frecuencia == 'Anual') {
+            nuevaFecha = DateTime(
+              fechaActual.year + 1,
+              fechaActual.month,
+              fechaActual.day,
+            );
+          } else if (frecuencia == 'Unico') {
+            // Desactivar
+            await supabase
+                .from('gastos_programados')
+                .update({'activo': false})
+                .eq('id', p['id']);
+            continue;
+          }
+
+          // 3. Actualizar recurrencia
+          await supabase
+              .from('gastos_programados')
+              .update({'fecha_proximo_pago': nuevaFecha.toIso8601String()})
+              .eq('id', p['id']);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Movimientos recurrentes registrados'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error chequeando recurrentes: $e');
+    }
+    _cargarRecurrentes();
+  }
+
+  Future<void> _cargarRecurrentes() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      final response = await supabase
+          .from('gastos_programados')
+          .select()
+          .eq('user_id', user.id)
+          .eq('activo', true);
+      if (mounted) {
+        setState(() {
+          _recurrentes = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error cargando recurrentes: $e');
+    }
+  }
 }
 
 class _DialogoTexto extends StatefulWidget {
@@ -4248,6 +5283,55 @@ class _DialogoEnteroState extends State<_DialogoEntero> {
           child: const Text('Guardar'),
         ),
       ],
+    );
+  }
+}
+
+/// A reusable widget that provides a press-to-scale animation effect.
+class _ScaleTap extends StatefulWidget {
+  const _ScaleTap({required this.child, required this.onTap});
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  State<_ScaleTap> createState() => _ScaleTapState();
+}
+
+class _ScaleTapState extends State<_ScaleTap>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+      reverseDuration: const Duration(milliseconds: 250),
+    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(scale: _scale, child: widget.child),
     );
   }
 }
