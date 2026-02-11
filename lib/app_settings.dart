@@ -37,6 +37,8 @@ class AppSettings {
     required this.autoLockMinutes,
     required this.creditCardBillingDay,
     required this.creditCardDueDay,
+    required this.enableCreditDueAlerts,
+    required this.creditDueAlertDaysBefore,
     required this.consumptionCredits,
   });
 
@@ -66,6 +68,8 @@ class AppSettings {
   final int autoLockMinutes;
   final int creditCardBillingDay;
   final int creditCardDueDay;
+  final bool enableCreditDueAlerts;
+  final int creditDueAlertDaysBefore;
   final List<Map<String, dynamic>> consumptionCredits;
 
   static const _unset = Object();
@@ -80,8 +84,8 @@ class AppSettings {
       localeCode: 'es_CL',
       weekStartDay: 'monday',
       budgetCycleDay: 1,
-      defaultAccount: 'Debito BICE',
-      activeAccounts: ['Debito BICE'],
+      defaultAccount: 'Banco Bice',
+      activeAccounts: ['Banco Bice'],
       archivedAccounts: [],
       activeCategories: [
         'Comida',
@@ -112,6 +116,8 @@ class AppSettings {
       autoLockMinutes: 1,
       creditCardBillingDay: 5,
       creditCardDueDay: 15,
+      enableCreditDueAlerts: true,
+      creditDueAlertDaysBefore: 3,
       consumptionCredits: [],
     );
   }
@@ -143,6 +149,8 @@ class AppSettings {
     int? autoLockMinutes,
     int? creditCardBillingDay,
     int? creditCardDueDay,
+    bool? enableCreditDueAlerts,
+    int? creditDueAlertDaysBefore,
     List<Map<String, dynamic>>? consumptionCredits,
   }) {
     return AppSettings(
@@ -177,6 +185,10 @@ class AppSettings {
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
       creditCardBillingDay: creditCardBillingDay ?? this.creditCardBillingDay,
       creditCardDueDay: creditCardDueDay ?? this.creditCardDueDay,
+      enableCreditDueAlerts:
+          enableCreditDueAlerts ?? this.enableCreditDueAlerts,
+      creditDueAlertDaysBefore:
+          creditDueAlertDaysBefore ?? this.creditDueAlertDaysBefore,
       consumptionCredits: consumptionCredits ?? this.consumptionCredits,
     );
   }
@@ -209,6 +221,8 @@ class AppSettings {
       'autoLockMinutes': autoLockMinutes,
       'creditCardBillingDay': creditCardBillingDay,
       'creditCardDueDay': creditCardDueDay,
+      'enableCreditDueAlerts': enableCreditDueAlerts,
+      'creditDueAlertDaysBefore': creditDueAlertDaysBefore,
       'consumptionCredits': consumptionCredits,
     };
   }
@@ -268,6 +282,12 @@ class AppSettings {
       creditCardDueDay:
           (json['creditCardDueDay'] as num?)?.toInt() ??
           defaults.creditCardDueDay,
+      enableCreditDueAlerts:
+          (json['enableCreditDueAlerts'] as bool?) ??
+          defaults.enableCreditDueAlerts,
+      creditDueAlertDaysBefore:
+          (json['creditDueAlertDaysBefore'] as num?)?.toInt() ??
+          defaults.creditDueAlertDaysBefore,
       consumptionCredits:
           (json['consumptionCredits'] as List?)
               ?.map((e) => e as Map<String, dynamic>)
@@ -635,6 +655,10 @@ class SettingsController extends ChangeNotifier {
       _apply(_settings.copyWith(creditCardBillingDay: value.clamp(1, 31)));
   void setCreditCardDueDay(int value) =>
       _apply(_settings.copyWith(creditCardDueDay: value.clamp(1, 31)));
+  void setEnableCreditDueAlerts(bool value) =>
+      _apply(_settings.copyWith(enableCreditDueAlerts: value));
+  void setCreditDueAlertDaysBefore(int value) =>
+      _apply(_settings.copyWith(creditDueAlertDaysBefore: value.clamp(1, 7)));
   void addConsumptionCredit(Map<String, dynamic> credit) {
     final current = List<Map<String, dynamic>>.from(
       _settings.consumptionCredits,

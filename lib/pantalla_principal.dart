@@ -645,6 +645,76 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }
     }
 
+    // Alerta de vencimiento de tarjeta de crédito
+    if (settings.enableCreditDueAlerts) {
+      final dueDay = settings.creditCardDueDay;
+      final billingDay = settings.creditCardBillingDay;
+      final daysBefore = settings.creditDueAlertDaysBefore;
+
+      // Calcular la próxima fecha de vencimiento
+      DateTime nextDue;
+      if (ahora.day <= dueDay) {
+        nextDue = DateTime(ahora.year, ahora.month, dueDay);
+      } else {
+        nextDue = DateTime(ahora.year, ahora.month + 1, dueDay);
+      }
+      final diasRestantes = nextDue
+          .difference(DateTime(ahora.year, ahora.month, ahora.day))
+          .inDays;
+
+      if (diasRestantes <= daysBefore && diasRestantes >= 0) {
+        // Calcular monto facturado (ciclo anterior)
+        final cutoffThisMonth = DateTime(ahora.year, ahora.month, billingDay);
+        DateTime lastCycleStart;
+        DateTime lastCycleEnd;
+        if (ahora.isAfter(cutoffThisMonth)) {
+          lastCycleEnd = cutoffThisMonth;
+          lastCycleStart = DateTime(
+            ahora.year,
+            ahora.month - 1,
+            billingDay,
+          ).add(const Duration(days: 1));
+        } else {
+          lastCycleEnd = DateTime(ahora.year, ahora.month - 1, billingDay);
+          lastCycleStart = DateTime(
+            ahora.year,
+            ahora.month - 2,
+            billingDay,
+          ).add(const Duration(days: 1));
+        }
+        final creditExpenses = movimientos.where(
+          (m) =>
+              (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
+              m['tipo'] == 'Gasto',
+        );
+        var facturado = 0;
+        for (final m in creditExpenses) {
+          final d = DateTime.parse(m['fecha']);
+          if (!d.isBefore(lastCycleStart) && !d.isAfter(lastCycleEnd)) {
+            facturado += (m['monto'] as num? ?? 0).toInt();
+          }
+        }
+
+        final diasTexto = diasRestantes == 0
+            ? 'Hoy vence'
+            : diasRestantes == 1
+            ? 'Vence mañana'
+            : 'Vence en $diasRestantes días';
+        alerts.add(
+          FinanceAlert(
+            id: 'credit_due_soon',
+            title: '⚠️ $diasTexto tu tarjeta',
+            message:
+                'Monto facturado pendiente: ${_textoMonto(facturado, ocultable: false)}. Día de vencimiento: $dueDay.',
+            icon: Icons.credit_score,
+            color: diasRestantes <= 1
+                ? Colors.red.shade700
+                : Colors.orange.shade700,
+          ),
+        );
+      }
+    }
+
     return alerts;
   }
 
@@ -1981,6 +2051,38 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                   ),
                 ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Alertas de vencimiento'),
+                  subtitle: const Text(
+                    'Notificar antes del vencimiento de la tarjeta',
+                  ),
+                  value: settings.enableCreditDueAlerts,
+                  onChanged: widget.settingsController.setEnableCreditDueAlerts,
+                ),
+                if (settings.enableCreditDueAlerts)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Días de anticipación'),
+                    subtitle: Text(
+                      '${settings.creditDueAlertDaysBefore} día(s) antes',
+                    ),
+                    trailing: SizedBox(
+                      width: 170,
+                      child: Slider(
+                        value: settings.creditDueAlertDaysBefore.toDouble(),
+                        min: 1,
+                        max: 7,
+                        divisions: 6,
+                        label: settings.creditDueAlertDaysBefore.toString(),
+                        onChanged: (value) {
+                          widget.settingsController.setCreditDueAlertDaysBefore(
+                            value.round(),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 const Divider(),
                 const Align(
                   alignment: Alignment.centerLeft,
@@ -2995,6 +3097,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     // --- Fin Lógica ---
 
+    // Countdown al día de vencimiento
+    DateTime nextDue;
+    if (now.day <= dueDay) {
+      nextDue = DateTime(now.year, now.month, dueDay);
+    } else {
+      nextDue = DateTime(now.year, now.month + 1, dueDay);
+    }
+    final diasAlVencimiento = nextDue
+        .difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+
+    // Filtrar movimientos de cada ciclo para las listas de detalle
+    final movimientosPorFacturar = creditExpenses.where((m) {
+      final d = DateTime.parse(m['fecha']);
+      return !d.isBefore(curStart) && !d.isAfter(curEnd);
+    }).toList();
+    final movimientosFacturados = creditExpenses.where((m) {
+      final d = DateTime.parse(m['fecha']);
+      return !d.isBefore(lastStart) && !d.isAfter(lastEnd);
+    }).toList();
+
     // Calcular fechas para el mes visualizado
     final firstDayOfMonth = DateTime(
       _mesVisualizado.year,
@@ -3005,12 +3128,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       firstDayOfMonth.year,
       firstDayOfMonth.month,
     );
-
-    // Offset para empezar el calendario en el día correcto de la semana (Lunes=1)
-    // DateTime.weekday devuelve 1 para Lunes, 7 para Domingo.
-    // Si queremos empezar en Lunes, el offset es weekday - 1.
-    // Si queremos empezar en Domingo, y weekday es 7 (Dom), offset 0. Si es 1 (Lun), offset 1.
-    // Asumiremos inicio Lunes por simplicidad o configurar según settings.
     final startingWeekday = firstDayOfMonth.weekday;
     final offset = startingWeekday - 1;
 
@@ -3019,6 +3136,59 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Countdown badge al vencimiento
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: diasAlVencimiento <= 1
+                  ? Colors.red.shade50
+                  : diasAlVencimiento <= 3
+                  ? Colors.orange.shade50
+                  : Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: diasAlVencimiento <= 1
+                    ? Colors.red.shade200
+                    : diasAlVencimiento <= 3
+                    ? Colors.orange.shade200
+                    : Colors.green.shade200,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  diasAlVencimiento <= 1
+                      ? Icons.warning_amber_rounded
+                      : Icons.schedule,
+                  color: diasAlVencimiento <= 1
+                      ? Colors.red.shade700
+                      : diasAlVencimiento <= 3
+                      ? Colors.orange.shade700
+                      : Colors.green.shade700,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    diasAlVencimiento == 0
+                        ? '¡Hoy vence tu tarjeta!'
+                        : diasAlVencimiento == 1
+                        ? 'Tu tarjeta vence mañana'
+                        : 'Faltan $diasAlVencimiento días para el vencimiento (día $dueDay)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: diasAlVencimiento <= 1
+                          ? Colors.red.shade800
+                          : diasAlVencimiento <= 3
+                          ? Colors.orange.shade800
+                          : Colors.green.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           // Tarjetas de Resumen
           Row(
             children: [
@@ -3279,6 +3449,115 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ),
           const SizedBox(height: 12),
           _construirEventosDelMes(settings, daysInMonth),
+
+          // --- Detalle de movimientos del ciclo actual (Por Facturar) ---
+          const SizedBox(height: 24),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Row(
+              children: [
+                Icon(
+                  Icons.receipt_long,
+                  color: Colors.indigo.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Movimientos Por Facturar (${movimientosPorFacturar.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            children: movimientosPorFacturar.isEmpty
+                ? [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Sin movimientos en este ciclo',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ]
+                : movimientosPorFacturar.map((m) {
+                    final fecha = DateTime.parse(m['fecha']);
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      leading: Icon(
+                        obtenerIcono(m['categoria'] ?? ''),
+                        size: 20,
+                      ),
+                      title: Text(m['item'] ?? 'Sin nombre'),
+                      subtitle: Text(
+                        '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
+                      ),
+                      trailing: Text(
+                        _textoMonto((m['monto'] as num).toInt()),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade700,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+          ),
+
+          // --- Detalle de movimientos facturados ---
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Row(
+              children: [
+                Icon(
+                  Icons.receipt,
+                  color: Colors.deepOrange.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Movimientos Facturados (${movimientosFacturados.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            children: movimientosFacturados.isEmpty
+                ? [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Sin movimientos facturados',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ]
+                : movimientosFacturados.map((m) {
+                    final fecha = DateTime.parse(m['fecha']);
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      leading: Icon(
+                        obtenerIcono(m['categoria'] ?? ''),
+                        size: 20,
+                      ),
+                      title: Text(m['item'] ?? 'Sin nombre'),
+                      subtitle: Text(
+                        '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
+                      ),
+                      trailing: Text(
+                        _textoMonto((m['monto'] as num).toInt()),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange.shade700,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+          ),
 
           const SizedBox(height: 24),
           const Text(
