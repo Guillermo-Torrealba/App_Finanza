@@ -24,6 +24,8 @@ class AppSettings {
     required this.archivedAccounts,
     required this.activeCategories,
     required this.archivedCategories,
+    required this.activeIncomeCategories,
+    required this.archivedIncomeCategories,
     required this.globalMonthlyBudget,
     required this.categoryBudgets,
     required this.savingsTargetPercent,
@@ -55,6 +57,8 @@ class AppSettings {
   final List<String> archivedAccounts;
   final List<String> activeCategories;
   final List<String> archivedCategories;
+  final List<String> activeIncomeCategories;
+  final List<String> archivedIncomeCategories;
   final int? globalMonthlyBudget;
   final Map<String, int> categoryBudgets;
   final double savingsTargetPercent;
@@ -103,6 +107,18 @@ class AppSettings {
         'Varios',
       ],
       archivedCategories: [],
+      activeIncomeCategories: [
+        'Sueldo',
+        'Freelance',
+        'Transferencia Recibida',
+        'Inversiones',
+        'Reembolso',
+        'Arriendo',
+        'Venta',
+        'Mesada',
+        'Otros Ingresos',
+      ],
+      archivedIncomeCategories: [],
       globalMonthlyBudget: null,
       categoryBudgets: {},
       savingsTargetPercent: 20,
@@ -136,6 +152,8 @@ class AppSettings {
     List<String>? archivedAccounts,
     List<String>? activeCategories,
     List<String>? archivedCategories,
+    List<String>? activeIncomeCategories,
+    List<String>? archivedIncomeCategories,
     Object? globalMonthlyBudget = _unset,
     Map<String, int>? categoryBudgets,
     double? savingsTargetPercent,
@@ -167,6 +185,10 @@ class AppSettings {
       archivedAccounts: archivedAccounts ?? this.archivedAccounts,
       activeCategories: activeCategories ?? this.activeCategories,
       archivedCategories: archivedCategories ?? this.archivedCategories,
+      activeIncomeCategories:
+          activeIncomeCategories ?? this.activeIncomeCategories,
+      archivedIncomeCategories:
+          archivedIncomeCategories ?? this.archivedIncomeCategories,
       globalMonthlyBudget: identical(globalMonthlyBudget, _unset)
           ? this.globalMonthlyBudget
           : globalMonthlyBudget as int?,
@@ -208,6 +230,8 @@ class AppSettings {
       'archivedAccounts': archivedAccounts,
       'activeCategories': activeCategories,
       'archivedCategories': archivedCategories,
+      'activeIncomeCategories': activeIncomeCategories,
+      'archivedIncomeCategories': archivedIncomeCategories,
       'globalMonthlyBudget': globalMonthlyBudget,
       'categoryBudgets': categoryBudgets,
       'savingsTargetPercent': savingsTargetPercent,
@@ -251,6 +275,12 @@ class AppSettings {
       archivedCategories:
           _asStringList(json['archivedCategories']) ??
           defaults.archivedCategories,
+      activeIncomeCategories:
+          _asStringList(json['activeIncomeCategories']) ??
+          defaults.activeIncomeCategories,
+      archivedIncomeCategories:
+          _asStringList(json['archivedIncomeCategories']) ??
+          defaults.archivedIncomeCategories,
       globalMonthlyBudget: (json['globalMonthlyBudget'] as num?)?.toInt(),
       categoryBudgets: _asIntMap(json['categoryBudgets']),
       savingsTargetPercent:

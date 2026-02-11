@@ -43,6 +43,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   bool _desbloqueando = false;
   DateTime? _pausedAt;
   List<String> _cuentasSeleccionadas = [];
+  bool _mostrarPorcentaje = false;
 
   final List<String> _titulosPestanas = const [
     'Mis Finanzas Cloud',
@@ -237,6 +238,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   IconData obtenerIcono(String categoria) {
     final value = categoria.toLowerCase();
+    // Gastos
     if (value.contains('comida')) return Icons.restaurant;
     if (value.contains('transporte')) return Icons.directions_bus;
     if (value.contains('regalo')) return Icons.card_giftcard;
@@ -249,6 +251,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     if (value.contains('deporte')) return Icons.sports_soccer;
     if (value.contains('peluquer')) return Icons.content_cut;
     if (value.contains('supermercado')) return Icons.shopping_cart;
+    // Ingresos
+    if (value.contains('sueldo')) return Icons.work;
+    if (value.contains('freelance')) return Icons.laptop;
+    if (value.contains('transferencia')) return Icons.swap_horiz;
+    if (value.contains('inversio')) return Icons.trending_up;
+    if (value.contains('reembolso')) return Icons.replay;
+    if (value.contains('arriendo')) return Icons.home;
+    if (value.contains('venta')) return Icons.storefront;
+    if (value.contains('mesada')) return Icons.savings;
+    if (value.contains('otros ingreso')) return Icons.attach_money;
     return Icons.sell;
   }
 
@@ -1037,17 +1049,45 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
               ),
               if (gastoMes > 0) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Gastos por Categoria',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 5,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Gastos por Categoria',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _toggleBoton(
+                              icono: Icons.attach_money,
+                              activo: !_mostrarPorcentaje,
+                              onTap: () =>
+                                  setState(() => _mostrarPorcentaje = false),
+                            ),
+                            _toggleBoton(
+                              icono: Icons.percent,
+                              activo: _mostrarPorcentaje,
+                              onTap: () =>
+                                  setState(() => _mostrarPorcentaje = true),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
@@ -1085,7 +1125,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   ],
                                 ),
                                 Text(
-                                  _textoMonto(catData['monto'] as int),
+                                  _mostrarPorcentaje
+                                      ? '${((catData['porcentaje'] as double) * 100).toStringAsFixed(1)}%'
+                                      : _textoMonto(catData['monto'] as int),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -2673,6 +2715,29 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return result ?? false;
   }
 
+  Widget _toggleBoton({
+    required IconData icono,
+    required bool activo,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: activo ? Colors.teal.shade400 : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icono,
+          size: 18,
+          color: activo ? Colors.white : Colors.grey.shade600,
+        ),
+      ),
+    );
+  }
+
   void _mostrarSnack(String message) {
     if (!mounted) {
       return;
@@ -2683,304 +2748,482 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   void _mostrarDialogo({Map<String, dynamic>? itemParaEditar}) {
+    final esEdicion = itemParaEditar != null;
+
+    if (esEdicion) {
+      final tipo = (itemParaEditar['tipo'] ?? 'Gasto').toString();
+      _mostrarFormulario(tipo: tipo, itemParaEditar: itemParaEditar);
+    } else {
+      // Paso 1: Elegir tipo
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) {
+          return Container(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  '¿Qué deseas registrar?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _tarjetaTipo(
+                        icono: Icons.arrow_downward_rounded,
+                        titulo: 'Gasto',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _mostrarFormulario(tipo: 'Gasto');
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _tarjetaTipo(
+                        icono: Icons.arrow_upward_rounded,
+                        titulo: 'Ingreso',
+                        color: Colors.green,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _mostrarFormulario(tipo: 'Ingreso');
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  Widget _tarjetaTipo({
+    required IconData icono,
+    required String titulo,
+    required MaterialColor color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        decoration: BoxDecoration(
+          color: color.shade50,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.shade200, width: 1.5),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: color.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, size: 32, color: color.shade700),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              titulo,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _mostrarFormulario({
+    required String tipo,
+    Map<String, dynamic>? itemParaEditar,
+  }) {
     final settings = widget.settingsController.settings;
     final esEdicion = itemParaEditar != null;
-    DateTime fechaSeleccionadaEnDialogo;
+    final esGasto = tipo == 'Gasto';
 
-    final categoriasDisponibles = [
-      ...widget.settingsController.settings.activeCategories,
-    ];
+    DateTime fechaSeleccionada;
+
+    final categoriasDisponibles = esGasto
+        ? [...settings.activeCategories]
+        : [...settings.activeIncomeCategories];
     if (categoriasDisponibles.isEmpty) {
-      categoriasDisponibles.add('Varios');
+      categoriasDisponibles.add(esGasto ? 'Varios' : 'Otros Ingresos');
     }
+
     final cuentasDisponibles = [...settings.activeAccounts];
     if (cuentasDisponibles.isEmpty) {
       cuentasDisponibles.add(settings.defaultAccount);
     }
 
     String cuentaSeleccionada;
+    String? categoriaSeleccionada;
     bool esCredito = false;
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
       _montoController.text = (itemParaEditar['monto'] ?? '').toString();
-      fechaSeleccionadaEnDialogo = DateTime.parse(itemParaEditar['fecha']);
+      fechaSeleccionada = DateTime.parse(itemParaEditar['fecha']);
 
-      final cat = (itemParaEditar['categoria'] ?? 'Varios').toString();
-      if (!categoriasDisponibles.contains(cat)) {
+      final cat = (itemParaEditar['categoria'] ?? '').toString();
+      if (cat.isNotEmpty && !categoriasDisponibles.contains(cat)) {
         categoriasDisponibles.add(cat);
       }
-      _categoriaSeleccionada = cat;
+      categoriaSeleccionada = cat.isNotEmpty
+          ? cat
+          : categoriasDisponibles.first;
 
       cuentaSeleccionada = (itemParaEditar['cuenta'] ?? settings.defaultAccount)
           .toString();
       if (!cuentasDisponibles.contains(cuentaSeleccionada)) {
         cuentasDisponibles.add(cuentaSeleccionada);
       }
-      _cuentaController.text = cuentaSeleccionada;
 
       final metodo = (itemParaEditar['metodo_pago'] ?? 'Debito').toString();
       esCredito = metodo == 'Credito';
     } else {
       _itemController.clear();
       _montoController.clear();
-      fechaSeleccionadaEnDialogo = DateTime.now();
-      _categoriaSeleccionada = categoriasDisponibles.first;
+      fechaSeleccionada = DateTime.now();
+      categoriaSeleccionada = categoriasDisponibles.first;
       cuentaSeleccionada = settings.defaultAccount;
-      _cuentaController.text = cuentaSeleccionada;
       esCredito = false;
     }
 
-    showDialog<void>(
+    final colorTipo = esGasto ? Colors.red : Colors.green;
+
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            Future<void> guardarNuevo(String tipo, DateTime fecha) async {
+          builder: (context, setStateSB) {
+            Future<void> guardar() async {
               final montoStr = _montoController.text.trim();
               if (montoStr.isEmpty) return;
               final monto = int.tryParse(montoStr) ?? 0;
-
               final item = _itemController.text.trim();
-              final categoria = _categoriaSeleccionada ?? 'Varios';
+              final categoria =
+                  categoriaSeleccionada ??
+                  (esGasto ? 'Varios' : 'Otros Ingresos');
               final metodo = esCredito ? 'Credito' : 'Debito';
 
               try {
-                await supabase.from('gastos').insert({
-                  'user_id': supabase.auth.currentUser!.id,
-                  'fecha': fecha.toIso8601String(),
-                  'item': item.isEmpty ? 'Sin nombre' : item,
-                  'monto': monto,
-                  'categoria': categoria,
-                  'cuenta': cuentaSeleccionada,
-                  'tipo': tipo,
-                  'metodo_pago': metodo,
-                });
+                if (esEdicion) {
+                  await supabase
+                      .from('gastos')
+                      .update({
+                        'fecha': fechaSeleccionada.toIso8601String(),
+                        'item': item.isEmpty ? 'Sin nombre' : item,
+                        'monto': monto,
+                        'categoria': categoria,
+                        'cuenta': cuentaSeleccionada,
+                        'metodo_pago': metodo,
+                      })
+                      .eq('id', itemParaEditar!['id'] as int);
+                } else {
+                  await supabase.from('gastos').insert({
+                    'user_id': supabase.auth.currentUser!.id,
+                    'fecha': fechaSeleccionada.toIso8601String(),
+                    'item': item.isEmpty ? 'Sin nombre' : item,
+                    'monto': monto,
+                    'categoria': categoria,
+                    'cuenta': cuentaSeleccionada,
+                    'tipo': tipo,
+                    'metodo_pago': metodo,
+                  });
+                }
                 if (mounted) Navigator.pop(context);
               } catch (e) {
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               }
             }
 
-            Future<void> actualizarExistente(int id, DateTime fecha) async {
-              final montoStr = _montoController.text.trim();
-              if (montoStr.isEmpty) return;
-              final monto = int.tryParse(montoStr) ?? 0;
-
-              final item = _itemController.text.trim();
-              final categoria = _categoriaSeleccionada ?? 'Varios';
-              final metodo = esCredito ? 'Credito' : 'Debito';
-
-              try {
-                await supabase
-                    .from('gastos')
-                    .update({
-                      'fecha': fecha.toIso8601String(),
-                      'item': item.isEmpty ? 'Sin nombre' : item,
-                      'monto': monto,
-                      'categoria': categoria,
-                      'cuenta': cuentaSeleccionada,
-                      'metodo_pago': metodo,
-                    })
-                    .eq('id', id);
-                if (mounted) Navigator.pop(context);
-              } catch (e) {
-                if (mounted)
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
-              }
-            }
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              title: Text(
-                esEdicion ? 'Editar movimiento' : 'Nuevo movimiento',
-                textAlign: TextAlign.center,
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: _itemController,
-                      decoration: InputDecoration(
-                        labelText: 'Concepto',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: fechaSeleccionadaEnDialogo,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2035),
-                        );
-                        if (picked != null) {
-                          setStateDialog(() {
-                            fechaSeleccionadaEnDialogo = picked;
-                          });
-                        }
-                      },
-                      child: InputDecorator(
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorTipo.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              esGasto
+                                  ? Icons.arrow_downward_rounded
+                                  : Icons.arrow_upward_rounded,
+                              color: colorTipo.shade700,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            esEdicion ? 'Editar $tipo' : 'Nuevo $tipo',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Concepto
+                      TextField(
+                        controller: _itemController,
                         decoration: InputDecoration(
-                          labelText: 'Fecha',
+                          labelText: 'Concepto',
+                          prefixIcon: const Icon(Icons.edit_note),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          suffixIcon: const Icon(Icons.calendar_today),
-                        ),
-                        child: Text(
-                          '${fechaSeleccionadaEnDialogo.day}/${fechaSeleccionadaEnDialogo.month}/${fechaSeleccionadaEnDialogo.year}',
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _categoriaSeleccionada,
-                      decoration: InputDecoration(
-                        labelText: 'Categoria',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 12),
+
+                      // Monto
+                      TextField(
+                        controller: _montoController,
+                        decoration: InputDecoration(
+                          labelText: 'Monto',
+                          prefixIcon: const Icon(Icons.attach_money),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Categoría label
+                      const Text(
+                        'Categoría',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
                       ),
-                      items: categoriasDisponibles
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c,
-                              child: Row(
-                                children: [
-                                  Icon(obtenerIcono(c), color: Colors.teal),
-                                  const SizedBox(width: 8),
-                                  Text(c),
-                                ],
+                      const SizedBox(height: 8),
+
+                      // Categorías como chips
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: categoriasDisponibles.map((cat) {
+                          final isSelected = categoriaSeleccionada == cat;
+                          return ChoiceChip(
+                            avatar: Icon(
+                              obtenerIcono(cat),
+                              size: 18,
+                              color: isSelected
+                                  ? Colors.white
+                                  : colorTipo.shade600,
+                            ),
+                            label: Text(cat),
+                            selected: isSelected,
+                            selectedColor: colorTipo.shade400,
+                            backgroundColor: Colors.grey.shade100,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : Colors.black87,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                            onSelected: (selected) {
+                              if (selected) {
+                                setStateSB(() => categoriaSeleccionada = cat);
+                              }
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Fecha y Cuenta
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: fechaSeleccionada,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2035),
+                                );
+                                if (picked != null) {
+                                  setStateSB(() => fechaSeleccionada = picked);
+                                }
+                              },
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Fecha',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  suffixIcon: const Icon(
+                                    Icons.calendar_today,
+                                    size: 18,
+                                  ),
+                                  isDense: true,
+                                ),
+                                child: Text(
+                                  '${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}',
+                                ),
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setStateDialog(() {
-                          _categoriaSeleccionada = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: cuentaSeleccionada,
-                      decoration: InputDecoration(
-                        labelText: 'Cuenta',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: cuentaSeleccionada,
+                              decoration: InputDecoration(
+                                labelText: 'Cuenta',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                isDense: true,
+                              ),
+                              items: cuentasDisponibles
+                                  .map(
+                                    (c) => DropdownMenuItem(
+                                      value: c,
+                                      child: Text(
+                                        c,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setStateSB(() => cuentaSeleccionada = value);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Método de pago
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment<bool>(
+                            value: false,
+                            label: Text('Débito'),
+                            icon: Icon(Icons.account_balance_wallet, size: 18),
+                          ),
+                          ButtonSegment<bool>(
+                            value: true,
+                            label: Text('Crédito'),
+                            icon: Icon(Icons.credit_card, size: 18),
+                          ),
+                        ],
+                        selected: {esCredito},
+                        onSelectionChanged: (s) =>
+                            setStateSB(() => esCredito = s.first),
+                        style: ButtonStyle(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
                         ),
                       ),
-                      items: cuentasDisponibles
-                          .map(
-                            (c) => DropdownMenuItem(value: c, child: Text(c)),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setStateDialog(() {
-                          cuentaSeleccionada = value;
-                          _cuentaController.text = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Text(
-                          'Método de pago:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: SegmentedButton<bool>(
-                            segments: const [
-                              ButtonSegment<bool>(
-                                value: false,
-                                label: Text('Débito'),
-                                icon: Icon(Icons.account_balance_wallet),
-                              ),
-                              ButtonSegment<bool>(
-                                value: true,
-                                label: Text('Crédito'),
-                                icon: Icon(Icons.credit_card),
-                              ),
-                            ],
-                            selected: {esCredito},
-                            onSelectionChanged: (Set<bool> newSelection) {
-                              setStateDialog(() {
-                                esCredito = newSelection.first;
-                              });
-                            },
-                            style: ButtonStyle(
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
+                      const SizedBox(height: 20),
+
+                      // Botón guardar
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: guardar,
+                          icon: Icon(esEdicion ? Icons.save : Icons.check),
+                          label: Text(
+                            esEdicion ? 'Guardar cambios' : 'Registrar $tipo',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorTipo.shade400,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _montoController,
-                      decoration: InputDecoration(
-                        labelText: 'Monto',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
                       ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              actionsAlignment: MainAxisAlignment.spaceAround,
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar'),
-                ),
-                if (esEdicion)
-                  ElevatedButton(
-                    onPressed: () => actualizarExistente(
-                      itemParaEditar['id'] as int,
-                      fechaSeleccionadaEnDialogo,
-                    ),
-                    child: const Text('Guardar'),
-                  )
-                else ...[
-                  ElevatedButton(
-                    onPressed: () =>
-                        guardarNuevo('Gasto', fechaSeleccionadaEnDialogo),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade100,
-                      foregroundColor: Colors.red.shade800,
-                    ),
-                    child: const Text('Gasto'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () =>
-                        guardarNuevo('Ingreso', fechaSeleccionadaEnDialogo),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade100,
-                      foregroundColor: Colors.green.shade800,
-                    ),
-                    child: const Text('Ingreso'),
-                  ),
-                ],
-              ],
             );
           },
         );
