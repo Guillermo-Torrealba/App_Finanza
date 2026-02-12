@@ -42,6 +42,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   bool _bloqueada = false;
   bool _desbloqueando = false;
+  bool _editandoPresupuesto = false;
+  bool _alertasExpandidas = true;
   DateTime? _pausedAt;
   List<String> _cuentasSeleccionadas = [];
   bool _mostrarPorcentaje = false;
@@ -58,6 +60,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   final List<String> _titulosPestanas = const [
     'Mis Finanzas Cloud',
     'Analisis',
+    'Presupuestos',
     'Crédito',
     'Ajustes',
   ];
@@ -444,6 +447,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required String descripcion,
   }) {
     final seleccionado = _ordenamiento == valor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Expanded(
       child: Tooltip(
         message: descripcion,
@@ -455,7 +460,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               Icon(
                 icono,
                 size: 14,
-                color: seleccionado ? Colors.white : Colors.grey.shade700,
+                color: seleccionado
+                    ? (isDark ? Colors.black87 : Colors.white)
+                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
               ),
               const SizedBox(width: 2),
               Flexible(
@@ -464,7 +471,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: seleccionado ? Colors.white : Colors.grey.shade800,
+                    color: seleccionado
+                        ? (isDark ? Colors.black87 : Colors.white)
+                        : (isDark
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade800),
                   ),
                 ),
               ),
@@ -472,7 +483,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ),
           selected: seleccionado,
           selectedColor: Colors.teal.shade400,
-          backgroundColor: Colors.grey.shade100,
+          backgroundColor: Theme.of(context).cardColor,
+          side: BorderSide(
+            color: isDark ? Colors.grey.shade800 : Colors.transparent,
+            width: 1,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -952,17 +967,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Widget _tarjetaAlerta(FinanceAlert alert) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: alert.color.withAlpha(24),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark
+            ? alert.color.withOpacity(0.15)
+            : alert.color.withAlpha(24),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: alert.color.withOpacity(isDark ? 0.3 : 0.1)),
       ),
       child: Row(
         children: [
-          Icon(alert.icon, color: alert.color),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: alert.color.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(alert.icon, color: alert.color, size: 20),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -971,10 +997,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   alert.title,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: alert.color,
+                    fontSize: 15,
+                    color: isDark ? alert.color.withOpacity(0.9) : alert.color,
                   ),
                 ),
-                Text(alert.message),
+                const SizedBox(height: 2),
+                Text(
+                  alert.message,
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade300 : Colors.black87,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
@@ -986,7 +1020,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   @override
   Widget build(BuildContext context) {
     final scaffold = Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
@@ -1024,6 +1058,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   : _indicePestana == 1
                   ? _construirPaginaAnalisis(todosLosDatos)
                   : _indicePestana == 2
+                  ? _construirPaginaPresupuestos(
+                      todosLosDatos,
+                    ) // Nueva pagina con datos
+                  : _indicePestana == 3
                   ? _construirPaginaCredito(todosLosDatos)
                   : _construirPaginaAjustes(),
             ),
@@ -1063,18 +1101,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               index: 1,
               tooltip: 'Analisis',
             ),
+            const Spacer(),
+            _navIcon(
+              filled: Icons.calculate,
+              outlined: Icons.calculate_outlined,
+              index: 2,
+              tooltip: 'Presupuestos',
+            ),
             const Spacer(flex: 3), // Gran espacio central
             _navIcon(
               filled: Icons.credit_card,
               outlined: Icons.credit_card_outlined,
-              index: 2,
+              index: 3,
               tooltip: 'Crédito',
             ),
             const Spacer(),
             _navIcon(
               filled: Icons.settings,
               outlined: Icons.settings_outlined,
-              index: 3,
+              index: 4,
               tooltip: 'Ajustes',
             ),
             const SizedBox(width: 16),
@@ -1141,6 +1186,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final compacto = widget.settingsController.settings.compactMode;
     final margin = compacto ? 12.0 : 16.0;
     final padding = compacto ? 12.0 : 16.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Filtrar por cuentas seleccionadas
     final datosFiltrados = todosLosDatos.where((mov) {
@@ -1218,9 +1264,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   children: [
                     _selectorCuentas(),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Saldo Total Disponible',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey,
+                      ),
                     ),
                     Text(
                       _textoMonto(saldoTotalGlobal),
@@ -1228,8 +1277,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         fontSize: 44,
                         fontWeight: FontWeight.w900,
                         color: saldoTotalGlobal >= 0
-                            ? Colors.teal.shade800
-                            : Colors.red.shade800,
+                            ? (isDark
+                                  ? Colors.tealAccent.shade400
+                                  : Colors.teal.shade800)
+                            : (isDark
+                                  ? Colors.redAccent.shade100
+                                  : Colors.red.shade800),
                       ),
                     ),
                   ],
@@ -1239,9 +1292,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 margin: EdgeInsets.symmetric(horizontal: margin),
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1268,11 +1323,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 margin: EdgeInsets.all(margin),
                 padding: EdgeInsets.all(padding),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha(12),
+                      color: Colors.black.withAlpha(isDark ? 50 : 12),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -1290,7 +1345,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Container(
                       height: 40,
                       width: 1,
-                      color: Colors.grey.shade200,
+                      color: Theme.of(context).dividerColor,
                     ),
                     _construirResumen(
                       'Gastos',
@@ -1301,7 +1356,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Container(
                       height: 40,
                       width: 1,
-                      color: Colors.grey.shade200,
+                      color: Theme.of(context).dividerColor,
                     ),
                     _construirResumen(
                       'Total Mes',
@@ -1330,7 +1385,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: Theme.of(context).highlightColor,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -1358,7 +1413,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   margin: EdgeInsets.symmetric(horizontal: margin, vertical: 8),
                   padding: EdgeInsets.all(padding),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -1375,7 +1430,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     _iconoCategoria(
                                       catData['categoria'] as String,
                                       size: 18,
-                                      color: Colors.grey.shade700,
+                                      color: isDark
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade700,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
@@ -1401,7 +1458,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               borderRadius: BorderRadius.circular(4),
                               child: LinearProgressIndicator(
                                 value: catData['porcentaje'] as double,
-                                backgroundColor: Colors.grey.shade100,
+                                backgroundColor: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade100,
                                 color: Colors.teal.shade300,
                                 minHeight: 8,
                               ),
@@ -1451,18 +1510,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ],
                     ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: Theme.of(context).cardColor,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 10,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: Colors.grey.shade200),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).dividerColor,
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: Colors.grey.shade200),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).dividerColor,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -1576,7 +1639,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         '${movimientosFiltrados.length} de ${datosDelMes.length}',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey.shade600,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                   ],
@@ -1648,7 +1711,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 child: Container(
                   margin: EdgeInsets.symmetric(horizontal: margin, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Dismissible(
@@ -1677,10 +1740,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         tag: 'mov_${item['id']}',
                         child: CircleAvatar(
                           backgroundColor: esIngreso
-                              ? Colors.green.shade50
-                              : Colors.red.shade50,
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
                           child: esIngreso
-                              ? Icon(
+                              ? const Icon(
                                   Icons.arrow_upward,
                                   color: Colors.green,
                                   size: 20,
@@ -1705,8 +1768,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
                           color: esIngreso
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
+                              ? (isDark
+                                    ? Colors.greenAccent
+                                    : Colors.green.shade700)
+                              : (isDark
+                                    ? Colors.redAccent
+                                    : Colors.red.shade700),
                         ),
                       ),
                     ),
@@ -1775,9 +1842,110 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
+  Widget _construirSeccionAlertas(List<FinanceAlert> alertas) {
+    if (alertas.isEmpty) return const SizedBox.shrink();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: isDark ? Border.all(color: Colors.grey.shade800) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          InkWell(
+            onTap: () =>
+                setState(() => _alertasExpandidas = !_alertasExpandidas),
+            borderRadius: BorderRadius.vertical(
+              top: const Radius.circular(16),
+              bottom: Radius.circular(_alertasExpandidas ? 0 : 16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.orange.withOpacity(0.2)
+                          : Colors.orange.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.notifications_active_outlined,
+                      color: Colors.orange.shade700,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${alertas.length} Alertas detectadas',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? Colors.grey.shade200
+                          : Colors.grey.shade800,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _alertasExpandidas
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Body Collapsible (Carousel)
+          AnimatedCrossFade(
+            firstChild: Container(
+              height: 140, // Altura fija para el carrusel
+              margin: const EdgeInsets.only(bottom: 16),
+              child: PageView.builder(
+                controller: PageController(viewportFraction: 0.92),
+                padEnds: false,
+                itemCount: alertas.length,
+                itemBuilder: (context, index) {
+                  final alert = alertas[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _tarjetaAlerta(alert),
+                  );
+                },
+              ),
+            ),
+            secondChild: const SizedBox(width: double.infinity),
+            crossFadeState: _alertasExpandidas
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            duration: const Duration(milliseconds: 300),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _construirPaginaAnalisis(List<Map<String, dynamic>> todosLosDatos) {
     // StreamBuilder removed
     final settings = widget.settingsController.settings;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final datosDelMes = todosLosDatos.where((mov) {
       final fechaMov = DateTime.parse(mov['fecha']);
       return fechaMov.year == _mesVisualizado.year &&
@@ -1841,16 +2009,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (alertas.isNotEmpty) ...[
-            ...alertas.map(_tarjetaAlerta),
-            const SizedBox(height: 8),
-          ],
+          // Seccion de Alertas (Carousel)
+          _construirSeccionAlertas(alertas),
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1880,7 +2048,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             descripcion:
                 'Ingresos ${_textoMonto(ingresoMes)} | Gastos ${_textoMonto(gastoMes)}',
             icono: Icons.waterfall_chart,
-            color: flujoMes >= 0 ? Colors.teal : Colors.red,
+            color: flujoMes >= 0
+                ? (isDark ? Colors.tealAccent : Colors.teal)
+                : (isDark ? Colors.redAccent : Colors.red),
           ),
           const SizedBox(height: 12),
           _tarjetaAnalisis(
@@ -1890,7 +2060,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ? 'Porcentaje de ingreso que queda como ahorro'
                 : 'Sin ingresos para calcular tasa',
             icono: Icons.savings_outlined,
-            color: tasaAhorro >= 0 ? Colors.green : Colors.red,
+            color: tasaAhorro >= 0
+                ? (isDark ? Colors.greenAccent : Colors.green)
+                : (isDark ? Colors.redAccent : Colors.red),
           ),
           const SizedBox(height: 12),
           _tarjetaAnalisis(
@@ -1898,7 +2070,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             valor: _textoMonto(proyeccionFlujo),
             descripcion: 'Proyeccion mensual basada en promedio diario actual',
             icono: Icons.trending_up,
-            color: proyeccionFlujo >= 0 ? Colors.teal : Colors.red,
+            color: proyeccionFlujo >= 0
+                ? (isDark ? Colors.tealAccent : Colors.teal)
+                : (isDark ? Colors.redAccent : Colors.red),
           ),
           const SizedBox(height: 12),
           _tarjetaAnalisis(
@@ -1916,7 +2090,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             descripcion:
                 '${_textoMonto(montoCategoriaTop)} (${(porcentajeCategoriaTop * 100).toStringAsFixed(1)}% del gasto)',
             icono: Icons.label_important_outline,
-            color: Colors.indigo,
+            color: isDark ? Colors.indigoAccent : Colors.indigo,
           ),
           if (consumoPresupuesto != null) ...[
             const SizedBox(height: 12),
@@ -1927,10 +2101,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   'Presupuesto ${_textoMonto(presupuestoGlobal!, ocultable: false)}',
               icono: Icons.account_balance_wallet_outlined,
               color: consumoPresupuesto < 0.8
-                  ? Colors.green
+                  ? (isDark ? Colors.greenAccent : Colors.green)
                   : consumoPresupuesto < 1
                   ? Colors.orange
-                  : Colors.red,
+                  : (isDark ? Colors.redAccent : Colors.red),
             ),
           ],
           if (cumplimientoMetaAhorro != null) ...[
@@ -1942,7 +2116,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               descripcion:
                   'Objetivo: ${settings.savingsTargetPercent.toStringAsFixed(1)}%',
               icono: Icons.flag_outlined,
-              color: cumplimientoMetaAhorro >= 1 ? Colors.green : Colors.orange,
+              color: cumplimientoMetaAhorro >= 1
+                  ? (isDark ? Colors.greenAccent : Colors.green)
+                  : Colors.orange,
             ),
           ],
           const SizedBox(height: 16),
@@ -1950,11 +2126,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(10),
+                  color: Colors.black.withAlpha(isDark ? 50 : 10),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -1970,7 +2146,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 const SizedBox(height: 4),
                 Text(
                   'Flujo promedio: ${_textoMonto(flujoPromedio6Meses)}',
-                  style: TextStyle(color: Colors.grey.shade700),
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
@@ -1989,6 +2167,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       final esSeleccionado =
                           mes.year == _mesVisualizado.year &&
                           mes.month == _mesVisualizado.month;
+
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+
                       return Expanded(
                         child: GestureDetector(
                           onTap: () {
@@ -1999,7 +2181,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 margin: const EdgeInsets.all(16),
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surface,
+                                  color: Theme.of(context).cardColor,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Column(
@@ -2024,27 +2206,45 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       ],
                                     ),
                                     const Divider(height: 24),
-                                    _filaDetalleBarra(
-                                      'Ingresos',
-                                      ingresos,
-                                      Colors.green.shade600,
-                                      Icons.arrow_upward,
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _filaDetalleBarra(
+                                            'Ingresos',
+                                            ingresos,
+                                            Colors.green.shade600,
+                                            Icons.arrow_upward,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 10),
-                                    _filaDetalleBarra(
-                                      'Gastos',
-                                      gastos,
-                                      Colors.red.shade600,
-                                      Icons.arrow_downward,
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _filaDetalleBarra(
+                                            'Gastos',
+                                            gastos,
+                                            Colors.red.shade600,
+                                            Icons.arrow_downward,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 10),
-                                    _filaDetalleBarra(
-                                      'Flujo neto',
-                                      flujo,
-                                      flujo >= 0
-                                          ? Colors.teal
-                                          : Colors.red.shade700,
-                                      Icons.waterfall_chart,
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _filaDetalleBarra(
+                                            'Flujo neto',
+                                            flujo,
+                                            flujo >= 0
+                                                ? Colors.teal
+                                                : Colors.red.shade700,
+                                            Icons.waterfall_chart,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 18),
                                     SizedBox(
@@ -2083,7 +2283,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   borderRadius: BorderRadius.circular(8),
                                   border: esSeleccionado
                                       ? Border.all(
-                                          color: Colors.black26,
+                                          color: isDark
+                                              ? Colors.white30
+                                              : Colors.black26,
                                           width: 2,
                                         )
                                       : null,
@@ -2107,8 +2309,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       ? FontWeight.bold
                                       : FontWeight.normal,
                                   color: esSeleccionado
-                                      ? Colors.black87
-                                      : Colors.grey.shade700,
+                                      ? (isDark ? Colors.white : Colors.black87)
+                                      : (isDark
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade700),
                                 ),
                               ),
                             ],
@@ -2132,6 +2336,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     Color color,
     IconData icono,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -2144,7 +2349,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               shape: BoxShape.circle,
             ),
             child: Icon(icono, color: color, size: 18),
@@ -2155,7 +2360,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
+              color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
             ),
           ),
           const Spacer(),
@@ -2179,19 +2384,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required IconData icono,
     required Color color,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: Colors.black.withAlpha(isDark ? 50 : 10),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
         ],
+        border: isDark ? Border.all(color: Colors.grey.shade800) : null,
       ),
       child: Row(
         children: [
@@ -2212,7 +2419,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 Text(
                   titulo,
                   style: TextStyle(
-                    color: Colors.grey.shade700,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2228,7 +2435,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 const SizedBox(height: 2),
                 Text(
                   descripcion,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
@@ -3013,6 +3223,485 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
             const SizedBox(height: 90),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _construirPaginaPresupuestos(
+    List<Map<String, dynamic>> todosLosDatos,
+  ) {
+    return AnimatedBuilder(
+      animation: widget.settingsController,
+      builder: (context, _) {
+        final settings = widget.settingsController.settings;
+        final globalBudget = settings.globalMonthlyBudget ?? 0;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        // Modo Edicion: Logica de distribucion (Slider/Inputs)
+        if (_editandoPresupuesto) {
+          var totalAsignado = 0;
+          for (final cat in settings.activeCategories) {
+            totalAsignado += settings.categoryBudgets[cat] ?? 0;
+          }
+
+          final restante = globalBudget - totalAsignado;
+          final excedido = restante < 0;
+          final porcentajeAsignado = globalBudget > 0
+              ? (totalAsignado / globalBudget).clamp(0.0, 1.0)
+              : 0.0;
+
+          Color colorBarra = Colors.teal;
+          if (excedido) {
+            colorBarra = Colors.red;
+          } else if (restante > 0) {
+            colorBarra = Colors.blue;
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Edicion
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Ajustando Presupuesto',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.check_circle,
+                        size: 28,
+                        color: Colors.teal,
+                      ),
+                      onPressed: () =>
+                          setState(() => _editandoPresupuesto = false),
+                      tooltip: 'Guardar y Salir',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // UI Distribucion
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(isDark ? 50 : 12),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: isDark
+                        ? Border.all(color: Colors.grey.shade800)
+                        : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total Mensual',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            onPressed: _editarPresupuestoGlobal,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ],
+                      ),
+                      GestureDetector(
+                        onTap: _editarPresupuestoGlobal,
+                        child: Text(
+                          _textoMonto(globalBudget, ocultable: false),
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: excedido ? 1.0 : porcentajeAsignado,
+                          minHeight: 12,
+                          backgroundColor: Colors.grey.shade100,
+                          color: colorBarra,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Asignado: ${_textoMonto(totalAsignado, ocultable: false)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: excedido ? Colors.red : Colors.teal,
+                            ),
+                          ),
+                          Text(
+                            excedido
+                                ? 'Excede: ${_textoMonto(restante.abs(), ocultable: false)}'
+                                : 'Libre: ${_textoMonto(restante, ocultable: false)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: excedido ? Colors.red : Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                const Text(
+                  'Asignar por Categoría',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                ...settings.activeCategories.map((categoria) {
+                  final asignado = settings.categoryBudgets[categoria] ?? 0;
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    child: ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: _iconoCategoria(categoria, size: 20),
+                      ),
+                      title: Text(
+                        categoria,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _textoMonto(asignado, ocultable: false),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      onTap: () => _editarPresupuestoCategoria(categoria),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          );
+        }
+
+        // Modo Visualizacion: Progreso Real (Gastado vs Presupuesto)
+        // 1. Filtrar datos del mes
+        final datosDelMes = todosLosDatos.where((mov) {
+          final fechaMov = DateTime.parse(mov['fecha']);
+          return fechaMov.year == _mesVisualizado.year &&
+              fechaMov.month == _mesVisualizado.month;
+        }).toList();
+
+        // 2. Calcular gasto total y por categoria
+        var gastoTotalMes = 0;
+        final gastoPorCategoria = <String, int>{};
+
+        for (final mov in datosDelMes) {
+          if (mov['tipo'] == 'Gasto' && mov['categoria'] != 'Transferencia') {
+            final monto = (mov['monto'] as num? ?? 0).toInt();
+            gastoTotalMes += monto;
+            final cat = (mov['categoria'] ?? 'Varios').toString();
+            gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
+          }
+        }
+
+        final porcentajeGlobalEjecutado = globalBudget > 0
+            ? (gastoTotalMes / globalBudget).clamp(0.0, 1.0)
+            : 0.0;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Presupuesto',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined, size: 24),
+                    onPressed: () =>
+                        setState(() => _editandoPresupuesto = true),
+                    tooltip: 'Ajustar Presupuestos',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Card Resumen Ejecucion Global
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.teal.shade700, Colors.teal.shade500],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.withAlpha(80),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Gasto Total vs Presupuesto',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _textoMonto(gastoTotalMes, ocultable: false),
+                          style: const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4, left: 6),
+                          child: Text(
+                            '/ ${_textoMonto(globalBudget, ocultable: false)}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: porcentajeGlobalEjecutado,
+                        minHeight: 8,
+                        backgroundColor: Colors.black12,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              const Text(
+                'Progreso por Categoría',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+
+              // Lista Progreso Categorias
+              ...settings.activeCategories.map((categoria) {
+                final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+                if (presupuestoCat == 0)
+                  return const SizedBox.shrink(); // Solo mostrar si tiene presupuesto?
+
+                final gastado = gastoPorCategoria[categoria] ?? 0;
+                final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
+                final saldoRestante = presupuestoCat - gastado;
+
+                Color colorStatus = Colors.green;
+                if (progress > 1.0 || saldoRestante < 0) {
+                  colorStatus = Colors.red;
+                } else if (progress > 0.8) {
+                  colorStatus = Colors.orange;
+                }
+
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(isDark ? 50 : 8),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: isDark
+                        ? Border.all(color: Colors.grey.shade800)
+                        : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          _iconoCategoria(
+                            categoria,
+                            size: 20,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              categoria,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _textoMonto(gastado, ocultable: false),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: saldoRestante < 0
+                                  ? Colors.red
+                                  : (isDark ? Colors.white : Colors.black87),
+                            ),
+                          ),
+                          Text(
+                            ' / ${_textoMonto(presupuestoCat, ocultable: false)}',
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey.shade500
+                                  : Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade100,
+                          color: colorStatus,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          saldoRestante >= 0
+                              ? 'Quedan ${_textoMonto(saldoRestante, ocultable: false)}'
+                              : 'Excedido por ${_textoMonto(saldoRestante.abs(), ocultable: false)}',
+                          style: TextStyle(
+                            color: saldoRestante >= 0
+                                ? (isDark
+                                      ? Colors.grey.shade400
+                                      : Colors.grey.shade600)
+                                : Colors.red,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              const SizedBox(height: 24),
+              if (settings.activeCategories.any(
+                (c) => (settings.categoryBudgets[c] ?? 0) == 0,
+              ))
+                Center(
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.info_outline, size: 16),
+                    label: const Text(
+                      'Hay categorías sin presupuesto asignado',
+                    ),
+                    onPressed: () =>
+                        setState(() => _editandoPresupuesto = true),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -4265,30 +4954,44 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.indigo.withOpacity(0.15)
+                        : Colors.indigo.shade50,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.indigo.shade100),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.indigo.shade900
+                          : Colors.indigo.shade100,
+                    ),
                   ),
                   child: Column(
                     children: [
-                      const Text(
+                      Text(
                         'Por Facturar',
-                        style: TextStyle(color: Colors.indigo),
+                        style: TextStyle(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.indigo.shade200
+                              : Colors.indigo,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _textoMonto(porFacturar),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.indigo.shade100
+                              : Colors.indigo,
                         ),
                       ),
                       Text(
                         '${curStart.day}/${curStart.month} - ${curEnd.day}/${curEnd.month}',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.indigo.shade300,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.indigo.shade300
+                              : Colors.indigo.shade300,
                         ),
                       ),
                     ],
@@ -4300,30 +5003,44 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.orange.withOpacity(0.15)
+                        : Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange.shade100),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.orange.shade900
+                          : Colors.orange.shade100,
+                    ),
                   ),
                   child: Column(
                     children: [
-                      const Text(
+                      Text(
                         'Facturado',
-                        style: TextStyle(color: Colors.deepOrange),
+                        style: TextStyle(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.deepOrange.shade200
+                              : Colors.deepOrange,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _textoMonto(facturado),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.deepOrange.shade100
+                              : Colors.deepOrange,
                         ),
                       ),
                       Text(
                         '${lastStart.day}/${lastStart.month} - ${lastEnd.day}/${lastEnd.month}',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.deepOrange.shade300,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.deepOrange.shade300
+                              : Colors.deepOrange.shade300,
                         ),
                       ),
                     ],
@@ -4478,32 +5195,57 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                     Color? bgColor;
                     Color textColor = Theme.of(context).colorScheme.onSurface;
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
 
                     if (isToday) {
-                      bgColor = Colors.blue.shade50;
-                      textColor = Colors.blue.shade900;
+                      bgColor = isDark
+                          ? Colors.blue.withOpacity(0.2)
+                          : Colors.blue.shade50;
+                      textColor = isDark
+                          ? Colors.blue.shade200
+                          : Colors.blue.shade900;
                     }
                     if (isBilling) {
-                      bgColor = Colors.indigo.shade100;
-                      textColor = Colors.indigo.shade900;
+                      bgColor = isDark
+                          ? Colors.indigo.withOpacity(0.2)
+                          : Colors.indigo.shade100;
+                      textColor = isDark
+                          ? Colors.indigo.shade200
+                          : Colors.indigo.shade900;
                     }
                     if (isDue) {
-                      bgColor = Colors.red.shade100;
-                      textColor = Colors.red.shade900;
+                      bgColor = isDark
+                          ? Colors.red.withOpacity(0.2)
+                          : Colors.red.shade100;
+                      textColor = isDark
+                          ? Colors.red.shade200
+                          : Colors.red.shade900;
                     }
                     if (hasCreditPayment || hasRecurring) {
-                      // Keep simple background logic or mix
                       if (!isDue && !isBilling && !isToday) {
                         if (hasCreditPayment && !hasRecurring) {
-                          bgColor = Colors.green.shade100;
-                          textColor = Colors.green.shade900;
+                          bgColor = isDark
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.green.shade100;
+                          textColor = isDark
+                              ? Colors.green.shade200
+                              : Colors.green.shade900;
                         } else if (hasRecurring && !hasCreditPayment) {
-                          bgColor = Colors.purple.shade100;
-                          textColor = Colors.purple.shade900;
+                          bgColor = isDark
+                              ? Colors.purple.withOpacity(0.2)
+                              : Colors.purple.shade100;
+                          textColor = isDark
+                              ? Colors.purple.shade200
+                              : Colors.purple.shade900;
                         } else {
                           // Ambos
-                          bgColor = Colors.amber.shade100;
-                          textColor = Colors.amber.shade900;
+                          bgColor = isDark
+                              ? Colors.amber.withOpacity(0.2)
+                              : Colors.amber.shade100;
+                          textColor = isDark
+                              ? Colors.amber.shade200
+                              : Colors.amber.shade900;
                         }
                       }
                     }
@@ -4791,17 +5533,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     return Column(
       children: eventos.map((e) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           elevation: 0,
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
+            side: BorderSide(
+              color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+            ),
           ),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: (e['color'] as Color).withAlpha(30),
+              backgroundColor: (e['color'] as Color).withAlpha(
+                isDark ? 50 : 30,
+              ),
               child: Icon(
                 e['icon'] as IconData,
                 color: e['color'] as Color,
@@ -4810,16 +5557,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
             title: Text(
               e['title'] as String,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
             ),
             trailing: e.containsKey('monto')
                 ? Text(
                     _textoMonto(e['monto'] as int),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? Colors.green.shade300
+                          : Colors.green.shade800,
+                    ),
                   )
                 : Text(
                     'Día ${e['day']}',
-                    style: TextStyle(color: Colors.grey.shade600),
+                    style: TextStyle(
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
                   ),
           ),
         );
@@ -4841,20 +5600,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     if (cuotasPagadas > totalCuotas) cuotasPagadas = totalCuotas;
 
     final progreso = cuotasPagadas / totalCuotas;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: Colors.black.withAlpha(isDark ? 50 : 10),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
+        border: isDark ? Border.all(color: Colors.grey.shade800) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4872,13 +5633,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: isDark
+                      ? Colors.green.withOpacity(0.2)
+                      : Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   _textoMonto(montoCuota),
                   style: TextStyle(
-                    color: Colors.green.shade800,
+                    color: isDark
+                        ? Colors.green.shade300
+                        : Colors.green.shade800,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -4888,14 +5653,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           const SizedBox(height: 8),
           Text(
             'Cuota $cuotasPagadas de $totalCuotas',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            style: TextStyle(
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 4),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progreso,
-              backgroundColor: Colors.grey.shade100,
+              backgroundColor: isDark
+                  ? Colors.grey.shade800
+                  : Colors.grey.shade100,
               color: Colors.teal,
               minHeight: 6,
             ),
@@ -4903,7 +5673,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           const SizedBox(height: 8),
           Text(
             'Próximo pago: día ${credit['paymentDay']}',
-            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            style: TextStyle(
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+              color: isDark ? Colors.grey.shade400 : Colors.black87,
+            ),
           ),
         ],
       ),
