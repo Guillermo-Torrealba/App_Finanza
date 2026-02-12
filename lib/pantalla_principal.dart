@@ -40,6 +40,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       .order('fecha', ascending: false);
 
   final _itemController = TextEditingController();
+  final _detalleController = TextEditingController();
   final _montoController = TextEditingController();
   final _cuentaController = TextEditingController();
 
@@ -94,6 +95,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     WidgetsBinding.instance.removeObserver(this);
     widget.settingsController.removeListener(_onSettingsChanged);
     _itemController.dispose();
+    _detalleController.dispose();
     _montoController.dispose();
     _cuentaController.dispose();
     _busquedaController.dispose();
@@ -638,6 +640,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   void _limpiarYCerrar() {
     _itemController.clear();
+    _detalleController.clear();
     _montoController.clear();
     _categoriaSeleccionada = null;
     _cuentaController.text = widget.settingsController.settings.defaultAccount;
@@ -4992,6 +4995,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
+      _detalleController.text = (itemParaEditar['detalle'] ?? '').toString();
       _montoController.text = (itemParaEditar['monto'] ?? '').toString();
       fechaSeleccionada = DateTime.parse(itemParaEditar['fecha']);
 
@@ -5013,6 +5017,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       esCredito = metodo == 'Credito';
     } else {
       _itemController.clear();
+      _detalleController.clear();
       _montoController.clear();
       fechaSeleccionada = DateTime.now();
       categoriaSeleccionada = categoriasDisponibles.first;
@@ -5043,7 +5048,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               final montoStr = _montoController.text.trim();
               if (montoStr.isEmpty) return;
               final monto = int.tryParse(montoStr) ?? 0;
+
               final item = _itemController.text.trim();
+              final detalle = _detalleController.text.trim();
 
               if (esTransferencia) {
                 if (cuentaDestinoSeleccionada == cuentaSeleccionada) {
@@ -5064,6 +5071,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     'fecha': fechaSeleccionada.toIso8601String(),
                     'item':
                         'Transf. a $cuentaDestinoSeleccionada', // Mejor descripción automática
+                    'detalle': detalle,
                     'monto': monto,
                     'categoria': 'Transferencia',
                     'cuenta': cuentaSeleccionada,
@@ -5076,6 +5084,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     'user_id': supabase.auth.currentUser!.id,
                     'fecha': fechaSeleccionada.toIso8601String(),
                     'item': 'Transf. desde $cuentaSeleccionada',
+                    'detalle': detalle,
                     'monto': monto,
                     'categoria': 'Transferencia',
                     'cuenta': cuentaDestinoSeleccionada, // Cuenta destino
@@ -5106,6 +5115,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       .update({
                         'fecha': fechaSeleccionada.toIso8601String(),
                         'item': item.isEmpty ? 'Sin nombre' : item,
+                        'detalle': detalle,
                         'monto': monto,
                         'categoria': categoria,
                         'cuenta': cuentaSeleccionada,
@@ -5117,6 +5127,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     'user_id': supabase.auth.currentUser!.id,
                     'fecha': fechaSeleccionada.toIso8601String(),
                     'item': item.isEmpty ? 'Sin nombre' : item,
+                    'detalle': detalle,
                     'monto': monto,
                     'categoria': categoria,
                     'cuenta': cuentaSeleccionada,
@@ -5205,6 +5216,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               ? Colors.grey.shade900
                               : Colors.grey.shade50,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Detalle
+                      TextField(
+                        controller: _detalleController,
+                        decoration: InputDecoration(
+                          labelText: 'Detalle (opcional)',
+                          prefixIcon: const Icon(Icons.description),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade900
+                              : Colors.grey.shade50,
+                        ),
+                        maxLines: 3,
+                        minLines: 1,
                       ),
                       const SizedBox(height: 12),
 
