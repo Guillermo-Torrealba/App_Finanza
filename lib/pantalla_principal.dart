@@ -27,6 +27,13 @@ class PantallaPrincipal extends StatefulWidget {
 
 class _PantallaPrincipalState extends State<PantallaPrincipal>
     with WidgetsBindingObserver {
+  static const String _itemAbonoTarjeta = 'Abono TC';
+  static const String _itemPagoFacturadoTarjeta = 'Pago Facturado TC';
+  static const Set<String> _itemsAbonoTarjeta = {
+    _itemAbonoTarjeta,
+    _itemPagoFacturadoTarjeta,
+  };
+
   final _stream = supabase
       .from('gastos')
       .stream(primaryKey: ['id'])
@@ -1183,7 +1190,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Widget _construirPaginaInicio(List<Map<String, dynamic>> todosLosDatos) {
-    final compacto = widget.settingsController.settings.compactMode;
+    final settings = widget.settingsController.settings;
+    final compacto = settings.compactMode;
     final margin = compacto ? 12.0 : 16.0;
     final padding = compacto ? 12.0 : 16.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1194,7 +1202,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       return _cuentasSeleccionadas.contains(cuenta);
     }).toList();
 
-    final saldoTotalGlobal = calcularSaldo(datosFiltrados);
+    // 4. Calcular Saldo de Cuenta Corriente (Liquidez total - Solo Débito/Efectivo)
+    // Se calcula explícitamente para asegurar que EXCLUYE Crédito
+    var saldoCuentaCorriente = 0;
+    for (final mov in datosFiltrados) {
+      // Ignorar transacciones de Crédito
+      if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+
+      final m = (mov['monto'] as num? ?? 0).toInt();
+      if (mov['tipo'] == 'Ingreso') {
+        saldoCuentaCorriente += m;
+      } else {
+        saldoCuentaCorriente -= m;
+      }
+    }
 
     final datosDelMes = datosFiltrados.where((mov) {
       final fechaMov = DateTime.parse(mov['fecha']);
@@ -1215,6 +1236,122 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
     final totalNetoMes = ingresoMes - gastoMes;
     final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
+
+    // 5. TC Utilizado:
+    // (Facturado pendiente + Por facturar pendiente), aplicando pagos/abonos.
+    final now = DateTime.now();
+    final billingDay = settings.creditCardBillingDay;
+    final cutoffThisMonth = DateTime(now.year, now.month, billingDay);
+    DateTime cycleStart;
+    DateTime cycleEnd;
+    DateTime lastCycleStart;
+    DateTime lastCycleEnd;
+    if (now.isAfter(cutoffThisMonth)) {
+      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
+      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
+      lastCycleEnd = cutoffThisMonth;
+      lastCycleStart = DateTime(
+        now.year,
+        now.month - 1,
+        billingDay,
+      ).add(const Duration(days: 1));
+    } else {
+      cycleEnd = cutoffThisMonth;
+      cycleStart = DateTime(
+        now.year,
+        now.month - 1,
+        billingDay,
+      ).add(const Duration(days: 1));
+      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
+      lastCycleStart = DateTime(
+        now.year,
+        now.month - 2,
+        billingDay,
+      ).add(const Duration(days: 1));
+    }
+    final curStart = DateTime(
+      cycleStart.year,
+      cycleStart.month,
+      cycleStart.day,
+    );
+    final curEnd = DateTime(
+      cycleEnd.year,
+      cycleEnd.month,
+      cycleEnd.day,
+      23,
+      59,
+      59,
+    );
+    final lastStart = DateTime(
+      lastCycleStart.year,
+      lastCycleStart.month,
+      lastCycleStart.day,
+    );
+    final lastEnd = DateTime(
+      lastCycleEnd.year,
+      lastCycleEnd.month,
+      lastCycleEnd.day,
+      23,
+      59,
+      59,
+    );
+    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    int calcularTotalRango(
+      List<Map<String, dynamic>> movimientos,
+      DateTime start,
+      DateTime end,
+    ) {
+      var total = 0;
+      for (final m in movimientos) {
+        final fecha = DateTime.parse((m['fecha'] ?? '').toString());
+        if (!fecha.isBefore(start) && !fecha.isAfter(end)) {
+          total += (m['monto'] as num? ?? 0).toInt();
+        }
+      }
+      return total;
+    }
+
+    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
+    for (final mov in datosFiltrados) {
+      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+      if (cuenta.isEmpty) continue;
+      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
+    }
+
+    var saldoCreditoUtilizado = 0;
+    for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
+      final creditExpenses = movimientosCuenta
+          .where((m) => (m['tipo'] ?? '') == 'Gasto')
+          .toList();
+      final creditPagos = movimientosCuenta
+          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
+          .toList();
+
+      final porFacturarBruto = calcularTotalRango(
+        creditExpenses,
+        curStart,
+        curEnd,
+      );
+      final facturadoBruto = calcularTotalRango(
+        creditExpenses,
+        lastStart,
+        lastEnd,
+      );
+      final pagosPeriodo = calcularTotalRango(creditPagos, lastStart, nowEnd);
+      final pagoAFacturado = pagosPeriodo > facturadoBruto
+          ? facturadoBruto
+          : pagosPeriodo;
+      final pagoRestante = pagosPeriodo - pagoAFacturado;
+      final facturadoPendiente = facturadoBruto - pagoAFacturado;
+      final porFacturarPendiente = (porFacturarBruto - pagoRestante).clamp(
+        0,
+        1 << 31,
+      );
+      saldoCreditoUtilizado += (facturadoPendiente + porFacturarPendiente)
+          .toInt();
+    }
 
     // Apply search & sort
     final query = _textoBusqueda.toLowerCase();
@@ -1258,36 +1395,250 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         SliverToBoxAdapter(
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Column(
-                  children: [
-                    _selectorCuentas(),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Saldo Total Disponible',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey,
-                      ),
+              _selectorCuentas(),
+              const SizedBox(height: 12),
+              // ── Tarjeta Liquidez Neta ──
+              Builder(
+                builder: (context) {
+                  final saldoNeto =
+                      saldoCuentaCorriente - saldoCreditoUtilizado;
+                  final totalBarra =
+                      saldoCuentaCorriente + saldoCreditoUtilizado;
+                  final double fraccionCuenta = totalBarra == 0
+                      ? 0.5
+                      : saldoCuentaCorriente / totalBarra;
+                  final double fraccionCredito = 1.0 - fraccionCuenta;
+                  final bool esNegativo = saldoNeto < 0;
+
+                  final Color colorNeto = esNegativo
+                      ? (isDark
+                            ? Colors.redAccent.shade100
+                            : Colors.red.shade700)
+                      : (isDark
+                            ? Colors.tealAccent.shade400
+                            : Colors.teal.shade700);
+
+                  return Container(
+                    margin: EdgeInsets.symmetric(horizontal: margin),
+                    padding: EdgeInsets.all(padding),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(isDark ? 60 : 18),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    Text(
-                      _textoMonto(saldoTotalGlobal),
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w900,
-                        color: saldoTotalGlobal >= 0
-                            ? (isDark
-                                  ? Colors.tealAccent.shade400
-                                  : Colors.teal.shade800)
-                            : (isDark
-                                  ? Colors.redAccent.shade100
-                                  : Colors.red.shade800),
-                      ),
+                    child: Column(
+                      children: [
+                        // ── Título ──
+                        Text(
+                          'Liquidez Neta',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // ── Monto Neto ──
+                        Text(
+                          _textoMonto(saldoNeto),
+                          style: TextStyle(
+                            fontSize: 38,
+                            fontWeight: FontWeight.w900,
+                            color: colorNeto,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // ── Barra de Composición ──
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            height: 10,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  flex: (fraccionCuenta * 1000).round().clamp(
+                                    1,
+                                    999,
+                                  ),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: isDark
+                                            ? [
+                                                Colors.tealAccent.shade700,
+                                                Colors.tealAccent.shade400,
+                                              ]
+                                            : [
+                                                Colors.teal.shade600,
+                                                Colors.teal.shade400,
+                                              ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                Flexible(
+                                  flex: (fraccionCredito * 1000).round().clamp(
+                                    1,
+                                    999,
+                                  ),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: isDark
+                                            ? [
+                                                Colors.redAccent.shade100,
+                                                Colors.red.shade300,
+                                              ]
+                                            : [
+                                                Colors.red.shade300,
+                                                Colors.red.shade400,
+                                              ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // ── Desglose Inferior ──
+                        Row(
+                          children: [
+                            // Cuenta Corriente
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          (isDark
+                                                  ? Colors.tealAccent.shade700
+                                                  : Colors.teal.shade600)
+                                              .withAlpha(30),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.account_balance,
+                                      size: 18,
+                                      color: isDark
+                                          ? Colors.tealAccent.shade400
+                                          : Colors.teal.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Cta. Corriente',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.grey.shade400
+                                                : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        Text(
+                                          _textoMonto(saldoCuentaCorriente),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? Colors.tealAccent.shade400
+                                                : Colors.teal.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Separador vertical
+                            Container(
+                              height: 32,
+                              width: 1,
+                              color: isDark
+                                  ? Colors.grey.shade700
+                                  : Colors.grey.shade300,
+                            ),
+                            // TC Utilizado
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Flexible(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'TC Utilizado',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.grey.shade400
+                                                : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        Text(
+                                          '- ${_textoMonto(saldoCreditoUtilizado)}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? Colors.redAccent.shade100
+                                                : Colors.red.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          (isDark
+                                                  ? Colors.redAccent.shade100
+                                                  : Colors.red.shade400)
+                                              .withAlpha(30),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.credit_card,
+                                      size: 18,
+                                      color: isDark
+                                          ? Colors.redAccent.shade100
+                                          : Colors.red.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
+              const SizedBox(height: 12),
               Container(
                 margin: EdgeInsets.symmetric(horizontal: margin),
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -2481,18 +2832,40 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   Future<void> _ajustarSaldoCuenta(String cuenta) async {
     try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      // 1. Obtener movimientos para calcular saldo actual y filtrar ajustes previos
       final List<dynamic> response = await supabase
           .from('gastos')
-          .select('monto, tipo')
+          .select('monto, tipo, categoria, metodo_pago')
+          .eq('user_id', user.id)
           .eq('cuenta', cuenta);
 
-      var saldoActual = 0;
+      var saldoVisual = 0;
+      var saldoRealSinAjustes = 0;
+
       for (final mov in response) {
+        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
+          continue;
+        }
+
         final monto = (mov['monto'] as num? ?? 0).toInt();
-        if (mov['tipo'] == 'Ingreso') {
-          saldoActual += monto;
+        final esIngreso = mov['tipo'] == 'Ingreso';
+
+        if (esIngreso) {
+          saldoVisual += monto;
         } else {
-          saldoActual -= monto;
+          saldoVisual -= monto;
+        }
+
+        // Calculamos el saldo "puro" sin ajustes previos
+        if (mov['categoria'] != 'Ajuste') {
+          if (esIngreso) {
+            saldoRealSinAjustes += monto;
+          } else {
+            saldoRealSinAjustes -= monto;
+          }
         }
       }
 
@@ -2501,34 +2874,47 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final nuevoSaldoStr = await _pedirTexto(
         titulo: 'Ajustar saldo: $cuenta',
         etiqueta:
-            'Nuevo saldo (Actual: ${_textoMonto(saldoActual, ocultable: false)})',
-        inicial: saldoActual.toString(),
+            'Nuevo saldo (Actual: ${_textoMonto(saldoVisual, ocultable: false)})',
+        inicial: saldoVisual.toString(),
       );
 
       if (nuevoSaldoStr == null) return;
 
       final nuevoSaldo = _parseMonto(nuevoSaldoStr);
 
-      if (nuevoSaldo == saldoActual) return;
-
-      final diferencia = nuevoSaldo - saldoActual;
-      final esIngreso = diferencia > 0;
-      final montoAjuste = diferencia.abs();
-      final fechaStr = DateTime.now().toIso8601String().split('T').first;
-
-      await supabase.from('gastos').insert({
-        'user_id': supabase.auth.currentUser!.id,
-        'fecha': fechaStr,
-        'item': 'Ajuste',
-        'monto': montoAjuste,
-        'categoria': 'Ajuste',
+      // 2. ELIMINAR ajustes previos para evitar acumulación
+      await supabase.from('gastos').delete().match({
+        'user_id': user.id,
         'cuenta': cuenta,
-        'tipo': esIngreso ? 'Ingreso' : 'Gasto',
+        'categoria': 'Ajuste',
+        'metodo_pago': 'Debito',
       });
+
+      // 3. Calcular diferencia necesaria desde el saldo REAL
+      final diferencia = nuevoSaldo - saldoRealSinAjustes;
+
+      if (diferencia != 0) {
+        final esIngreso = diferencia > 0;
+        final montoAjuste = diferencia.abs();
+        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': fechaStr,
+          'item': 'Ajuste de Saldo',
+          'monto': montoAjuste,
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': esIngreso ? 'Ingreso' : 'Gasto',
+          'metodo_pago': 'Debito',
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saldo ajustado correctamente')),
+          const SnackBar(
+            content: Text('Saldo ajustado (ajustes previos reemplazados)'),
+          ),
         );
       }
     } catch (e) {
@@ -3007,6 +3393,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                   ),
                 const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.move_to_inbox_outlined),
+                  title: const Text('Establecer Saldo Inicial TC'),
+                  subtitle: const Text(
+                    'Migrar deuda facturada y consumo actual',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _mostrarDialogoMigracionCredito,
+                ),
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -4017,7 +4413,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       for (final row in rows) {
         final fecha = (row['fecha'] ?? '').toString();
         final item = _csvEscape((row['item'] ?? '').toString());
-        final monto = (row['monto'] ?? '').toString();
+        final monto = (row['monto'] as num? ?? 0)
+            .toString(); // Ensure monto is num before toString
         final categoria = _csvEscape((row['categoria'] ?? '').toString());
         final cuenta = _csvEscape((row['cuenta'] ?? '').toString());
         final tipo = _csvEscape((row['tipo'] ?? '').toString());
@@ -4084,6 +4481,306 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       _mostrarSnack('Todos los movimientos fueron eliminados');
     } catch (e) {
       _mostrarSnack('No se pudieron borrar movimientos: $e');
+    }
+  }
+
+  Future<void> _mostrarDialogoMigracionCredito() async {
+    final accounts = widget.settingsController.settings.activeAccounts;
+    // Intentar preseleccionar una cuenta que parezca ser de crédito
+    String selectedAccount = accounts.firstWhere(
+      (acc) =>
+          acc.toLowerCase().contains('credito') ||
+          acc.toLowerCase().contains('crédito') ||
+          acc.toLowerCase().contains('tc') ||
+          acc.toLowerCase().contains('visa') ||
+          acc.toLowerCase().contains('master'),
+      orElse: () => widget.settingsController.settings.defaultAccount,
+    );
+
+    // Asegurarse de que la cuenta seleccionada sea válida
+    if (!accounts.contains(selectedAccount) && accounts.isNotEmpty) {
+      selectedAccount = accounts.first;
+    }
+
+    final facturadoController = TextEditingController();
+    final noFacturadoController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Migrar Deuda Tarjeta'),
+              scrollable: true,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Ingresa los montos pendientes. AL GUARDAR SE REEMPLAZARÁN los saldos iniciales previos de esta cuenta.',
+                    style: TextStyle(fontSize: 13, color: Colors.orange),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedAccount,
+                    decoration: const InputDecoration(
+                      labelText: 'Cuenta (T. Crédito)',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: accounts.map((acc) {
+                      return DropdownMenuItem(value: acc, child: Text(acc));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() => selectedAccount = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: facturadoController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Monto Facturado',
+                      helperText: 'Deuda cerrada pendiente de pago',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$ ',
+                    ),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: noFacturadoController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Monto NO Facturado',
+                      helperText: 'Consumo del ciclo actual',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$ ',
+                    ),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    _guardarMigracionCredito(
+                      selectedAccount,
+                      facturadoController.text,
+                      noFacturadoController.text,
+                    );
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _guardarMigracionCredito(
+    String cuenta,
+    String facturadoStr,
+    String noFacturadoStr,
+  ) async {
+    final mFacturado =
+        int.tryParse(facturadoStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    final mNoFacturado =
+        int.tryParse(noFacturadoStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      // 1. ELIMINAR ANTERIORES para esta cuenta (Evitar duplicados)
+      await supabase
+          .from('gastos')
+          .delete()
+          .match({'user_id': user.id, 'cuenta': cuenta, 'categoria': 'Ajuste'})
+          .or(
+            'item.eq."Saldo Inicial Importado (Facturado)",item.eq."Saldo Inicial Importado (Actual)"',
+          );
+
+      if (mFacturado == 0 && mNoFacturado == 0) {
+        _mostrarSnack('Saldos iniciales eliminados/limpiados.');
+        return;
+      }
+
+      final ahora = DateTime.now();
+      final billingDay =
+          widget.settingsController.settings.creditCardBillingDay;
+
+      // Calcular fecha para "Facturado" (debe ser anterior al inicio del ciclo actual de TC)
+      DateTime fechaFacturado;
+      if (ahora.day > billingDay) {
+        // Estamos en ciclo que cierra este mes
+        fechaFacturado = DateTime(ahora.year, ahora.month, billingDay);
+      } else {
+        // Estamos en ciclo que cerró el mes pasado
+        final mesAnterior = ahora.month == 1 ? 12 : ahora.month - 1;
+        final anioAnterior = ahora.month == 1 ? ahora.year - 1 : ahora.year;
+        fechaFacturado = DateTime(anioAnterior, mesAnterior, billingDay);
+      }
+
+      // 2. Insertar Facturado (Ciclo anterior)
+      if (mFacturado > 0) {
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': fechaFacturado.toIso8601String().split('T').first,
+          'item': 'Saldo Inicial Importado (Facturado)',
+          'monto': mFacturado,
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': 'Gasto',
+          'metodo_pago': 'Credito',
+        });
+      }
+
+      // 3. Insertar No Facturado (Ciclo actual - fecha hoy)
+      if (mNoFacturado > 0) {
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': ahora.toIso8601String().split('T').first,
+          'item': 'Saldo Inicial Importado (Actual)',
+          'monto': mNoFacturado,
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': 'Gasto',
+          'metodo_pago': 'Credito',
+        });
+      }
+
+      _mostrarSnack('Saldos iniciales actualizados (anteriores reemplazados)');
+    } catch (e) {
+      _mostrarSnack('Error al guardar saldo inicial: $e');
+    }
+  }
+
+  Future<void> _mostrarDialogoAbonoTarjeta({
+    required List<String> cuentasCredito,
+    required String itemAbono,
+    int? montoInicial,
+    String titulo = 'Registrar abono',
+  }) async {
+    if (cuentasCredito.isEmpty) {
+      _mostrarSnack('No hay cuentas de credito disponibles');
+      return;
+    }
+
+    var cuentaSeleccionada = cuentasCredito.first;
+    final montoController = TextEditingController(
+      text: montoInicial != null && montoInicial > 0
+          ? montoInicial.toString()
+          : '',
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(titulo),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: cuentaSeleccionada,
+                    decoration: const InputDecoration(
+                      labelText: 'Cuenta tarjeta',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: cuentasCredito
+                        .map(
+                          (acc) =>
+                              DropdownMenuItem(value: acc, child: Text(acc)),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() => cuentaSeleccionada = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: montoController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Monto',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$ ',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final monto = _parseMonto(montoController.text);
+                    if (monto <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ingresa un monto valido'),
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.pop(context);
+                    _registrarAbonoTarjeta(
+                      cuenta: cuentaSeleccionada,
+                      monto: monto,
+                      itemAbono: itemAbono,
+                    );
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _registrarAbonoTarjeta({
+    required String cuenta,
+    required int monto,
+    required String itemAbono,
+  }) async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      await supabase.from('gastos').insert({
+        'user_id': user.id,
+        'fecha': DateTime.now().toIso8601String(),
+        'item': itemAbono,
+        'monto': monto,
+        'categoria': 'Transferencia',
+        'cuenta': cuenta,
+        'tipo': 'Ingreso',
+        'metodo_pago': 'Credito',
+      });
+
+      _mostrarSnack(
+        'Abono registrado: ${_textoMonto(monto, ocultable: false)}',
+      );
+    } catch (e) {
+      _mostrarSnack('No se pudo registrar el abono: $e');
     }
   }
 
@@ -4800,6 +5497,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               (m['tipo'] == 'Gasto'),
         )
         .toList();
+    final creditAbonos = todosLosDatos
+        .where(
+          (m) =>
+              (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
+              (m['tipo'] == 'Ingreso') &&
+              _itemsAbonoTarjeta.contains((m['item'] ?? '').toString()),
+        )
+        .toList();
 
     int calcularTotal(List<dynamic> movimientos, DateTime start, DateTime end) {
       var total = 0;
@@ -4849,9 +5554,79 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       59,
       59,
     );
+    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-    final porFacturar = calcularTotal(creditExpenses, curStart, curEnd);
-    final facturado = calcularTotal(creditExpenses, lastStart, lastEnd);
+    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
+    for (final mov in todosLosDatos) {
+      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+      if (cuenta.isEmpty) continue;
+      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
+    }
+
+    var porFacturarPendiente = 0;
+    var facturadoPendiente = 0;
+    var pagosPeriodo = 0;
+    for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
+      final gastosCuenta = movimientosCuenta
+          .where((m) => (m['tipo'] ?? '') == 'Gasto')
+          .toList();
+      final ingresosCuenta = movimientosCuenta
+          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
+          .toList();
+
+      final porFacturarBrutoCuenta = calcularTotal(
+        gastosCuenta,
+        curStart,
+        curEnd,
+      );
+      final facturadoBrutoCuenta = calcularTotal(
+        gastosCuenta,
+        lastStart,
+        lastEnd,
+      );
+      final pagosPeriodoCuenta = calcularTotal(
+        ingresosCuenta,
+        lastStart,
+        nowEnd,
+      );
+
+      final pagoAFacturado = pagosPeriodoCuenta > facturadoBrutoCuenta
+          ? facturadoBrutoCuenta
+          : pagosPeriodoCuenta;
+      final pagoRestante = pagosPeriodoCuenta - pagoAFacturado;
+
+      facturadoPendiente += facturadoBrutoCuenta - pagoAFacturado;
+      porFacturarPendiente += (porFacturarBrutoCuenta - pagoRestante)
+          .clamp(0, 1 << 31)
+          .toInt();
+      pagosPeriodo += pagosPeriodoCuenta;
+    }
+
+    final cuentasCredito = <String>[];
+    for (final mov in todosLosDatos) {
+      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+      if (cuenta.isEmpty || cuentasCredito.contains(cuenta)) continue;
+      cuentasCredito.add(cuenta);
+    }
+    if (cuentasCredito.isEmpty) {
+      for (final acc in settings.activeAccounts) {
+        final lower = acc.toLowerCase();
+        final pareceCredito =
+            lower.contains('credito') ||
+            lower.contains('crédito') ||
+            lower.contains('tc') ||
+            lower.contains('visa') ||
+            lower.contains('master');
+        if (pareceCredito) {
+          cuentasCredito.add(acc);
+        }
+      }
+    }
+    if (cuentasCredito.isEmpty && settings.activeAccounts.isNotEmpty) {
+      cuentasCredito.add(settings.defaultAccount);
+    }
 
     // --- Fin Lógica ---
 
@@ -4875,6 +5650,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final d = DateTime.parse(m['fecha']);
       return !d.isBefore(lastStart) && !d.isAfter(lastEnd);
     }).toList();
+    final movimientosAbonos =
+        creditAbonos.where((m) {
+          final d = DateTime.parse(m['fecha']);
+          return !d.isBefore(lastStart) && !d.isAfter(nowEnd);
+        }).toList()..sort((a, b) {
+          final fa = DateTime.parse((a['fecha'] ?? '').toString());
+          final fb = DateTime.parse((b['fecha'] ?? '').toString());
+          return fb.compareTo(fa);
+        });
 
     // Calcular fechas para el mes visualizado
     final firstDayOfMonth = DateTime(
@@ -4976,7 +5760,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _textoMonto(porFacturar),
+                        _textoMonto(porFacturarPendiente),
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -5025,13 +5809,23 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _textoMonto(facturado),
+                        _textoMonto(facturadoPendiente),
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).brightness == Brightness.dark
                               ? Colors.deepOrange.shade100
                               : Colors.deepOrange,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Pagos/abonos: ${_textoMonto(pagosPeriodo)}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.green.shade200
+                              : Colors.green.shade700,
                         ),
                       ),
                       Text(
@@ -5050,6 +5844,78 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ],
           ),
           const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.payments_outlined, color: Colors.teal.shade600),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Pagos de tarjeta',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Facturado pendiente: ${_textoMonto(facturadoPendiente)}',
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade300
+                        : Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed:
+                          cuentasCredito.isEmpty || facturadoPendiente <= 0
+                          ? null
+                          : () => _mostrarDialogoAbonoTarjeta(
+                              cuentasCredito: cuentasCredito,
+                              itemAbono: _itemPagoFacturadoTarjeta,
+                              montoInicial: facturadoPendiente,
+                              titulo: 'Pagar monto facturado',
+                            ),
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: const Text('Pagar facturado'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: cuentasCredito.isEmpty
+                          ? null
+                          : () => _mostrarDialogoAbonoTarjeta(
+                              cuentasCredito: cuentasCredito,
+                              itemAbono: _itemAbonoTarjeta,
+                              titulo: 'Registrar abono',
+                            ),
+                      icon: const Icon(Icons.add_card),
+                      label: const Text('Registrar abono'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
@@ -5425,6 +6291,56 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.deepOrange.shade700,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+          ),
+
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Row(
+              children: [
+                Icon(Icons.payments, color: Colors.green.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Abonos registrados (${movimientosAbonos.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            children: movimientosAbonos.isEmpty
+                ? [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Sin abonos en el periodo actual',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ]
+                : movimientosAbonos.map((m) {
+                    final fecha = DateTime.parse(m['fecha']);
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      leading: Icon(
+                        Icons.arrow_circle_down_rounded,
+                        color: Colors.green.shade700,
+                        size: 20,
+                      ),
+                      title: Text(m['item'] ?? _itemAbonoTarjeta),
+                      subtitle: Text(
+                        '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
+                      ),
+                      trailing: Text(
+                        _textoMonto((m['monto'] as num).toInt()),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
                         ),
                       ),
                     );
