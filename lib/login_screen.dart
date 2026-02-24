@@ -29,7 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isSignUp) {
-        await Supabase.instance.client.auth.signUp(
+        // 1. REGISTRO EN SUPABASE AUTH
+        final AuthResponse res = await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           data: {
@@ -37,15 +38,43 @@ class _LoginScreenState extends State<LoginScreen> {
             'phone': _phoneController.text.trim(),
           },
         );
+
+        // 2. VINCULACIÓN AUTOMÁTICA CON EL BOT (NUEVO) 🤖🔗
+        // Si el registro fue exitoso y tenemos usuario y teléfono...
+        final user = res.user;
+        final rawPhone = _phoneController.text.trim();
+
+        if (user != null && rawPhone.isNotEmpty) {
+          // Limpieza básica del número (quita espacios, guiones y signos +)
+          // Para asegurar que coincida con lo que ve WhatsApp (solo números)
+          final cleanPhone = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+
+          try {
+            await Supabase.instance.client.from('usuarios_bot').upsert({
+              'user_id': user.id, // El ID que acaba de crear Supabase
+              'celular': cleanPhone, // El número limpio
+            });
+            print("✅ ¡Bot vinculado con éxito para el usuario ${user.email}!");
+          } catch (botError) {
+            print(
+              "⚠️ Error vinculando bot (pero el usuario se creó): $botError",
+            );
+            // No detenemos el flujo si esto falla, pero queda en consola
+          }
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cuenta creada. Inicia sesión.')),
+            const SnackBar(
+              content: Text('Cuenta creada y vinculada. Inicia sesión.'),
+            ),
           );
           setState(() {
             _isSignUp = false;
           });
         }
       } else {
+        // LOGIN NORMAL
         await Supabase.instance.client.auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
@@ -132,7 +161,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _phoneController,
                   decoration: const InputDecoration(
-                    labelText: 'Teléfono',
+                    labelText: 'Teléfono (Ej: 569...)', // Recordatorio visual
+                    hintText: '56912345678',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.phone),
                   ),
