@@ -655,7 +655,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final agrupado = <String, int>{};
     var total = 0;
     for (final mov in movimientosDelMes) {
-      if (mov['tipo'] != 'Gasto' || mov['categoria'] == 'Transferencia') {
+      if (mov['tipo'] != 'Gasto' ||
+          mov['categoria'] == 'Transferencia' ||
+          mov['categoria'] == 'Ajuste') {
         continue;
       }
       final cat = (mov['categoria'] ?? 'Varios').toString();
@@ -681,7 +683,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresos = 0;
     var gastos = 0;
     for (final mov in movimientos) {
-      if (mov['categoria'] == 'Transferencia') continue;
+      if (mov['categoria'] == 'Transferencia' || mov['categoria'] == 'Ajuste')
+        continue;
       final fechaMov = DateTime.parse(mov['fecha']);
       if (fechaMov.year != mes.year || fechaMov.month != mes.month) {
         continue;
