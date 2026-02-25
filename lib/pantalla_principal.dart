@@ -39,6 +39,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       .stream(primaryKey: ['id'])
       .order('fecha', ascending: false);
 
+  final _metasStream = supabase
+      .from('metas_ahorro')
+      .stream(primaryKey: ['id'])
+      .order('created_at', ascending: false);
+
   final _itemController = TextEditingController();
   final _detalleController = TextEditingController();
   final _montoController = TextEditingController();
@@ -68,6 +73,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   final List<String> _titulosPestanas = const [
     'Mis Finanzas Cloud',
     'Analisis',
+    'Metas',
     'Presupuestos',
     'Crédito',
     'Ajustes',
@@ -1071,10 +1077,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   : _indicePestana == 1
                   ? _construirPaginaAnalisis(todosLosDatos)
                   : _indicePestana == 2
-                  ? _construirPaginaPresupuestos(
-                      todosLosDatos,
-                    ) // Nueva pagina con datos
+                  ? _construirPaginaMetas()
                   : _indicePestana == 3
+                  ? _construirPaginaPresupuestos(todosLosDatos)
+                  : _indicePestana == 4
                   ? _construirPaginaCredito(todosLosDatos)
                   : _construirPaginaAjustes(),
             ),
@@ -1098,44 +1104,61 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         shape: const CircularNotchedRectangle(),
         notchMargin: 8.0,
         child: Row(
-          mainAxisSize: MainAxisSize.max,
           children: <Widget>[
-            const SizedBox(width: 16),
-            _navIcon(
-              filled: Icons.home,
-              outlined: Icons.home_outlined,
-              index: 0,
-              tooltip: 'Inicio',
+            // Lado izquierdo: 3 iconos
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _navIcon(
+                    filled: Icons.home,
+                    outlined: Icons.home_outlined,
+                    index: 0,
+                    tooltip: 'Inicio',
+                  ),
+                  _navIcon(
+                    filled: Icons.pie_chart,
+                    outlined: Icons.pie_chart_outline,
+                    index: 1,
+                    tooltip: 'Análisis',
+                  ),
+                  _navIcon(
+                    filled: Icons.flag,
+                    outlined: Icons.flag_outlined,
+                    index: 2,
+                    tooltip: 'Metas',
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
-            _navIcon(
-              filled: Icons.pie_chart,
-              outlined: Icons.pie_chart_outline,
-              index: 1,
-              tooltip: 'Analisis',
+            // Espacio central para el FAB
+            const SizedBox(width: 72),
+            // Lado derecho: 3 iconos
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _navIcon(
+                    filled: Icons.calculate,
+                    outlined: Icons.calculate_outlined,
+                    index: 3,
+                    tooltip: 'Presupuestos',
+                  ),
+                  _navIcon(
+                    filled: Icons.credit_card,
+                    outlined: Icons.credit_card_outlined,
+                    index: 4,
+                    tooltip: 'Crédito',
+                  ),
+                  _navIcon(
+                    filled: Icons.settings,
+                    outlined: Icons.settings_outlined,
+                    index: 5,
+                    tooltip: 'Ajustes',
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
-            _navIcon(
-              filled: Icons.calculate,
-              outlined: Icons.calculate_outlined,
-              index: 2,
-              tooltip: 'Presupuestos',
-            ),
-            const Spacer(flex: 3), // Gran espacio central
-            _navIcon(
-              filled: Icons.credit_card,
-              outlined: Icons.credit_card_outlined,
-              index: 3,
-              tooltip: 'Crédito',
-            ),
-            const Spacer(),
-            _navIcon(
-              filled: Icons.settings,
-              outlined: Icons.settings_outlined,
-              index: 4,
-              tooltip: 'Ajustes',
-            ),
-            const SizedBox(width: 16),
           ],
         ),
       ),
@@ -3627,6 +3650,865 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ],
         );
       },
+    );
+  }
+
+  // ─── METAS DE AHORRO ─────────────────────────────────────────────────
+
+  static const _coloresMeta = [
+    Color(0xFF009688), // teal
+    Color(0xFF4CAF50), // green
+    Color(0xFF2196F3), // blue
+    Color(0xFF9C27B0), // purple
+    Color(0xFFFF9800), // orange
+    Color(0xFFE91E63), // pink
+    Color(0xFFF44336), // red
+    Color(0xFFFFC107), // amber
+  ];
+
+  static const _emojisMeta = [
+    '✈️',
+    '🏖️',
+    '🏠',
+    '🚗',
+    '💻',
+    '📱',
+    '🎮',
+    '🎓',
+    '💍',
+    '👶',
+    '🐶',
+    '🏋️',
+    '🎸',
+    '📸',
+    '🧳',
+    '🏔️',
+    '💰',
+    '🏦',
+    '🛡️',
+    '🎯',
+    '⭐',
+    '🚀',
+    '🌟',
+    '🎁',
+  ];
+
+  Widget _construirPaginaMetas() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _metasStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final todasLasMetas = snapshot.data!;
+        final metasActivas = todasLasMetas
+            .where((m) => m['completada'] != true)
+            .toList();
+        final metasCompletadas = todasLasMetas
+            .where((m) => m['completada'] == true)
+            .toList();
+
+        // Calculate totals for summary
+        var totalAhorrado = 0;
+        var totalObjetivo = 0;
+        for (final meta in todasLasMetas) {
+          totalAhorrado += (meta['monto_actual'] as num? ?? 0).toInt();
+          totalObjetivo += (meta['monto_meta'] as num? ?? 0).toInt();
+        }
+        final progresoTotal = totalObjetivo > 0
+            ? totalAhorrado / totalObjetivo
+            : 0.0;
+
+        if (todasLasMetas.isEmpty) {
+          return _construirMetasVacio();
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Summary Header ──
+              _construirResumenMetas(
+                totalAhorrado,
+                totalObjetivo,
+                progresoTotal,
+                metasActivas.length,
+                metasCompletadas.length,
+                isDark,
+              ),
+              const SizedBox(height: 20),
+
+              // ── Active Goals ──
+              if (metasActivas.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.flag_outlined,
+                      size: 18,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Metas activas',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ...metasActivas.map(
+                  (meta) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _construirTarjetaMeta(meta, isDark),
+                  ),
+                ),
+              ],
+
+              // ── Completed Goals (collapsible) ──
+              if (metasCompletadas.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.check_circle,
+                      size: 18,
+                      color: isDark ? Colors.greenAccent : Colors.green,
+                    ),
+                    title: Text(
+                      'Completadas (${metasCompletadas.length})',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                    children: metasCompletadas
+                        .map(
+                          (meta) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _construirTarjetaMeta(
+                              meta,
+                              isDark,
+                              completada: true,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+
+              // ── Add button at the bottom ──
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _mostrarDialogoMeta(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nueva meta'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 90),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _construirMetasVacio() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.flag_circle_outlined,
+              size: 80,
+              color: isDark
+                  ? Colors.tealAccent.withAlpha(100)
+                  : Colors.teal.shade200,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              '¡Empieza a ahorrar\ncon propósito!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Crea metas como "Viaje a Japón" o\n"Fondo de emergencia" y ve tu progreso.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 28),
+            FilledButton.icon(
+              onPressed: () => _mostrarDialogoMeta(),
+              icon: const Icon(Icons.add),
+              label: const Text('Crear primera meta'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _construirResumenMetas(
+    int totalAhorrado,
+    int totalObjetivo,
+    double progresoTotal,
+    int activas,
+    int completadas,
+    bool isDark,
+  ) {
+    final colorBarra = progresoTotal >= 1.0
+        ? Colors.greenAccent
+        : Colors.tealAccent;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1A2E2A), const Color(0xFF1E1E1E)]
+              : [Colors.teal.shade50, Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.teal.shade800 : Colors.teal.shade100,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.savings,
+                color: isDark ? Colors.tealAccent : Colors.teal,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Resumen de metas',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _textoMonto(totalAhorrado),
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.tealAccent : Colors.teal.shade700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'de ${_textoMonto(totalObjetivo)} objetivo total',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progresoTotal.clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 8,
+                backgroundColor: isDark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(colorBarra),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${(progresoTotal * 100).clamp(0, 9999).toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? colorBarra : Colors.teal.shade700,
+                ),
+              ),
+              Text(
+                '$activas activa${activas != 1 ? 's' : ''} · $completadas completada${completadas != 1 ? 's' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirTarjetaMeta(
+    Map<String, dynamic> meta,
+    bool isDark, {
+    bool completada = false,
+  }) {
+    final nombre = meta['nombre'] ?? 'Meta';
+    final emoji = meta['emoji'] as String?;
+    final montoMeta = (meta['monto_meta'] as num? ?? 1).toInt();
+    final montoActual = (meta['monto_actual'] as num? ?? 0).toInt();
+    final colorHex = meta['color'] as String? ?? '#009688';
+    final fechaLimite = meta['fecha_limite'] as String?;
+
+    final progreso = montoMeta > 0
+        ? (montoActual / montoMeta).clamp(0.0, 1.0)
+        : 0.0;
+
+    // Parse color
+    final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
+
+    // Days remaining
+    String? diasRestantes;
+    if (fechaLimite != null && !completada) {
+      final limite = DateTime.parse(fechaLimite);
+      final hoy = DateTime.now();
+      final diff = limite.difference(hoy).inDays;
+      if (diff > 0) {
+        diasRestantes = '$diff días restantes';
+      } else if (diff == 0) {
+        diasRestantes = '¡Hoy vence!';
+      } else {
+        diasRestantes = 'Venció hace ${diff.abs()} días';
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: completada
+              ? (isDark ? Colors.green.shade800 : Colors.green.shade200)
+              : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDark ? 40 : 8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onLongPress: () => _mostrarOpcionesMeta(meta),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header: emoji + name + menu
+                Row(
+                  children: [
+                    // Circular progress
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: progreso),
+                            duration: const Duration(milliseconds: 700),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, _) =>
+                                CircularProgressIndicator(
+                                  value: value,
+                                  strokeWidth: 4,
+                                  backgroundColor: isDark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade200,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    completada ? Colors.green : color,
+                                  ),
+                                ),
+                          ),
+                          if (emoji != null && emoji.isNotEmpty)
+                            Text(emoji, style: const TextStyle(fontSize: 18))
+                          else if (completada)
+                            Icon(Icons.check, size: 20, color: Colors.green)
+                          else
+                            Text(
+                              '${(progreso * 100).toInt()}%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nombre,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              decoration: completada
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_textoMonto(montoActual)} / ${_textoMonto(montoMeta)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!completada)
+                      FilledButton.tonal(
+                        onPressed: () => _mostrarDialogoAbonar(meta),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          backgroundColor: color.withAlpha(isDark ? 50 : 30),
+                        ),
+                        child: Text(
+                          'Abonar',
+                          style: TextStyle(
+                            color: isDark ? color.withAlpha(220) : color,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progreso),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) => LinearProgressIndicator(
+                      value: value,
+                      minHeight: 6,
+                      backgroundColor: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation(
+                        completada ? Colors.green : color,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Footer: deadline + percentage
+                if (diasRestantes != null || completada) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (diasRestantes != null)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              size: 14,
+                              color: isDark
+                                  ? Colors.grey.shade500
+                                  : Colors.grey.shade500,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              diasRestantes,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.grey.shade500
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (completada)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.celebration,
+                              size: 14,
+                              color: isDark ? Colors.greenAccent : Colors.green,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '¡Meta cumplida!',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? Colors.greenAccent
+                                    : Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _mostrarOpcionesMeta(Map<String, dynamic> meta) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Editar meta'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _mostrarDialogoMeta(metaExistente: meta);
+                },
+              ),
+              if (meta['completada'] != true)
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline),
+                  title: const Text('Marcar como completada'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await supabase
+                        .from('metas_ahorro')
+                        .update({
+                          'completada': true,
+                          'updated_at': DateTime.now().toIso8601String(),
+                        })
+                        .eq('id', meta['id']);
+                    _mostrarSnack('¡Meta completada! 🎉');
+                  },
+                ),
+              if (meta['completada'] == true)
+                ListTile(
+                  leading: const Icon(Icons.undo),
+                  title: const Text('Reactivar meta'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await supabase
+                        .from('metas_ahorro')
+                        .update({
+                          'completada': false,
+                          'updated_at': DateTime.now().toIso8601String(),
+                        })
+                        .eq('id', meta['id']);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text(
+                  'Eliminar',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmarEliminarMeta(meta);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmarEliminarMeta(Map<String, dynamic> meta) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar meta'),
+        content: Text(
+          '¿Seguro que deseas eliminar "${meta['nombre']}"? Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await supabase.from('metas_ahorro').delete().eq('id', meta['id']);
+      _mostrarSnack('Meta eliminada');
+    }
+  }
+
+  void _mostrarDialogoMeta({Map<String, dynamic>? metaExistente}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FormularioMeta(
+        metaExistente: metaExistente,
+        formatoMoneda: formatoMoneda,
+        onGuardar: (data) async {
+          if (metaExistente != null) {
+            await supabase
+                .from('metas_ahorro')
+                .update({
+                  ...data,
+                  'updated_at': DateTime.now().toIso8601String(),
+                })
+                .eq('id', metaExistente['id']);
+          } else {
+            await supabase.from('metas_ahorro').insert({
+              ...data,
+              'user_id': supabase.auth.currentUser!.id,
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _mostrarDialogoAbonar(Map<String, dynamic> meta) {
+    final controller = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final montoActual = (meta['monto_actual'] as num? ?? 0).toInt();
+    final montoMeta = (meta['monto_meta'] as num? ?? 1).toInt();
+    final restante = montoMeta - montoActual;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (meta['emoji'] != null &&
+                      (meta['emoji'] as String).isNotEmpty)
+                    Text(meta['emoji'], style: const TextStyle(fontSize: 22))
+                  else
+                    const Icon(Icons.savings_outlined, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Abonar a "${meta['nombre']}"',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Faltan ${_textoMonto(restante > 0 ? restante : 0)} para completar',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'Monto a abonar',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Quick amount chips
+              if (restante > 0)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (restante >= 10000) _chipAbonoRapido(controller, 10000),
+                    if (restante >= 50000) _chipAbonoRapido(controller, 50000),
+                    if (restante >= 100000)
+                      _chipAbonoRapido(controller, 100000),
+                    ActionChip(
+                      label: Text('Todo (${_textoMonto(restante)})'),
+                      onPressed: () => controller.text = restante.toString(),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  onPressed: () async {
+                    final monto = int.tryParse(controller.text.trim()) ?? 0;
+                    if (monto <= 0) return;
+                    final nuevoMonto = montoActual + monto;
+                    final completada = nuevoMonto >= montoMeta;
+                    await supabase
+                        .from('metas_ahorro')
+                        .update({
+                          'monto_actual': nuevoMonto,
+                          'completada': completada,
+                          'updated_at': DateTime.now().toIso8601String(),
+                        })
+                        .eq('id', meta['id']);
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      if (completada) {
+                        _mostrarSnack(
+                          '🎉 ¡Meta "${meta['nombre']}" completada!',
+                        );
+                      } else {
+                        _mostrarSnack(
+                          'Abono de ${_textoMonto(monto)} registrado ✓',
+                        );
+                      }
+                    }
+                    controller.dispose();
+                  },
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Abonar', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chipAbonoRapido(TextEditingController controller, int monto) {
+    return ActionChip(
+      label: Text(_textoMonto(monto, ocultable: false)),
+      onPressed: () => controller.text = monto.toString(),
     );
   }
 
@@ -7057,5 +7939,449 @@ class _ScaleTapState extends State<_ScaleTap>
       onTapCancel: () => _controller.reverse(),
       child: ScaleTransition(scale: _scale, child: widget.child),
     );
+  }
+}
+
+// ─── FORMULARIO META DE AHORRO ──────────────────────────────────────────────
+
+class _FormularioMeta extends StatefulWidget {
+  final Map<String, dynamic>? metaExistente;
+  final String Function(num numero, {bool ocultar}) formatoMoneda;
+  final Future<void> Function(Map<String, dynamic> data) onGuardar;
+
+  const _FormularioMeta({
+    this.metaExistente,
+    required this.formatoMoneda,
+    required this.onGuardar,
+  });
+
+  @override
+  State<_FormularioMeta> createState() => _FormularioMetaState();
+}
+
+class _FormularioMetaState extends State<_FormularioMeta> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nombreController;
+  late TextEditingController _montoMetaController;
+  late TextEditingController _montoActualController;
+  String? _emojiSeleccionado;
+  DateTime? _fechaLimite;
+  Color _colorSeleccionado = const Color(0xFF009688);
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final meta = widget.metaExistente;
+    _nombreController = TextEditingController(
+      text: meta?['nombre']?.toString() ?? '',
+    );
+    _montoMetaController = TextEditingController(
+      text: meta?['monto_meta']?.toString() ?? '',
+    );
+    _montoActualController = TextEditingController(
+      text: meta != null ? (meta['monto_actual'] ?? 0).toString() : '',
+    );
+    _emojiSeleccionado = meta?['emoji'] as String?;
+    if (meta?['fecha_limite'] != null) {
+      _fechaLimite = DateTime.tryParse(meta!['fecha_limite']);
+    }
+    if (meta?['color'] != null) {
+      try {
+        _colorSeleccionado = Color(
+          int.parse((meta!['color'] as String).replaceFirst('#', '0xFF')),
+        );
+      } catch (_) {}
+    }
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _montoMetaController.dispose();
+    _montoActualController.dispose();
+    super.dispose();
+  }
+
+  String _colorToHex(Color color) {
+    return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEditing = widget.metaExistente != null;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+
+                Text(
+                  isEditing ? 'Editar meta' : 'Nueva meta de ahorro',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Nombre
+                TextFormField(
+                  controller: _nombreController,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre de la meta',
+                    hintText: 'Ej: Viaje a Japón',
+                    prefixIcon:
+                        _emojiSeleccionado != null &&
+                            _emojiSeleccionado!.isNotEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 12, right: 4),
+                            child: Text(
+                              _emojiSeleccionado!,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          )
+                        : const Icon(Icons.flag_outlined),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 0,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Requerido'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+
+                // Emoji selector
+                Text(
+                  'Emoji (opcional)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      // Clear emoji option
+                      GestureDetector(
+                        onTap: () => setState(() => _emojiSeleccionado = null),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                            color: _emojiSeleccionado == null
+                                ? (isDark
+                                      ? Colors.teal.shade800
+                                      : Colors.teal.shade100)
+                                : (isDark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(10),
+                            border: _emojiSeleccionado == null
+                                ? Border.all(
+                                    color: Colors.teal.shade400,
+                                    width: 2,
+                                  )
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.close,
+                            size: 18,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      ..._PantallaPrincipalState._emojisMeta.map((emoji) {
+                        final isSelected = _emojiSeleccionado == emoji;
+                        return GestureDetector(
+                          onTap: () =>
+                              setState(() => _emojiSeleccionado = emoji),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (isDark
+                                        ? Colors.teal.shade800
+                                        : Colors.teal.shade100)
+                                  : (isDark
+                                        ? Colors.grey.shade800
+                                        : Colors.grey.shade100),
+                              borderRadius: BorderRadius.circular(10),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: Colors.teal.shade400,
+                                      width: 2,
+                                    )
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              emoji,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Monto meta
+                TextFormField(
+                  controller: _montoMetaController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: 'Monto objetivo',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Requerido';
+                    }
+                    final parsed = int.tryParse(value.trim());
+                    if (parsed == null || parsed <= 0) {
+                      return 'Debe ser mayor a 0';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Monto actual (solo en creación o edición)
+                TextFormField(
+                  controller: _montoActualController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: 'Monto inicial ahorrado',
+                    hintText: '0',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Fecha límite (optional)
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Fecha límite (opcional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate:
+                            _fechaLimite ??
+                            DateTime.now().add(const Duration(days: 90)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(
+                          const Duration(days: 3650),
+                        ),
+                      );
+                      if (picked != null) {
+                        setState(() => _fechaLimite = picked);
+                      }
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _fechaLimite != null
+                              ? '${_fechaLimite!.day}/${_fechaLimite!.month}/${_fechaLimite!.year}'
+                              : 'Sin fecha límite',
+                          style: TextStyle(
+                            color: _fechaLimite != null
+                                ? null
+                                : (isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade500),
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_fechaLimite != null)
+                              GestureDetector(
+                                onTap: () =>
+                                    setState(() => _fechaLimite = null),
+                                child: Icon(
+                                  Icons.clear,
+                                  size: 18,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.calendar_today, size: 18),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Color picker
+                Text(
+                  'Color de la meta',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: _PantallaPrincipalState._coloresMeta.map((color) {
+                    final isSelected = _colorSeleccionado.value == color.value;
+                    return GestureDetector(
+                      onTap: () => setState(() => _colorSeleccionado = color),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isSelected ? 36 : 30,
+                        height: isSelected ? 36 : 30,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: isSelected
+                              ? Border.all(
+                                  color: isDark ? Colors.white : Colors.black87,
+                                  width: 2.5,
+                                )
+                              : null,
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: color.withAlpha(120),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: isSelected
+                            ? const Icon(
+                                Icons.check,
+                                size: 16,
+                                color: Colors.white,
+                              )
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+
+                // Save button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: _guardando ? null : _guardar,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _guardando
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            isEditing ? 'Guardar cambios' : 'Crear meta',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _guardar() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _guardando = true);
+
+    final data = <String, dynamic>{
+      'nombre': _nombreController.text.trim(),
+      'emoji': _emojiSeleccionado,
+      'monto_meta': int.parse(_montoMetaController.text.trim()),
+      'monto_actual': int.tryParse(_montoActualController.text.trim()) ?? 0,
+      'fecha_limite': _fechaLimite?.toIso8601String().split('T').first,
+      'color': _colorToHex(_colorSeleccionado),
+    };
+
+    try {
+      await widget.onGuardar(data);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
   }
 }
