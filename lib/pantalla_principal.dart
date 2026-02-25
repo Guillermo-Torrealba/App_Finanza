@@ -745,10 +745,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     List<Map<String, dynamic>> movimientosDelMes,
   ) {
     final desglose = calcularGastosPorCategoria(movimientosDelMes);
-    if (desglose.isEmpty) {
+    final excluidas = {'Créditos', 'Crédito Consumo'};
+    final filtrado = desglose
+        .where((d) => !excluidas.contains(d['categoria']))
+        .toList();
+    if (filtrado.isEmpty) {
       return {'categoria': 'Sin datos', 'monto': 0, 'porcentaje': 0.0};
     }
-    return desglose.first;
+    return filtrado.first;
   }
 
   DateTime _inicioCiclo(DateTime referencia) {
@@ -781,6 +785,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   ) {
     var total = 0;
     for (final mov in movimientos) {
+      final cat = (mov['categoria'] ?? '').toString();
+      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
       final fecha = DateTime.parse(mov['fecha']);
       if (fecha.isBefore(inicio) || fecha.isAfter(finInclusive)) {
         continue;
@@ -808,6 +814,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresosCiclo = 0;
     var gastosCiclo = 0;
     for (final mov in cicloMov) {
+      final cat = (mov['categoria'] ?? '').toString();
+      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         ingresosCiclo += monto;
@@ -1255,7 +1263,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresoMes = 0;
     var gastoMes = 0;
     for (final mov in datosDelMes) {
-      if (mov['categoria'] == 'Transferencia') continue;
+      final cat = (mov['categoria'] ?? '').toString();
+      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         ingresoMes += monto;
@@ -6927,10 +6936,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     // Chequear si hay créditos que se pagan hoy
                     final creditosHoy = settings.consumptionCredits.where((c) {
                       final paymentDay = c['paymentDay'] as int;
+                      final paid = (c['paidInstallments'] as int?) ?? 0;
+                      final total = c['installments'] as int;
+                      if (paid >= total) return false; // already completed
                       final start = DateTime.parse(c['startDate']);
                       final end = DateTime(
                         start.year,
-                        start.month + (c['installments'] as int),
+                        start.month + total,
                         start.day,
                       );
                       return day == paymentDay &&
@@ -7325,13 +7337,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // Créditos
     for (final c in settings.consumptionCredits) {
       final payDay = c['paymentDay'] as int;
+      final paid = (c['paidInstallments'] as int?) ?? 0;
+      final total = c['installments'] as int;
+      if (paid >= total) continue; // already completed
       if (payDay <= daysInMonth) {
         final start = DateTime.parse(c['startDate']);
-        final end = DateTime(
-          start.year,
-          start.month + (c['installments'] as int),
-          start.day,
-        );
+        final end = DateTime(start.year, start.month + total, start.day);
         final current = DateTime(
           _mesVisualizado.year,
           _mesVisualizado.month,
@@ -7339,20 +7350,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         );
 
         if (!current.isBefore(start) && current.isBefore(end)) {
-          // Calcular número de cuota
-          // Aproximación simple meses
-          int cuota =
-              (current.year - start.year) * 12 +
-              current.month -
-              start.month +
-              1;
-          if (start.day > payDay)
-            cuota--; // Ajuste si el día de pago es menor al inicio
-          if (cuota < 1) cuota = 1;
-
+          final cuotaSiguiente = paid + 1;
           eventos.add({
             'day': payDay,
-            'title': '${c['name']} (Cuota $cuota/${c['installments']})',
+            'title': '${c['name']} (Cuota $cuotaSiguiente/$total)',
             'monto': c['amount'],
             'color': Colors.green,
             'icon': Icons.account_balance,
@@ -7419,19 +7420,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Widget _tarjetaCreditoConsumo(Map<String, dynamic> credit) {
-    // Calculos
-    final start = DateTime.parse(credit['startDate']);
     final totalCuotas = credit['installments'] as int;
     final montoCuota = credit['amount'] as int;
+    final cuotasPagadas = (credit['paidInstallments'] as int?) ?? 0;
+    final cuenta = (credit['cuenta'] ?? '').toString();
+    final completado = cuotasPagadas >= totalCuotas;
 
-    // Cuotas pagadas aprox
-    final now = DateTime.now();
-    int cuotasPagadas = (now.year - start.year) * 12 + now.month - start.month;
-    if (now.day < (credit['paymentDay'] as int)) cuotasPagadas--;
-    if (cuotasPagadas < 0) cuotasPagadas = 0;
-    if (cuotasPagadas > totalCuotas) cuotasPagadas = totalCuotas;
-
-    final progreso = cuotasPagadas / totalCuotas;
+    final progreso = totalCuotas > 0 ? cuotasPagadas / totalCuotas : 0.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -7455,11 +7450,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                credit['name'],
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              Expanded(
+                child: Text(
+                  credit['name'],
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
@@ -7483,12 +7481,32 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Cuota $cuotasPagadas de $totalCuotas',
-            style: TextStyle(
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-              fontSize: 12,
-            ),
+          Row(
+            children: [
+              Text(
+                'Cuota $cuotasPagadas de $totalCuotas',
+                style: TextStyle(
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  fontSize: 12,
+                ),
+              ),
+              if (cuenta.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.account_balance,
+                  size: 12,
+                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  cuenta,
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 4),
           ClipRRect(
@@ -7498,30 +7516,149 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               backgroundColor: isDark
                   ? Colors.grey.shade800
                   : Colors.grey.shade100,
-              color: Colors.teal,
+              color: completado ? Colors.green : Colors.teal,
               minHeight: 6,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Próximo pago: día ${credit['paymentDay']}',
-            style: TextStyle(
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-              color: isDark ? Colors.grey.shade400 : Colors.black87,
+          const SizedBox(height: 10),
+          if (completado)
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  size: 18,
+                  color: Colors.green.shade400,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Crédito completado',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green.shade400,
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Próximo pago: día ${credit['paymentDay']}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: isDark ? Colors.grey.shade400 : Colors.black87,
+                  ),
+                ),
+                SizedBox(
+                  height: 32,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _pagarCuotaCredito(credit),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: Text(
+                      'Pagar Cuota ${cuotasPagadas + 1}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );
   }
 
+  Future<void> _pagarCuotaCredito(Map<String, dynamic> credit) async {
+    final totalCuotas = credit['installments'] as int;
+    final montoCuota = credit['amount'] as int;
+    final cuotasPagadas = (credit['paidInstallments'] as int?) ?? 0;
+    final cuenta = (credit['cuenta'] ?? '').toString();
+    final nombre = (credit['name'] ?? '').toString();
+    final cuotaSiguiente = cuotasPagadas + 1;
+
+    if (cuotaSiguiente > totalCuotas) return;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar Pago'),
+          content: Text(
+            '¿Pagar cuota $cuotaSiguiente de $totalCuotas de "$nombre"?\n\n'
+            'Monto: ${formatoMoneda(montoCuota)}\n'
+            'Cuenta: $cuenta',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Pagar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true || !mounted) return;
+
+    try {
+      // Register expense in Supabase
+      await supabase.from('gastos').insert({
+        'user_id': supabase.auth.currentUser!.id,
+        'fecha': DateTime.now().toIso8601String().split('T').first,
+        'item': '$nombre (Cuota $cuotaSiguiente/$totalCuotas)',
+        'monto': montoCuota,
+        'categoria': 'Créditos',
+        'cuenta': cuenta,
+        'tipo': 'Gasto',
+        'metodo_pago': 'Debito',
+      });
+
+      // Update paid installments
+      final updated = Map<String, dynamic>.from(credit);
+      updated['paidInstallments'] = cuotaSiguiente;
+      widget.settingsController.updateConsumptionCredit(
+        credit['id'] as String,
+        updated,
+      );
+
+      if (mounted) {
+        _mostrarSnack(
+          '✅ Cuota $cuotaSiguiente pagada: ${formatoMoneda(montoCuota)} desde $cuenta',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarSnack('Error al registrar pago: $e');
+      }
+    }
+  }
+
   Future<void> _agregarCreditoConsumo() async {
+    final settings = widget.settingsController.settings;
     final nameCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
     final installmentsCtrl = TextEditingController();
     final paymentDayCtrl = TextEditingController();
     DateTime? startDate;
+    String cuentaSeleccionada = settings.defaultAccount;
 
     await showDialog(
       context: context,
@@ -7564,7 +7701,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: cuentaSeleccionada,
+                      decoration: const InputDecoration(
+                        labelText: 'Cuenta de cargo',
+                        prefixIcon: Icon(Icons.account_balance),
+                      ),
+                      items: settings.activeAccounts.map((cuenta) {
+                        return DropdownMenuItem(
+                          value: cuenta,
+                          child: Text(cuenta),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setStateSB(() => cuentaSeleccionada = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
                     ListTile(
                       title: Text(
                         startDate == null
@@ -7611,6 +7767,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         paymentDayCtrl.text.trim(),
                       ).clamp(1, 31),
                       'startDate': startDate!.toIso8601String(),
+                      'cuenta': cuentaSeleccionada,
+                      'paidInstallments': 0,
                     };
 
                     widget.settingsController.addConsumptionCredit(credit);
