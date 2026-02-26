@@ -2418,6 +2418,170 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         : (tasaAhorro * 100) / settings.savingsTargetPercent;
     final alertas = _generarAlertas(todosLosDatos);
 
+    // Calcular Dinero Libre Hoy solo si es el mes actual
+    Widget? tarjetaSupervivencia;
+    if (esMesActual) {
+      final datosFiltradosSupervivencia = todosLosDatos.where((mov) {
+        final cuenta = (mov['cuenta'] ?? '').toString();
+        return _cuentasSeleccionadas.contains(cuenta);
+      }).toList();
+
+      var saldoDebito = 0;
+      var deudaCredito = 0;
+      for (final mov in datosFiltradosSupervivencia) {
+        final m = (mov['monto'] as num? ?? 0).toInt();
+        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
+          if (mov['tipo'] == 'Gasto') {
+            deudaCredito += m;
+          } else {
+            deudaCredito -= m;
+          }
+        } else {
+          if (mov['tipo'] == 'Ingreso') {
+            saldoDebito += m;
+          } else {
+            saldoDebito -= m;
+          }
+        }
+      }
+
+      final dineroLibreHoy = saldoDebito - deudaCredito;
+      final diasRestantes = diasDelMes - hoy.day + 1; // +1 to include today
+      final presupuestoDiarioSugerido = diasRestantes > 0
+          ? (dineroLibreHoy / diasRestantes).round()
+          : 0;
+
+      tarjetaSupervivencia = Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
+                : [Colors.blue.shade50, Colors.blue.shade100.withAlpha(150)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.blue.shade700.withAlpha(100)
+                : Colors.blue.shade300,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (isDark ? Colors.black : Colors.blue.shade200).withAlpha(
+                100,
+              ),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet,
+                  color: isDark ? Colors.blueAccent : Colors.blue.shade700,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Dinero Libre Hoy',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.blue.shade100 : Colors.blue.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _textoMonto(dineroLibreHoy),
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.blue.shade900,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.black : Colors.white).withAlpha(150),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Presupuesto Sugerido',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        '${_textoMonto(presupuestoDiarioSugerido)} / día',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.greenAccent.shade400
+                              : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Restante',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        '$diasRestantes días',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              // Explicacion sutil
+              '(Calculado como Cuentas Débito - Pagos pendientes Tarjeta)',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.blue.shade200 : Colors.blue.shade800,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
@@ -2456,6 +2620,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
           const SizedBox(height: 16),
+          if (tarjetaSupervivencia != null) tarjetaSupervivencia,
+          Text(
+            'Rendimiento del Mes',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+            ),
+          ),
+          const SizedBox(height: 8),
           _tarjetaAnalisis(
             titulo: 'Flujo de caja del mes',
             valor: _textoMonto(flujoMes),
