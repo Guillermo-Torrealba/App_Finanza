@@ -689,8 +689,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresos = 0;
     var gastos = 0;
     for (final mov in movimientos) {
-      if (mov['categoria'] == 'Transferencia' || mov['categoria'] == 'Ajuste')
+      if (mov['categoria'] == 'Transferencia' || mov['categoria'] == 'Ajuste') {
         continue;
+      }
       final fechaMov = DateTime.parse(mov['fecha']);
       if (fechaMov.year != mes.year || fechaMov.month != mes.month) {
         continue;
@@ -1000,17 +1001,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark
-            ? alert.color.withOpacity(0.15)
+            ? alert.color.withValues(alpha: 0.15)
             : alert.color.withAlpha(24),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: alert.color.withOpacity(isDark ? 0.3 : 0.1)),
+        border: Border.all(
+          color: alert.color.withValues(alpha: isDark ? 0.3 : 0.1),
+        ),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: alert.color.withOpacity(0.2),
+              color: alert.color.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(alert.icon, color: alert.color, size: 20),
@@ -1025,7 +1028,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: isDark ? alert.color.withOpacity(0.9) : alert.color,
+                    color: isDark
+                        ? alert.color.withValues(alpha: 0.9)
+                        : alert.color,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -2129,8 +2134,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         tag: 'mov_${item['id']}',
                         child: CircleAvatar(
                           backgroundColor: esIngreso
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
+                              ? Colors.green.withValues(alpha: 0.1)
+                              : Colors.red.withValues(alpha: 0.1),
                           child: esIngreso
                               ? const Icon(
                                   Icons.arrow_upward,
@@ -2242,7 +2247,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -2268,7 +2273,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.orange.withOpacity(0.2)
+                          ? Colors.orange.withValues(alpha: 0.2)
                           : Colors.orange.shade50,
                       shape: BoxShape.circle,
                     ),
@@ -2471,6 +2476,34 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 'Calculado sobre $diasTranscurridos dia(s) del periodo',
             icono: Icons.calendar_view_day,
             color: Colors.orange.shade700,
+          ),
+          const SizedBox(height: 12),
+          // ── Presupuesto diario disponible ──
+          Builder(
+            builder: (_) {
+              final diasRestantes = esMesActual
+                  ? (diasDelMes - hoy.day + 1) // incluye hoy
+                  : diasDelMes;
+              final flujoRestante = ingresoMes - gastoMes;
+              final presupuestoDiario = diasRestantes > 0
+                  ? (flujoRestante / diasRestantes).round()
+                  : flujoRestante;
+              final colorPresupuesto = presupuestoDiario > 0
+                  ? (isDark ? Colors.cyanAccent : Colors.cyan.shade700)
+                  : presupuestoDiario == 0
+                  ? Colors.orange
+                  : (isDark ? Colors.redAccent : Colors.red);
+              final descripcionDiario = esMesActual
+                  ? '$diasRestantes dia(s) restantes · Disponible ${_textoMonto(flujoRestante)}'
+                  : 'Resultado final del mes';
+              return _tarjetaAnalisis(
+                titulo: 'Presupuesto diario disponible',
+                valor: _textoMonto(presupuestoDiario),
+                descripcion: descripcionDiario,
+                icono: Icons.today_outlined,
+                color: colorPresupuesto,
+              );
+            },
           ),
           const SizedBox(height: 12),
           _tarjetaAnalisis(
@@ -2714,8 +2747,103 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          // ── Botón Simular Compra ──
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [Colors.deepPurple.shade700, Colors.indigo.shade700]
+                    : [Colors.deepPurple.shade400, Colors.indigo.shade400],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.deepPurple.withAlpha(isDark ? 60 : 40),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => _mostrarSimuladorCompra(todosLosDatos),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 20,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white.withAlpha(220),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Simular Compra',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  SIMULADOR DE COMPRAS
+  // ═══════════════════════════════════════════════════════
+
+  void _mostrarSimuladorCompra(List<Map<String, dynamic>> todosLosDatos) {
+    // Calcular promedio de ingresos y gastos de los últimos 3 meses
+    final now = DateTime.now();
+    var sumaIngresos = 0;
+    var sumaGastos = 0;
+    var mesesConDatos = 0;
+    for (var i = 1; i <= 3; i++) {
+      final mes = DateTime(now.year, now.month - i, 1);
+      final resumen = _calcularResumenMes(todosLosDatos, mes);
+      final ing = resumen['ingresos'] ?? 0;
+      final gas = resumen['gastos'] ?? 0;
+      if (ing > 0 || gas > 0) {
+        sumaIngresos += ing;
+        sumaGastos += gas;
+        mesesConDatos++;
+      }
+    }
+    final ingresoPromedio = mesesConDatos > 0
+        ? sumaIngresos ~/ mesesConDatos
+        : 0;
+    final gastoPromedio = mesesConDatos > 0 ? sumaGastos ~/ mesesConDatos : 0;
+    final flujoBasePromedio = ingresoPromedio - gastoPromedio;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _SimuladorCompraSheet(
+          ingresoPromedio: ingresoPromedio,
+          gastoPromedio: gastoPromedio,
+          flujoBasePromedio: flujoBasePromedio,
+          formatoMoneda: (num n) => _textoMonto(n.toInt(), ocultable: false),
+        );
+      },
     );
   }
 
@@ -2979,7 +3107,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
               children: [
                 DropdownButtonFormField<String>(
-                  value: settings.themeMode,
+                  initialValue: settings.themeMode,
                   decoration: const InputDecoration(labelText: 'Tema'),
                   items: const [
                     DropdownMenuItem(value: 'system', child: Text('Sistema')),
@@ -3064,7 +3192,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
               children: [
                 DropdownButtonFormField<String>(
-                  value: settings.currencyCode,
+                  initialValue: settings.currencyCode,
                   decoration: const InputDecoration(labelText: 'Moneda'),
                   items: const [
                     DropdownMenuItem(value: 'CLP', child: Text('CLP')),
@@ -3079,7 +3207,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: settings.localeCode,
+                  initialValue: settings.localeCode,
                   decoration: const InputDecoration(labelText: 'Locale'),
                   items: const [
                     DropdownMenuItem(value: 'es_CL', child: Text('es_CL')),
@@ -3094,7 +3222,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: settings.weekStartDay,
+                  initialValue: settings.weekStartDay,
                   decoration: const InputDecoration(
                     labelText: 'Inicio de semana',
                   ),
@@ -3592,7 +3720,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       : null,
                 ),
                 DropdownButtonFormField<int>(
-                  value: settings.autoLockMinutes,
+                  initialValue: settings.autoLockMinutes,
                   decoration: const InputDecoration(
                     labelText: 'Auto-bloqueo al volver',
                   ),
@@ -4066,6 +4194,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
+          onTap: () => _mostrarOpcionesMeta(meta),
           onLongPress: () => _mostrarOpcionesMeta(meta),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -4164,6 +4293,100 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           ),
                         ),
                       ),
+                    // ── Menú de 3 puntos ──
+                    PopupMenuButton<String>(
+                      icon: Icon(
+                        Icons.more_vert,
+                        size: 20,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'edit':
+                            _mostrarDialogoMeta(metaExistente: meta);
+                          case 'complete':
+                            supabase
+                                .from('metas_ahorro')
+                                .update({
+                                  'completada': true,
+                                  'updated_at': DateTime.now()
+                                      .toIso8601String(),
+                                })
+                                .eq('id', meta['id'])
+                                .then(
+                                  (_) => _mostrarSnack('¡Meta completada! 🎉'),
+                                );
+                          case 'reactivate':
+                            supabase
+                                .from('metas_ahorro')
+                                .update({
+                                  'completada': false,
+                                  'updated_at': DateTime.now()
+                                      .toIso8601String(),
+                                })
+                                .eq('id', meta['id']);
+                          case 'delete':
+                            _confirmarEliminarMeta(meta);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 18),
+                              SizedBox(width: 10),
+                              Text('Editar'),
+                            ],
+                          ),
+                        ),
+                        if (!completada)
+                          const PopupMenuItem(
+                            value: 'complete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle_outline, size: 18),
+                                SizedBox(width: 10),
+                                Text('Completar'),
+                              ],
+                            ),
+                          ),
+                        if (completada)
+                          const PopupMenuItem(
+                            value: 'reactivate',
+                            child: Row(
+                              children: [
+                                Icon(Icons.undo, size: 18),
+                                SizedBox(width: 10),
+                                Text('Reactivar'),
+                              ],
+                            ),
+                          ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Eliminar',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -4635,7 +4858,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         child: LinearProgressIndicator(
                           value: excedido ? 1.0 : porcentajeAsignado,
                           minHeight: 12,
-                          backgroundColor: Colors.grey.shade100,
+                          backgroundColor: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade100,
                           color: colorBarra,
                         ),
                       ),
@@ -4685,13 +4910,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     margin: const EdgeInsets.only(bottom: 8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey.shade200),
+                      side: BorderSide(
+                        color: isDark
+                            ? Colors.grey.shade700
+                            : Colors.grey.shade200,
+                      ),
                     ),
                     child: ListTile(
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: _iconoCategoria(categoria, size: 20),
@@ -4706,7 +4937,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -4870,8 +5103,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               // Lista Progreso Categorias
               ...settings.activeCategories.map((categoria) {
                 final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
-                if (presupuestoCat == 0)
-                  return const SizedBox.shrink(); // Solo mostrar si tiene presupuesto?
+                if (presupuestoCat == 0) {
+                  return const SizedBox.shrink();
+                }
 
                 final gastado = gastoPorCategoria[categoria] ?? 0;
                 final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
@@ -5419,7 +5653,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: selectedAccount,
+                    initialValue: selectedAccount,
                     decoration: const InputDecoration(
                       labelText: 'Cuenta (T. Crédito)',
                       border: OutlineInputBorder(),
@@ -5590,7 +5824,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: cuentaSeleccionada,
+                    initialValue: cuentaSeleccionada,
                     decoration: const InputDecoration(
                       labelText: 'Cuenta tarjeta',
                       border: OutlineInputBorder(),
@@ -5753,9 +5987,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         builder: (context) {
           return Container(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E1E1E)
+                  : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -5825,24 +6063,32 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required MaterialColor color,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _ScaleTap(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 28),
         decoration: BoxDecoration(
-          color: color.shade50,
+          color: isDark ? color.shade900.withAlpha(80) : color.shade50,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.shade200, width: 1.5),
+          border: Border.all(
+            color: isDark ? color.shade700 : color.shade200,
+            width: 1.5,
+          ),
         ),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: color.shade100,
+                color: isDark ? color.shade800.withAlpha(120) : color.shade100,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icono, size: 32, color: color.shade700),
+              child: Icon(
+                icono,
+                size: 32,
+                color: isDark ? color.shade200 : color.shade700,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -5850,7 +6096,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: color.shade800,
+                color: isDark ? color.shade200 : color.shade800,
               ),
             ),
           ],
@@ -6072,14 +6318,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: colorTipo.shade50,
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? colorTipo.shade900.withAlpha(80)
+                                  : colorTipo.shade50,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
                               esGasto
                                   ? Icons.arrow_downward_rounded
                                   : Icons.arrow_upward_rounded,
-                              color: colorTipo.shade700,
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? colorTipo.shade200
+                                  : colorTipo.shade700,
                               size: 20,
                             ),
                           ),
@@ -6182,11 +6436,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               label: Text(cat),
                               selected: isSelected,
                               selectedColor: colorTipo.shade400,
-                              backgroundColor: Colors.grey.shade100,
+                              backgroundColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade100,
                               labelStyle: TextStyle(
                                 color: isSelected
                                     ? Colors.white
-                                    : Colors.black87,
+                                    : (Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.grey.shade300
+                                          : Colors.black87),
                                 fontWeight: isSelected
                                     ? FontWeight.bold
                                     : FontWeight.normal,
@@ -6226,7 +6487,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.grey.shade50,
+                                  fillColor:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.grey.shade900
+                                      : Colors.grey.shade50,
                                   suffixIcon: const Icon(
                                     Icons.calendar_today,
                                     size: 18,
@@ -6242,7 +6507,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           const SizedBox(width: 10),
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: cuentaSeleccionada,
+                              initialValue: cuentaSeleccionada,
                               decoration: InputDecoration(
                                 labelText: esTransferencia
                                     ? 'Cuenta Origen'
@@ -6251,7 +6516,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 filled: true,
-                                fillColor: Colors.grey.shade50,
+                                fillColor:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey.shade900
+                                    : Colors.grey.shade50,
                                 isDense: true,
                               ),
                               items: cuentasDisponibles
@@ -6278,14 +6547,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       if (esTransferencia) ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: cuentaDestinoSeleccionada,
+                          initialValue: cuentaDestinoSeleccionada,
                           decoration: InputDecoration(
                             labelText: 'Cuenta Destino',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                             filled: true,
-                            fillColor: Colors.grey.shade50,
+                            fillColor:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey.shade900
+                                : Colors.grey.shade50,
                             isDense: true,
                           ),
                           items: cuentasDisponibles
@@ -6664,7 +6936,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.indigo.withOpacity(0.15)
+                        ? Colors.indigo.withValues(alpha: 0.15)
                         : Colors.indigo.shade50,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
@@ -6713,7 +6985,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.orange.withOpacity(0.15)
+                        ? Colors.orange.withValues(alpha: 0.15)
                         : Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
@@ -6994,7 +7266,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                     if (isToday) {
                       bgColor = isDark
-                          ? Colors.blue.withOpacity(0.2)
+                          ? Colors.blue.withValues(alpha: 0.2)
                           : Colors.blue.shade50;
                       textColor = isDark
                           ? Colors.blue.shade200
@@ -7002,7 +7274,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     }
                     if (isBilling) {
                       bgColor = isDark
-                          ? Colors.indigo.withOpacity(0.2)
+                          ? Colors.indigo.withValues(alpha: 0.2)
                           : Colors.indigo.shade100;
                       textColor = isDark
                           ? Colors.indigo.shade200
@@ -7010,7 +7282,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     }
                     if (isDue) {
                       bgColor = isDark
-                          ? Colors.red.withOpacity(0.2)
+                          ? Colors.red.withValues(alpha: 0.2)
                           : Colors.red.shade100;
                       textColor = isDark
                           ? Colors.red.shade200
@@ -7020,14 +7292,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       if (!isDue && !isBilling && !isToday) {
                         if (hasCreditPayment && !hasRecurring) {
                           bgColor = isDark
-                              ? Colors.green.withOpacity(0.2)
+                              ? Colors.green.withValues(alpha: 0.2)
                               : Colors.green.shade100;
                           textColor = isDark
                               ? Colors.green.shade200
                               : Colors.green.shade900;
                         } else if (hasRecurring && !hasCreditPayment) {
                           bgColor = isDark
-                              ? Colors.purple.withOpacity(0.2)
+                              ? Colors.purple.withValues(alpha: 0.2)
                               : Colors.purple.shade100;
                           textColor = isDark
                               ? Colors.purple.shade200
@@ -7035,7 +7307,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         } else {
                           // Ambos
                           bgColor = isDark
-                              ? Colors.amber.withOpacity(0.2)
+                              ? Colors.amber.withValues(alpha: 0.2)
                               : Colors.amber.shade100;
                           textColor = isDark
                               ? Colors.amber.shade200
@@ -7464,7 +7736,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.green.withOpacity(0.2)
+                      ? Colors.green.withValues(alpha: 0.2)
                       : Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -7703,7 +7975,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: cuentaSeleccionada,
+                      initialValue: cuentaSeleccionada,
                       decoration: const InputDecoration(
                         labelText: 'Cuenta de cargo',
                         prefixIcon: Icon(Icons.account_balance),
@@ -8162,7 +8434,7 @@ class _FormularioMetaState extends State<_FormularioMeta> {
   }
 
   String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+    return '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
   }
 
   @override
@@ -8442,7 +8714,8 @@ class _FormularioMetaState extends State<_FormularioMeta> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: _PantallaPrincipalState._coloresMeta.map((color) {
-                    final isSelected = _colorSeleccionado.value == color.value;
+                    final isSelected =
+                        _colorSeleccionado.toARGB32() == color.toARGB32();
                     return GestureDetector(
                       onTap: () => setState(() => _colorSeleccionado = color),
                       child: AnimatedContainer(
@@ -8541,5 +8814,1011 @@ class _FormularioMetaState extends State<_FormularioMeta> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SIMULADOR DE COMPRAS — Widget de pantalla completa
+// ═══════════════════════════════════════════════════════════════════
+
+class _SimuladorCompraSheet extends StatefulWidget {
+  final int ingresoPromedio;
+  final int gastoPromedio;
+  final int flujoBasePromedio;
+  final String Function(num) formatoMoneda;
+
+  const _SimuladorCompraSheet({
+    required this.ingresoPromedio,
+    required this.gastoPromedio,
+    required this.flujoBasePromedio,
+    required this.formatoMoneda,
+  });
+
+  @override
+  State<_SimuladorCompraSheet> createState() => _SimuladorCompraSheetState();
+}
+
+class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+  final _nombreCtrl = TextEditingController();
+  final _montoCtrl = TextEditingController();
+  final _cuotasCtrl = TextEditingController(text: '12');
+  final _tasaCtrl = TextEditingController(text: '0');
+
+  bool _esCuotas = false;
+  bool _simulado = false;
+  final int _mesInicioOffset = 0; // 0 = mes actual
+
+  // Resultados
+  List<Map<String, dynamic>> _proyeccion = [];
+  int _cuotaMensual = 0;
+  int _totalConInteres = 0;
+  int _costoInteres = 0;
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _montoCtrl.dispose();
+    _cuotasCtrl.dispose();
+    _tasaCtrl.dispose();
+    super.dispose();
+  }
+
+  void _calcularSimulacion() {
+    final montoTotal =
+        int.tryParse(_montoCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (montoTotal <= 0) return;
+
+    final now = DateTime.now();
+
+    if (!_esCuotas) {
+      // ── CONTADO ──
+      final flujoConCompra = widget.flujoBasePromedio - montoTotal;
+      final diasDelMes = DateUtils.getDaysInMonth(now.year, now.month);
+      final diasRestantes = diasDelMes - now.day + 1;
+      _cuotaMensual = montoTotal;
+      _totalConInteres = montoTotal;
+      _costoInteres = 0;
+
+      _proyeccion = [
+        {
+          'mes': DateTime(now.year, now.month),
+          'label': _nombreMes(now.month, now.year),
+          'flujoSin': widget.flujoBasePromedio,
+          'flujoCon': flujoConCompra,
+          'cuota': montoTotal,
+          'diasRestantes': diasRestantes,
+        },
+      ];
+    } else {
+      // ── CUOTAS CON INTERÉS ──
+      final numCuotas = int.tryParse(_cuotasCtrl.text) ?? 12;
+      final tasaAnual =
+          double.tryParse(_tasaCtrl.text.replaceAll(',', '.')) ?? 0;
+
+      if (numCuotas <= 0) return;
+
+      if (tasaAnual > 0) {
+        // Fórmula francesa: C = P * r * (1+r)^n / ((1+r)^n - 1)
+        final tasaMensual = tasaAnual / 100 / 12;
+        final potencia = _pow(1 + tasaMensual, numCuotas);
+        _cuotaMensual = (montoTotal * tasaMensual * potencia / (potencia - 1))
+            .round();
+        _totalConInteres = _cuotaMensual * numCuotas;
+        _costoInteres = _totalConInteres - montoTotal;
+      } else {
+        _cuotaMensual = (montoTotal / numCuotas).ceil();
+        _totalConInteres = montoTotal;
+        _costoInteres = 0;
+      }
+
+      _proyeccion = List.generate(numCuotas, (i) {
+        final mesIdx = now.month + _mesInicioOffset + i;
+        final fecha = DateTime(now.year, mesIdx);
+        return {
+          'mes': fecha,
+          'label': _nombreMes(fecha.month, fecha.year),
+          'flujoSin': widget.flujoBasePromedio,
+          'flujoCon': widget.flujoBasePromedio - _cuotaMensual,
+          'cuota': _cuotaMensual,
+          'numeroCuota': i + 1,
+        };
+      });
+    }
+
+    setState(() => _simulado = true);
+  }
+
+  double _pow(double base, int exp) {
+    var result = 1.0;
+    for (var i = 0; i < exp; i++) {
+      result *= base;
+    }
+    return result;
+  }
+
+  String _nombreMes(int month, int year) {
+    const meses = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
+    final m = ((month - 1) % 12 + 12) % 12;
+    return '${meses[m]} $year';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Container(
+      height: screenHeight * 0.92,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF121212) : Colors.grey.shade50,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.deepPurple.shade400,
+                        Colors.indigo.shade400,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Simulador de Compra',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        'Analiza el impacto antes de comprar',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 24),
+          // Body
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── FORMULARIO ──
+                  _seccionTitulo(
+                    'Datos de la compra',
+                    Icons.shopping_bag_outlined,
+                  ),
+                  const SizedBox(height: 12),
+                  _campo(
+                    controller: _nombreCtrl,
+                    label: '¿Qué quieres comprar?',
+                    hint: 'Ej: MacBook Pro, Viaje, etc.',
+                    icon: Icons.label_outline,
+                  ),
+                  const SizedBox(height: 12),
+                  _campo(
+                    controller: _montoCtrl,
+                    label: 'Monto total',
+                    hint: 'Precio de la compra',
+                    icon: Icons.attach_money,
+                    isNumber: true,
+                  ),
+                  const SizedBox(height: 16),
+                  // Toggle Contado / Cuotas
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.grey.shade800
+                            : Colors.grey.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _esCuotas = false;
+                              _simulado = false;
+                            }),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: !_esCuotas
+                                    ? Colors.deepPurple.withAlpha(
+                                        isDark ? 60 : 30,
+                                      )
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.payment,
+                                    size: 18,
+                                    color: !_esCuotas
+                                        ? Colors.deepPurple
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Contado',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: !_esCuotas
+                                          ? (isDark
+                                                ? Colors.deepPurple.shade200
+                                                : Colors.deepPurple)
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _esCuotas = true;
+                              _simulado = false;
+                            }),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: _esCuotas
+                                    ? Colors.deepPurple.withAlpha(
+                                        isDark ? 60 : 30,
+                                      )
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.calendar_month,
+                                    size: 18,
+                                    color: _esCuotas
+                                        ? Colors.deepPurple
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'En cuotas',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: _esCuotas
+                                          ? (isDark
+                                                ? Colors.deepPurple.shade200
+                                                : Colors.deepPurple)
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Campos de cuotas
+                  if (_esCuotas) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _campo(
+                            controller: _cuotasCtrl,
+                            label: 'Nº de cuotas',
+                            hint: '12',
+                            icon: Icons.numbers,
+                            isNumber: true,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _campo(
+                            controller: _tasaCtrl,
+                            label: 'Tasa anual %',
+                            hint: '0',
+                            icon: Icons.percent,
+                            isNumber: true,
+                            isDecimal: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Chips de cuotas rápidas
+                    Wrap(
+                      spacing: 8,
+                      children: [3, 6, 12, 18, 24, 36].map((n) {
+                        final selected = _cuotasCtrl.text == n.toString();
+                        return ChoiceChip(
+                          label: Text('$n'),
+                          selected: selected,
+                          onSelected: (_) {
+                            setState(() {
+                              _cuotasCtrl.text = n.toString();
+                              _simulado = false;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  // Botón Simular
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _calcularSimulacion,
+                      icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                      label: const Text(
+                        'Simular',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // ── RESULTADOS ──
+                  if (_simulado) ...[
+                    const SizedBox(height: 28),
+                    _seccionTitulo('Resultado', Icons.analytics_outlined),
+                    const SizedBox(height: 12),
+                    // Resumen Card
+                    _tarjetaResultado(isDark),
+                    const SizedBox(height: 16),
+                    // Comparación de presupuesto diario
+                    _tarjetaPresupuestoDiario(isDark),
+                    const SizedBox(height: 16),
+                    // Alertas de riesgo
+                    _construirAlertas(isDark),
+                    // Gráfico proyección
+                    if (_proyeccion.length > 1) ...[
+                      const SizedBox(height: 16),
+                      _construirGraficoProyeccion(isDark),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _seccionTitulo(String titulo, IconData icono) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: [
+        Icon(
+          icono,
+          size: 20,
+          color: isDark ? Colors.deepPurple.shade200 : Colors.deepPurple,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          titulo,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: isDark ? Colors.grey.shade200 : Colors.grey.shade800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _campo({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool isNumber = false,
+    bool isDecimal = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextField(
+      controller: controller,
+      keyboardType: isNumber
+          ? (isDecimal
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.number)
+          : TextInputType.text,
+      inputFormatters: isNumber && !isDecimal
+          ? [FilteringTextInputFormatter.digitsOnly]
+          : null,
+      onChanged: (_) {
+        if (_simulado) setState(() => _simulado = false);
+      },
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 20),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _tarjetaResultado(bool isDark) {
+    final nombre = _nombreCtrl.text.trim().isEmpty
+        ? 'Compra simulada'
+        : _nombreCtrl.text.trim();
+    final montoOriginal =
+        int.tryParse(_montoCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDark ? 40 : 8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.shopping_bag,
+                color: Colors.deepPurple.shade300,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  nombre,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _filaResumen(
+            'Precio',
+            widget.formatoMoneda(montoOriginal),
+            Icons.sell_outlined,
+            isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+          ),
+          if (_esCuotas) ...[
+            const SizedBox(height: 6),
+            _filaResumen(
+              'Cuota mensual',
+              widget.formatoMoneda(_cuotaMensual),
+              Icons.calendar_today,
+              Colors.deepPurple,
+            ),
+            const SizedBox(height: 6),
+            _filaResumen(
+              'Cuotas',
+              '${_cuotasCtrl.text}x ${widget.formatoMoneda(_cuotaMensual)}',
+              Icons.numbers,
+              isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+            ),
+            if (_costoInteres > 0) ...[
+              const SizedBox(height: 6),
+              _filaResumen(
+                'Costo financiero',
+                '+${widget.formatoMoneda(_costoInteres)}',
+                Icons.trending_up,
+                Colors.orange.shade700,
+              ),
+              const SizedBox(height: 6),
+              _filaResumen(
+                'Total a pagar',
+                widget.formatoMoneda(_totalConInteres),
+                Icons.account_balance_wallet,
+                Colors.red.shade600,
+              ),
+            ],
+          ] else ...[
+            const SizedBox(height: 6),
+            _filaResumen(
+              'Pago único',
+              widget.formatoMoneda(montoOriginal),
+              Icons.bolt,
+              Colors.deepPurple,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _filaResumen(String label, String valor, IconData icono, Color color) {
+    return Row(
+      children: [
+        Icon(icono, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+        ),
+        const Spacer(),
+        Text(
+          valor,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tarjetaPresupuestoDiario(bool isDark) {
+    final now = DateTime.now();
+    final diasDelMes = DateUtils.getDaysInMonth(now.year, now.month);
+    final diasRestantes = diasDelMes - now.day + 1;
+
+    final presupuestoActual = diasRestantes > 0
+        ? widget.flujoBasePromedio ~/ diasRestantes
+        : widget.flujoBasePromedio;
+    final impactoMensual = _esCuotas
+        ? _cuotaMensual
+        : (int.tryParse(_montoCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+              0);
+    final presupuestoConCompra = diasRestantes > 0
+        ? (widget.flujoBasePromedio - impactoMensual) ~/ diasRestantes
+        : widget.flujoBasePromedio - impactoMensual;
+
+    final diferencia = presupuestoConCompra - presupuestoActual;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.today_outlined,
+                size: 20,
+                color: isDark ? Colors.cyan.shade200 : Colors.cyan.shade700,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Presupuesto diario',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _miniCard(
+                  'Actual',
+                  widget.formatoMoneda(presupuestoActual),
+                  presupuestoActual >= 0 ? Colors.green : Colors.red,
+                  isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_forward, size: 18, color: Colors.grey.shade500),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniCard(
+                  'Con compra',
+                  widget.formatoMoneda(presupuestoConCompra),
+                  presupuestoConCompra >= 0 ? Colors.green : Colors.red,
+                  isDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: (diferencia >= 0 ? Colors.green : Colors.red).withAlpha(
+                isDark ? 30 : 15,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  diferencia >= 0 ? Icons.thumb_up : Icons.thumb_down,
+                  size: 16,
+                  color: diferencia >= 0 ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${diferencia >= 0 ? '+' : ''}${widget.formatoMoneda(diferencia)}/día',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: diferencia >= 0 ? Colors.green : Colors.red,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniCard(String label, String valor, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(isDark ? 25 : 12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(50)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            valor,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirAlertas(bool isDark) {
+    final mesesNegativos = _proyeccion
+        .where((p) => (p['flujoCon'] as int) < 0)
+        .length;
+    if (mesesNegativos == 0) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.green.withAlpha(isDark ? 30 : 15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.withAlpha(60)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              color: Colors.green.shade600,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tu flujo se mantiene positivo. ¡Puedes hacerlo!',
+                style: TextStyle(
+                  color: isDark ? Colors.green.shade200 : Colors.green.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withAlpha(isDark ? 30 : 15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withAlpha(60)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.red.shade600,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '¡Atención!',
+                  style: TextStyle(
+                    color: isDark ? Colors.red.shade200 : Colors.red.shade800,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _esCuotas
+                      ? 'En $mesesNegativos de ${_proyeccion.length} meses tu flujo sería negativo. '
+                            'Considera menos cuotas o revisar tus gastos.'
+                      : 'Tu flujo quedaría negativo este mes. '
+                            'Considera pagar en cuotas.',
+                  style: TextStyle(
+                    color: isDark ? Colors.red.shade300 : Colors.red.shade700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirGraficoProyeccion(bool isDark) {
+    // Limitar a mostrar máximo 12 barras, con paginación si hay más
+    final maxVisible = 12;
+    final total = _proyeccion.length;
+    final datos = total <= maxVisible
+        ? _proyeccion
+        : _proyeccion.sublist(0, maxVisible);
+
+    // Encontrar escala
+    var maxAbs = 1.0;
+    for (final p in datos) {
+      final sinAbs = (p['flujoSin'] as int).abs().toDouble();
+      final conAbs = (p['flujoCon'] as int).abs().toDouble();
+      if (sinAbs > maxAbs) maxAbs = sinAbs;
+      if (conAbs > maxAbs) maxAbs = conAbs;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.bar_chart,
+                size: 20,
+                color: isDark ? Colors.deepPurple.shade200 : Colors.deepPurple,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Proyección de flujo mensual',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Leyenda
+          Row(
+            children: [
+              _leyenda(Colors.green.shade400, 'Sin compra'),
+              const SizedBox(width: 16),
+              _leyenda(Colors.deepPurple.shade400, 'Con compra'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 160,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: datos.map((p) {
+                final flujoSin = p['flujoSin'] as int;
+                final flujoCon = p['flujoCon'] as int;
+                final label = p['label'] as String;
+
+                final alturaSin = ((flujoSin.abs() / maxAbs) * 90) + 4;
+                final alturaCon = ((flujoCon.abs() / maxAbs) * 90) + 4;
+
+                final colorSin = flujoSin >= 0
+                    ? Colors.green.shade400
+                    : Colors.red.shade300;
+                final colorCon = flujoCon >= 0
+                    ? Colors.deepPurple.shade400
+                    : Colors.red.shade600;
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: alturaSin,
+                              decoration: BoxDecoration(
+                                color: colorSin,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            Container(
+                              width: 8,
+                              height: alturaCon,
+                              decoration: BoxDecoration(
+                                color: colorCon,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          label.split(' ')[0], // Solo mes corto
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          if (total > maxVisible)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Mostrando primeros $maxVisible de $total meses',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leyenda(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        ),
+      ],
+    );
   }
 }
