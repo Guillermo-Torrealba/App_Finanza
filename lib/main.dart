@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app_settings.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
+import 'onboarding_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +68,9 @@ class AppFinanzas extends StatelessWidget {
           ),
           home: supabase.auth.currentSession == null
               ? LoginScreen(settingsController: settingsController)
-              : PantallaPrincipal(settingsController: settingsController),
+              : settings.hasCompletedOnboarding
+              ? PantallaPrincipal(settingsController: settingsController)
+              : OnboardingScreen(settingsController: settingsController),
         );
       },
     );

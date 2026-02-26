@@ -70,14 +70,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   bool _ordenamientoVisible = false;
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
 
-  final List<String> _titulosPestanas = const [
-    'Mis Finanzas Cloud',
-    'Analisis',
-    'Metas',
-    'Presupuestos',
-    'Crédito',
-    'Ajustes',
-  ];
+  List<String> get _titulosPestanas {
+    final hasCreditCard = widget.settingsController.settings.hasCreditCard;
+    if (hasCreditCard) {
+      return const [
+        'Mis Finanzas Cloud',
+        'Analisis',
+        'Metas',
+        'Presupuestos',
+        'Crédito',
+        'Ajustes',
+      ];
+    } else {
+      return const [
+        'Mis Finanzas Cloud',
+        'Analisis',
+        'Metas',
+        'Presupuestos',
+        'Ajustes',
+      ];
+    }
+  }
 
   @override
   void initState() {
@@ -139,6 +152,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       // Si se desbloqueó desde ajustes
       if (!settings.lockEnabled && _bloqueada) {
         _bloqueada = false;
+      }
+
+      // Ajustar índice de pestaña si deshabilitan la tarjeta
+      if (!settings.hasCreditCard && _indicePestana > 3) {
+        _indicePestana = 4; // Ajustes is now at index 4
       }
     });
   }
@@ -1105,17 +1123,24 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             },
             child: KeyedSubtree(
               key: ValueKey<int>(_indicePestana),
-              child: _indicePestana == 0
-                  ? _construirPaginaInicio(todosLosDatos)
-                  : _indicePestana == 1
-                  ? _construirPaginaAnalisis(todosLosDatos)
-                  : _indicePestana == 2
-                  ? _construirPaginaMetas()
-                  : _indicePestana == 3
-                  ? _construirPaginaPresupuestos(todosLosDatos)
-                  : _indicePestana == 4
-                  ? _construirPaginaCredito(todosLosDatos)
-                  : _construirPaginaAjustes(),
+              child: () {
+                final hasCreditCard =
+                    widget.settingsController.settings.hasCreditCard;
+                if (_indicePestana == 0)
+                  return _construirPaginaInicio(todosLosDatos);
+                if (_indicePestana == 1)
+                  return _construirPaginaAnalisis(todosLosDatos);
+                if (_indicePestana == 2) return _construirPaginaMetas();
+                if (_indicePestana == 3)
+                  return _construirPaginaPresupuestos(todosLosDatos);
+                if (hasCreditCard) {
+                  if (_indicePestana == 4)
+                    return _construirPaginaCredito(todosLosDatos);
+                  return _construirPaginaAjustes();
+                } else {
+                  return _construirPaginaAjustes();
+                }
+              }(),
             ),
           );
         },
@@ -1177,16 +1202,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     index: 3,
                     tooltip: 'Presupuestos',
                   ),
-                  _navIcon(
-                    filled: Icons.credit_card,
-                    outlined: Icons.credit_card_outlined,
-                    index: 4,
-                    tooltip: 'Crédito',
-                  ),
+                  if (widget.settingsController.settings.hasCreditCard)
+                    _navIcon(
+                      filled: Icons.credit_card,
+                      outlined: Icons.credit_card_outlined,
+                      index: 4,
+                      tooltip: 'Crédito',
+                    ),
                   _navIcon(
                     filled: Icons.settings,
                     outlined: Icons.settings_outlined,
-                    index: 5,
+                    index: widget.settingsController.settings.hasCreditCard
+                        ? 5
+                        : 4,
                     tooltip: 'Ajustes',
                   ),
                 ],
@@ -1632,68 +1660,72 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 ],
                               ),
                             ),
-                            // Separador vertical
-                            Container(
-                              height: 32,
-                              width: 1,
-                              color: isDark
-                                  ? Colors.grey.shade700
-                                  : Colors.grey.shade300,
-                            ),
-                            // TC Utilizado
-                            Expanded(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Flexible(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          'TC Utilizado',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.grey.shade400
-                                                : Colors.grey.shade600,
-                                          ),
-                                        ),
-                                        Text(
-                                          '- ${_textoMonto(saldoCreditoUtilizado)}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: isDark
-                                                ? Colors.redAccent.shade100
-                                                : Colors.red.shade600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          (isDark
-                                                  ? Colors.redAccent.shade100
-                                                  : Colors.red.shade400)
-                                              .withAlpha(30),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      Icons.credit_card,
-                                      size: 18,
-                                      color: isDark
-                                          ? Colors.redAccent.shade100
-                                          : Colors.red.shade500,
-                                    ),
-                                  ),
-                                ],
+                            if (settings.hasCreditCard) ...[
+                              // Separador vertical
+                              Container(
+                                height: 32,
+                                width: 1,
+                                color: isDark
+                                    ? Colors.grey.shade700
+                                    : Colors.grey.shade300,
                               ),
-                            ),
+                              // TC Utilizado
+                              Expanded(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Flexible(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            'TC Utilizado',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: isDark
+                                                  ? Colors.grey.shade400
+                                                  : Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          Text(
+                                            saldoCreditoUtilizado == 0
+                                                ? _textoMonto(0)
+                                                : '- ${_textoMonto(saldoCreditoUtilizado)}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: isDark
+                                                  ? Colors.redAccent.shade100
+                                                  : Colors.red.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            (isDark
+                                                    ? Colors.redAccent.shade100
+                                                    : Colors.red.shade400)
+                                                .withAlpha(30),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        Icons.credit_card,
+                                        size: 18,
+                                        color: isDark
+                                            ? Colors.redAccent.shade100
+                                            : Colors.red.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -6931,7 +6963,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             setStateSB(() => cuentaDestinoSeleccionada = value);
                           },
                         ),
-                      ] else ...[
+                      ] else if (settings.hasCreditCard) ...[
                         const SizedBox(height: 12),
                         // Método de pago
                         SegmentedButton<bool>(

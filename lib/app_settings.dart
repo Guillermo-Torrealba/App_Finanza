@@ -43,6 +43,8 @@ class AppSettings {
     required this.enableCreditDueAlerts,
     required this.creditDueAlertDaysBefore,
     required this.consumptionCredits,
+    required this.hasCompletedOnboarding,
+    required this.hasCreditCard,
     this.lastManualBillingClose,
   });
 
@@ -78,6 +80,8 @@ class AppSettings {
   final bool enableCreditDueAlerts;
   final int creditDueAlertDaysBefore;
   final List<Map<String, dynamic>> consumptionCredits;
+  final bool hasCompletedOnboarding;
+  final bool hasCreditCard;
   final String? lastManualBillingClose;
 
   static const _unset = Object();
@@ -140,6 +144,8 @@ class AppSettings {
       enableCreditDueAlerts: true,
       creditDueAlertDaysBefore: 3,
       consumptionCredits: [],
+      hasCompletedOnboarding: false,
+      hasCreditCard: true,
       lastManualBillingClose: null,
     );
   }
@@ -177,6 +183,8 @@ class AppSettings {
     bool? enableCreditDueAlerts,
     int? creditDueAlertDaysBefore,
     List<Map<String, dynamic>>? consumptionCredits,
+    bool? hasCompletedOnboarding,
+    bool? hasCreditCard,
     Object? lastManualBillingClose = _unset,
   }) {
     return AppSettings(
@@ -221,6 +229,9 @@ class AppSettings {
       creditDueAlertDaysBefore:
           creditDueAlertDaysBefore ?? this.creditDueAlertDaysBefore,
       consumptionCredits: consumptionCredits ?? this.consumptionCredits,
+      hasCompletedOnboarding:
+          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+      hasCreditCard: hasCreditCard ?? this.hasCreditCard,
       lastManualBillingClose: identical(lastManualBillingClose, _unset)
           ? this.lastManualBillingClose
           : lastManualBillingClose as String?,
@@ -261,6 +272,8 @@ class AppSettings {
       'enableCreditDueAlerts': enableCreditDueAlerts,
       'creditDueAlertDaysBefore': creditDueAlertDaysBefore,
       'consumptionCredits': consumptionCredits,
+      'hasCompletedOnboarding': hasCompletedOnboarding,
+      'hasCreditCard': hasCreditCard,
       'lastManualBillingClose': lastManualBillingClose,
     };
   }
@@ -338,6 +351,10 @@ class AppSettings {
               ?.map((e) => e as Map<String, dynamic>)
               .toList() ??
           defaults.consumptionCredits,
+      hasCompletedOnboarding:
+          (json['hasCompletedOnboarding'] as bool?) ??
+          defaults.hasCompletedOnboarding,
+      hasCreditCard: (json['hasCreditCard'] as bool?) ?? defaults.hasCreditCard,
       lastManualBillingClose: json['lastManualBillingClose'] as String?,
     );
   }
@@ -505,6 +522,12 @@ class SettingsController extends ChangeNotifier {
       _apply(_settings.copyWith(weekStartDay: value));
   void setBudgetCycleDay(int value) =>
       _apply(_settings.copyWith(budgetCycleDay: value.clamp(1, 28)));
+
+  void setHasCompletedOnboarding(bool value) =>
+      _apply(_settings.copyWith(hasCompletedOnboarding: value));
+
+  void setHasCreditCard(bool value) =>
+      _apply(_settings.copyWith(hasCreditCard: value));
 
   void addAccount(String value) {
     final account = value.trim();
