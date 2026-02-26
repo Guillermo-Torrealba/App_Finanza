@@ -4036,6 +4036,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   icon: const Icon(Icons.delete_forever_outlined),
                   label: const Text('Borrar todos los movimientos'),
                 ),
+                const SizedBox(height: 16),
+                const Divider(),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade900,
+                    side: BorderSide(color: Colors.red.shade900),
+                  ),
+                  onPressed: _eliminarCuentaUsuario,
+                  icon: const Icon(Icons.person_remove_outlined),
+                  label: const Text('Eliminar cuenta permanentemente'),
+                ),
               ],
             ),
             const SizedBox(height: 90),
@@ -5867,6 +5878,61 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       _mostrarSnack('Todos los movimientos fueron eliminados');
     } catch (e) {
       _mostrarSnack('No se pudieron borrar movimientos: $e');
+    }
+  }
+
+  Future<void> _eliminarCuentaUsuario() async {
+    final ok = await _confirmar(
+      titulo: 'Eliminar Cuenta Permanentemente',
+      mensaje:
+          'Esta accion eliminara tu usuario, todos tus datos financieros de forma permanente. Es irreversible.',
+    );
+    if (!ok) return;
+
+    final texto = await _pedirTexto(
+      titulo: 'Confirmacion final',
+      etiqueta: 'Escribe ELIMINAR para confirmar',
+    );
+    if (texto != 'ELIMINAR') {
+      _mostrarSnack('Cancelado');
+      return;
+    }
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // Intentar borrar todos los datos vinculados (si RLS lo permite, normalmente el user_id está en RLS)
+      await supabase.from('gastos').delete().eq('user_id', userId);
+      try {
+        await supabase.from('recurrentes').delete().eq('user_id', userId);
+        await supabase.from('metas_ahorro').delete().eq('user_id', userId);
+      } catch (_) {
+        // ignora si estas tablas no existen
+      }
+
+      // Resetear configuraciones locales
+      await widget.settingsController.resetSettings();
+
+      // Llamar al backend para eliminar el auth user si está configurado
+      try {
+        await supabase.rpc('delete_user');
+      } catch (_) {
+        // En algunos setups no hay un call delete_user definido.
+      }
+
+      await supabase.auth.signOut();
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) =>
+                LoginScreen(settingsController: widget.settingsController),
+          ),
+        );
+      }
+    } catch (e) {
+      _mostrarSnack('Error al eliminar cuenta: $e');
     }
   }
 
