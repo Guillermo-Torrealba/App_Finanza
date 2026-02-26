@@ -43,6 +43,7 @@ class AppSettings {
     required this.enableCreditDueAlerts,
     required this.creditDueAlertDaysBefore,
     required this.consumptionCredits,
+    this.lastManualBillingClose,
   });
 
   final String themeMode;
@@ -77,6 +78,7 @@ class AppSettings {
   final bool enableCreditDueAlerts;
   final int creditDueAlertDaysBefore;
   final List<Map<String, dynamic>> consumptionCredits;
+  final String? lastManualBillingClose;
 
   static const _unset = Object();
 
@@ -138,6 +140,7 @@ class AppSettings {
       enableCreditDueAlerts: true,
       creditDueAlertDaysBefore: 3,
       consumptionCredits: [],
+      lastManualBillingClose: null,
     );
   }
 
@@ -174,6 +177,7 @@ class AppSettings {
     bool? enableCreditDueAlerts,
     int? creditDueAlertDaysBefore,
     List<Map<String, dynamic>>? consumptionCredits,
+    Object? lastManualBillingClose = _unset,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -217,6 +221,9 @@ class AppSettings {
       creditDueAlertDaysBefore:
           creditDueAlertDaysBefore ?? this.creditDueAlertDaysBefore,
       consumptionCredits: consumptionCredits ?? this.consumptionCredits,
+      lastManualBillingClose: identical(lastManualBillingClose, _unset)
+          ? this.lastManualBillingClose
+          : lastManualBillingClose as String?,
     );
   }
 
@@ -254,6 +261,7 @@ class AppSettings {
       'enableCreditDueAlerts': enableCreditDueAlerts,
       'creditDueAlertDaysBefore': creditDueAlertDaysBefore,
       'consumptionCredits': consumptionCredits,
+      'lastManualBillingClose': lastManualBillingClose,
     };
   }
 
@@ -330,6 +338,7 @@ class AppSettings {
               ?.map((e) => e as Map<String, dynamic>)
               .toList() ??
           defaults.consumptionCredits,
+      lastManualBillingClose: json['lastManualBillingClose'] as String?,
     );
   }
 
@@ -722,6 +731,8 @@ class SettingsController extends ChangeNotifier {
       _apply(_settings.copyWith(enableCreditDueAlerts: value));
   void setCreditDueAlertDaysBefore(int value) =>
       _apply(_settings.copyWith(creditDueAlertDaysBefore: value.clamp(1, 7)));
+  void setLastManualBillingClose(String? value) =>
+      _apply(_settings.copyWith(lastManualBillingClose: value));
   void addConsumptionCredit(Map<String, dynamic> credit) {
     final current = List<Map<String, dynamic>>.from(
       _settings.consumptionCredits,

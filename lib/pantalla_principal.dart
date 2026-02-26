@@ -587,6 +587,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return saldo;
   }
 
+  /// Devuelve la fecha de corte efectiva para el mes actual.
+  /// Si el usuario cerró el ciclo manualmente este mes, usa esa fecha.
+  /// De lo contrario, usa el billingDay configurado.
+  DateTime _getEffectiveCutoff(AppSettings settings, DateTime referenceDate) {
+    final manualClose = settings.lastManualBillingClose;
+    if (manualClose != null && manualClose.isNotEmpty) {
+      final parsed = DateTime.tryParse(manualClose);
+      if (parsed != null &&
+          parsed.year == referenceDate.year &&
+          parsed.month == referenceDate.month) {
+        return parsed;
+      }
+    }
+    return DateTime(
+      referenceDate.year,
+      referenceDate.month,
+      settings.creditCardBillingDay,
+    );
+  }
+
   int _parseMonto(String value) {
     final onlyNumbers = value.replaceAll(RegExp(r'[^0-9-]'), '');
     return int.tryParse(onlyNumbers) ?? 0;
@@ -940,7 +960,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       if (diasRestantes <= daysBefore && diasRestantes >= 0) {
         // Calcular monto facturado (ciclo anterior)
-        final cutoffThisMonth = DateTime(ahora.year, ahora.month, billingDay);
+        final cutoffThisMonth = _getEffectiveCutoff(settings, ahora);
         DateTime lastCycleStart;
         DateTime lastCycleEnd;
         if (ahora.isAfter(cutoffThisMonth)) {
@@ -1284,7 +1304,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // (Facturado pendiente + Por facturar pendiente), aplicando pagos/abonos.
     final now = DateTime.now();
     final billingDay = settings.creditCardBillingDay;
-    final cutoffThisMonth = DateTime(now.year, now.month, billingDay);
+    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
     DateTime cycleStart;
     DateTime cycleEnd;
     DateTime lastCycleStart;
@@ -2832,6 +2852,34 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final gastoPromedio = mesesConDatos > 0 ? sumaGastos ~/ mesesConDatos : 0;
     final flujoBasePromedio = ingresoPromedio - gastoPromedio;
 
+    // Calcular patrimonio actual (Liquidez Neta)
+    final datosFiltrados = todosLosDatos.where((mov) {
+      final cuenta = (mov['cuenta'] ?? '').toString();
+      return _cuentasSeleccionadas.contains(cuenta);
+    }).toList();
+    var saldoCuentaCorriente = 0;
+    for (final mov in datosFiltrados) {
+      if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+      final m = (mov['monto'] as num? ?? 0).toInt();
+      if (mov['tipo'] == 'Ingreso') {
+        saldoCuentaCorriente += m;
+      } else {
+        saldoCuentaCorriente -= m;
+      }
+    }
+    // Calcular crédito utilizado (simplificado)
+    var saldoCreditoUtilizado = 0;
+    for (final mov in datosFiltrados) {
+      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+      final m = (mov['monto'] as num? ?? 0).toInt();
+      if (mov['tipo'] == 'Gasto') {
+        saldoCreditoUtilizado += m;
+      } else {
+        saldoCreditoUtilizado -= m;
+      }
+    }
+    final patrimonioActual = saldoCuentaCorriente - saldoCreditoUtilizado;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2841,6 +2889,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ingresoPromedio: ingresoPromedio,
           gastoPromedio: gastoPromedio,
           flujoBasePromedio: flujoBasePromedio,
+          patrimonioActual: patrimonioActual,
           formatoMoneda: (num n) => _textoMonto(n.toInt(), ocultable: false),
         );
       },
@@ -5795,6 +5844,90 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
   }
 
+  void _confirmarCierreCiclo(int montoPorFacturar) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.event_available, color: Colors.amber.shade700, size: 24),
+            const SizedBox(width: 10),
+            const Text('Cerrar ciclo ahora'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Los gastos de "Por Facturar" pasarán a "Facturado".',
+              style: TextStyle(
+                color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withAlpha(isDark ? 25 : 12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withAlpha(40)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Colors.amber.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Monto a facturar: ${_textoMonto(montoPorFacturar, ocultable: false)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? Colors.amber.shade200
+                            : Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Usa esto cuando el banco te facturó antes del día configurado.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              final hoy = DateTime.now().toIso8601String().split('T').first;
+              widget.settingsController.setLastManualBillingClose(hoy);
+              Navigator.pop(ctx);
+              _mostrarSnack('Ciclo cerrado. Los montos se recalcularán.');
+            },
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Confirmar cierre'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _mostrarDialogoAbonoTarjeta({
     required List<String> cuentasCredito,
     required String itemAbono,
@@ -5806,7 +5939,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       return;
     }
 
-    var cuentaSeleccionada = cuentasCredito.first;
+    final allAccounts = widget.settingsController.settings.activeAccounts;
+    var cuentasDebito = allAccounts
+        .where((a) => !cuentasCredito.contains(a))
+        .toList();
+    if (cuentasDebito.isEmpty) {
+      cuentasDebito = allAccounts.isNotEmpty ? allAccounts : ['Efectivo'];
+    }
+
+    var cuentaCreditoSeleccionada = cuentasCredito.first;
+    var cuentaDebitoSeleccionada =
+        widget.settingsController.settings.defaultAccount;
+    if (!cuentasDebito.contains(cuentaDebitoSeleccionada)) {
+      cuentaDebitoSeleccionada = cuentasDebito.first;
+    }
+
     final montoController = TextEditingController(
       text: montoInicial != null && montoInicial > 0
           ? montoInicial.toString()
@@ -5824,9 +5971,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    initialValue: cuentaSeleccionada,
+                    initialValue: cuentaDebitoSeleccionada,
                     decoration: const InputDecoration(
-                      labelText: 'Cuenta tarjeta',
+                      labelText: 'Cta. Origen (Débito)',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: cuentasDebito
+                        .map(
+                          (acc) =>
+                              DropdownMenuItem(value: acc, child: Text(acc)),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() => cuentaDebitoSeleccionada = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: cuentaCreditoSeleccionada,
+                    decoration: const InputDecoration(
+                      labelText: 'Cta. Destino (Tarjeta)',
                       border: OutlineInputBorder(),
                     ),
                     items: cuentasCredito
@@ -5837,7 +6003,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         .toList(),
                     onChanged: (val) {
                       if (val != null) {
-                        setStateDialog(() => cuentaSeleccionada = val);
+                        setStateDialog(() => cuentaCreditoSeleccionada = val);
                       }
                     },
                   ),
@@ -5872,7 +6038,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     }
                     Navigator.pop(context);
                     _registrarAbonoTarjeta(
-                      cuenta: cuentaSeleccionada,
+                      cuentaCredito: cuentaCreditoSeleccionada,
+                      cuentaDebito: cuentaDebitoSeleccionada,
                       monto: monto,
                       itemAbono: itemAbono,
                     );
@@ -5888,7 +6055,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Future<void> _registrarAbonoTarjeta({
-    required String cuenta,
+    required String cuentaCredito,
+    required String cuentaDebito,
     required int monto,
     required String itemAbono,
   }) async {
@@ -5896,22 +6064,35 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      await supabase.from('gastos').insert({
+      final fechaIso = DateTime.now().toIso8601String();
+
+      final abonoCredito = {
         'user_id': user.id,
-        'fecha': DateTime.now().toIso8601String(),
+        'fecha': fechaIso,
         'item': itemAbono,
         'monto': monto,
         'categoria': 'Transferencia',
-        'cuenta': cuenta,
+        'cuenta': cuentaCredito,
         'tipo': 'Ingreso',
         'metodo_pago': 'Credito',
-      });
+      };
 
-      _mostrarSnack(
-        'Abono registrado: ${_textoMonto(monto, ocultable: false)}',
-      );
+      final pagoDebito = {
+        'user_id': user.id,
+        'fecha': fechaIso,
+        'item': itemAbono,
+        'monto': monto,
+        'categoria': 'Transferencia',
+        'cuenta': cuentaDebito,
+        'tipo': 'Gasto',
+        'metodo_pago': 'Debito',
+      };
+
+      await supabase.from('gastos').insert([abonoCredito, pagoDebito]);
+
+      _mostrarSnack('Pago registrado: ${_textoMonto(monto, ocultable: false)}');
     } catch (e) {
-      _mostrarSnack('No se pudo registrar el abono: $e');
+      _mostrarSnack('No se pudo registrar el pago: $e');
     }
   }
 
@@ -6648,7 +6829,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     // --- Lógica de Ciclos de Tarjeta ---
     // Calculamos el cutoff del mes actual
-    final cutoffThisMonth = DateTime(now.year, now.month, billingDay);
+    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
 
     // Si hoy es después del corte, el ciclo actual empezó el día siguiente al corte (BillingDay + 1)
     // y termina el próximo BillingDay.
@@ -7040,7 +7221,102 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          // Botón Cerrar Ciclo
+          Builder(
+            builder: (_) {
+              final yaSeManualClose =
+                  settings.lastManualBillingClose != null &&
+                  settings.lastManualBillingClose!.isNotEmpty &&
+                  (() {
+                    final parsed = DateTime.tryParse(
+                      settings.lastManualBillingClose!,
+                    );
+                    return parsed != null &&
+                        parsed.year == now.year &&
+                        parsed.month == now.month;
+                  })();
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              // Solo mostrar si NO se cerró manualmente este mes y hay montos por facturar
+              if (yaSeManualClose || porFacturarPendiente <= 0) {
+                if (yaSeManualClose) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withAlpha(isDark ? 25 : 12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.green.withAlpha(40)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 16,
+                          color: Colors.green.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Ciclo cerrado manualmente el ${settings.lastManualBillingClose}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.green.shade200
+                                  : Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            widget.settingsController.setLastManualBillingClose(
+                              null,
+                            );
+                          },
+                          child: Icon(
+                            Icons.undo,
+                            size: 16,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }
+              return SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark
+                        ? Colors.amber.shade200
+                        : Colors.amber.shade800,
+                    side: BorderSide(
+                      color: isDark
+                          ? Colors.amber.shade700
+                          : Colors.amber.shade300,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => _confirmarCierreCiclo(porFacturarPendiente),
+                  icon: const Icon(Icons.event_available, size: 20),
+                  label: const Text(
+                    'Cerrar ciclo ahora',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -8825,12 +9101,14 @@ class _SimuladorCompraSheet extends StatefulWidget {
   final int ingresoPromedio;
   final int gastoPromedio;
   final int flujoBasePromedio;
+  final int patrimonioActual;
   final String Function(num) formatoMoneda;
 
   const _SimuladorCompraSheet({
     required this.ingresoPromedio,
     required this.gastoPromedio,
     required this.flujoBasePromedio,
+    required this.patrimonioActual,
     required this.formatoMoneda,
   });
 
@@ -9242,6 +9520,9 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
                     // Comparación de presupuesto diario
                     _tarjetaPresupuestoDiario(isDark),
                     const SizedBox(height: 16),
+                    // Impacto en patrimonio total
+                    _tarjetaImpactoPatrimonio(isDark),
+                    const SizedBox(height: 16),
                     // Alertas de riesgo
                     _construirAlertas(isDark),
                     // Gráfico proyección
@@ -9577,6 +9858,255 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _tarjetaImpactoPatrimonio(bool isDark) {
+    final montoTotal =
+        int.tryParse(_montoCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+    // Para contado: el patrimonio baja por el monto completo
+    // Para cuotas: el patrimonio baja por el total con intereses
+    final costoTotal = _esCuotas ? _totalConInteres : montoTotal;
+    final patrimonioConCompra = widget.patrimonioActual - costoTotal;
+    final diferencia = patrimonioConCompra - widget.patrimonioActual;
+    final porcentajeCambio = widget.patrimonioActual != 0
+        ? (diferencia / widget.patrimonioActual.abs()) * 100
+        : 0.0;
+
+    final colorPatrimonioCon = patrimonioConCompra >= 0
+        ? Colors.green
+        : Colors.red;
+    final colorPatrimonioActual = widget.patrimonioActual >= 0
+        ? Colors.green
+        : Colors.red;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_outlined,
+                size: 20,
+                color: isDark ? Colors.amber.shade200 : Colors.amber.shade800,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Impacto en patrimonio',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _miniCard(
+                  'Actual',
+                  widget.formatoMoneda(widget.patrimonioActual),
+                  colorPatrimonioActual,
+                  isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_forward, size: 18, color: Colors.grey.shade500),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniCard(
+                  'Con compra',
+                  widget.formatoMoneda(patrimonioConCompra),
+                  colorPatrimonioCon,
+                  isDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Barra de impacto
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.red.withAlpha(isDark ? 30 : 15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.trending_down, size: 16, color: Colors.red),
+                const SizedBox(width: 8),
+                Text(
+                  '${widget.formatoMoneda(diferencia)} (${porcentajeCambio.toStringAsFixed(1)}%)',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_esCuotas && _costoInteres > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withAlpha(isDark ? 30 : 15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withAlpha(40)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.orange.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Incluye ${widget.formatoMoneda(_costoInteres)} en intereses',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? Colors.orange.shade200
+                            : Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          // Barra visual de proporción
+          _barraProporcionPatrimonio(
+            widget.patrimonioActual,
+            patrimonioConCompra,
+            costoTotal,
+            isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _barraProporcionPatrimonio(
+    int patrimonioActual,
+    int patrimonioConCompra,
+    int costoCompra,
+    bool isDark,
+  ) {
+    // Mostrar visualmente qué proporción del patrimonio representa la compra
+    final absPatrimonio = patrimonioActual.abs();
+    final fraccionCompra = absPatrimonio > 0
+        ? (costoCompra / absPatrimonio).clamp(0.0, 1.0)
+        : 1.0;
+    final fraccionRestante = 1.0 - fraccionCompra;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Proporción sobre tu patrimonio',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 14,
+            child: Row(
+              children: [
+                // Porción que queda
+                Expanded(
+                  flex: (fraccionRestante * 100).round().clamp(1, 100),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.tealAccent.withAlpha(80)
+                          : Colors.teal.shade300,
+                    ),
+                  ),
+                ),
+                // Porción de la compra
+                Expanded(
+                  flex: (fraccionCompra * 100).round().clamp(1, 100),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.redAccent.withAlpha(120)
+                          : Colors.red.shade400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.tealAccent.withAlpha(80)
+                        : Colors.teal.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Restante ${(fraccionRestante * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.redAccent.withAlpha(120)
+                        : Colors.red.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Compra ${(fraccionCompra * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
