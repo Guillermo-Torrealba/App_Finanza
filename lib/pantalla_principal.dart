@@ -13,6 +13,7 @@ import 'app_settings.dart';
 import 'finance_alert.dart';
 import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
+import 'simulador_financiero_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -1039,20 +1040,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark
-            ? alert.color.withValues(alpha: 0.15)
-            : alert.color.withAlpha(24),
+        color: isDark ? alert.color.withAlpha(0x26) : alert.color.withAlpha(24),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: alert.color.withValues(alpha: isDark ? 0.3 : 0.1),
-        ),
+        border: Border.all(color: alert.color.withAlpha(isDark ? 0x4D : 0x1A)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: alert.color.withValues(alpha: 0.2),
+              color: alert.color.withAlpha(0x33),
               shape: BoxShape.circle,
             ),
             child: Icon(alert.icon, color: alert.color, size: 20),
@@ -1067,9 +1064,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: isDark
-                        ? alert.color.withValues(alpha: 0.9)
-                        : alert.color,
+                    color: isDark ? alert.color.withAlpha(0xE6) : alert.color,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -2204,8 +2199,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         tag: 'mov_${item['id']}',
                         child: CircleAvatar(
                           backgroundColor: esIngreso
-                              ? Colors.green.withValues(alpha: 0.1)
-                              : Colors.red.withValues(alpha: 0.1),
+                              ? Colors.green.withAlpha(0x1A)
+                              : Colors.red.withAlpha(0x1A),
                           child: esIngreso
                               ? const Icon(
                                   Icons.arrow_upward,
@@ -2337,13 +2332,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            color: Colors.black.withAlpha(isDark ? 0x4D : 0x0C),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -2369,7 +2364,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.orange.withValues(alpha: 0.2)
+                          ? Colors.orange.withAlpha(0x33)
                           : Colors.orange.shade50,
                       shape: BoxShape.circle,
                     ),
@@ -2850,7 +2845,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     children: serieFlujo.map((punto) {
                       final flujo = punto['flujo'] as int;
                       final ingresos = punto['ingresos'] as int;
-                      final gastos = punto['gastos'] as int;
+                      final gastos = punto['ingresos'] as int;
                       final mes = punto['mes'] as DateTime;
                       final altura = ((flujo.abs() / maxAbsFlujo) * 70) + 8;
                       final color = flujo >= 0
@@ -4190,7 +4185,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 metasCompletadas.length,
                 isDark,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _construirBannerSimulador(),
+              const SizedBox(height: 24),
 
               // ── Active Goals ──
               if (metasActivas.isNotEmpty) ...[
@@ -4333,6 +4330,100 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
+            ),
+            const SizedBox(height: 32),
+            _construirBannerSimulador(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _construirBannerSimulador() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SimuladorFinancieroScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [Colors.deepPurple.shade900, Colors.indigo.shade900]
+                : [Colors.deepPurple.shade50, Colors.indigo.shade50],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.deepPurple.shade700
+                : Colors.deepPurple.shade200,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.deepPurple.withValues(alpha: 0.3)
+                    : Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_graph,
+                color: isDark ? Colors.deepPurpleAccent : Colors.deepPurple,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Premium',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.star, size: 10, color: Colors.amber.shade700),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Simulador Financiero',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Calcula tu libertad financiera proyectada',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
             ),
           ],
         ),
