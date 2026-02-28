@@ -7770,10 +7770,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           date.isBefore(end);
                     }).toList();
 
-                    // Chequear gastos recurrentes
-                    final recurrentesHoy = _recurrentes.where((r) {
+                    // Chequear gastos e ingresos recurrentes/planificados
+                    final gastosRecurrentesHoy = <Map<String, dynamic>>[];
+                    final ingresosPlanificadosHoy = <Map<String, dynamic>>[];
+
+                    for (final r in _recurrentes) {
                       final start = DateTime.parse(r['fecha_proximo_pago']);
                       final frecuencia = r['frecuencia'];
+                      final tipo = r['tipo'] ?? 'Gasto';
 
                       // Solo mostramos desde la fecha programada en adelante
                       // (O si está vencido, start es anterior a hoy, date es start o futuro)
@@ -7790,22 +7794,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         start.day,
                       );
 
-                      if (dateDate.isBefore(startDate)) return false;
+                      if (dateDate.isBefore(startDate)) continue;
 
+                      bool coincide = false;
                       if (frecuencia == 'Mensual') {
-                        return date.day == start.day;
+                        coincide = date.day == start.day;
                       } else if (frecuencia == 'Semanal') {
                         final diff = dateDate.difference(startDate).inDays;
-                        return diff % 7 == 0;
+                        coincide = diff % 7 == 0;
                       } else if (frecuencia == 'Anual') {
-                        return date.month == start.month &&
-                            date.day == start.day;
+                        coincide =
+                            date.month == start.month && date.day == start.day;
                       }
-                      return false;
-                    }).toList();
+
+                      if (coincide) {
+                        if (tipo == 'Ingreso') {
+                          ingresosPlanificadosHoy.add(r);
+                        } else {
+                          gastosRecurrentesHoy.add(r);
+                        }
+                      }
+                    }
 
                     final hasCreditPayment = creditosHoy.isNotEmpty;
-                    final hasRecurring = recurrentesHoy.isNotEmpty;
+                    final hasRecurringExpense = gastosRecurrentesHoy.isNotEmpty;
+                    final hasPlannedIncome = ingresosPlanificadosHoy.isNotEmpty;
+                    final hasAnyRecurring =
+                        hasRecurringExpense || hasPlannedIncome;
 
                     Color? bgColor;
                     Color textColor = Theme.of(context).colorScheme.onSurface;
@@ -7836,24 +7851,38 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           ? Colors.red.shade200
                           : Colors.red.shade900;
                     }
-                    if (hasCreditPayment || hasRecurring) {
+                    if (hasCreditPayment || hasAnyRecurring) {
                       if (!isDue && !isBilling && !isToday) {
-                        if (hasCreditPayment && !hasRecurring) {
-                          bgColor = isDark
-                              ? Colors.green.withValues(alpha: 0.2)
-                              : Colors.green.shade100;
-                          textColor = isDark
-                              ? Colors.green.shade200
-                              : Colors.green.shade900;
-                        } else if (hasRecurring && !hasCreditPayment) {
-                          bgColor = isDark
-                              ? Colors.purple.withValues(alpha: 0.2)
-                              : Colors.purple.shade100;
-                          textColor = isDark
-                              ? Colors.purple.shade200
-                              : Colors.purple.shade900;
+                        int eventTypes = 0;
+                        if (hasCreditPayment) eventTypes++;
+                        if (hasRecurringExpense) eventTypes++;
+                        if (hasPlannedIncome) eventTypes++;
+
+                        if (eventTypes == 1) {
+                          if (hasCreditPayment) {
+                            bgColor = isDark
+                                ? Colors.green.withValues(alpha: 0.2)
+                                : Colors.green.shade100;
+                            textColor = isDark
+                                ? Colors.green.shade200
+                                : Colors.green.shade900;
+                          } else if (hasRecurringExpense) {
+                            bgColor = isDark
+                                ? Colors.purple.withValues(alpha: 0.2)
+                                : Colors.purple.shade100;
+                            textColor = isDark
+                                ? Colors.purple.shade200
+                                : Colors.purple.shade900;
+                          } else if (hasPlannedIncome) {
+                            bgColor = isDark
+                                ? Colors.teal.withValues(alpha: 0.2)
+                                : Colors.teal.shade100;
+                            textColor = isDark
+                                ? Colors.teal.shade200
+                                : Colors.teal.shade900;
+                          }
                         } else {
-                          // Ambos
+                          // Hay más de un tipo de evento
                           bgColor = isDark
                               ? Colors.amber.withValues(alpha: 0.2)
                               : Colors.amber.shade100;
@@ -7864,58 +7893,88 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       }
                     }
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        shape: BoxShape.circle,
-                        border: isToday
-                            ? Border.all(color: Colors.blue, width: 2)
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Stack(
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () {
+                        if (isBilling ||
+                            isDue ||
+                            hasCreditPayment ||
+                            hasAnyRecurring) {
+                          _mostrarEventosDelDia(
+                            date,
+                            isBilling,
+                            isDue,
+                            creditosHoy,
+                            gastosRecurrentesHoy,
+                            ingresosPlanificadosHoy,
+                          );
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          shape: BoxShape.circle,
+                          border: isToday
+                              ? Border.all(color: Colors.blue, width: 2)
+                              : null,
+                        ),
                         alignment: Alignment.center,
-                        children: [
-                          Text(
-                            '$day',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Text(
+                              '$day',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
                             ),
-                          ),
-                          Positioned(
-                            bottom: 4,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (hasCreditPayment)
-                                  Container(
-                                    width: 4,
-                                    height: 4,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 1,
+                            Positioned(
+                              bottom: 4,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasCreditPayment)
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade700,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade700,
-                                      shape: BoxShape.circle,
+                                  if (hasRecurringExpense)
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.shade700,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                  ),
-                                if (hasRecurring)
-                                  Container(
-                                    width: 4,
-                                    height: 4,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 1,
+                                  if (hasPlannedIncome)
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade700,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.purple.shade700,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -7927,7 +7986,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     _leyendaCalendario(Colors.indigo.shade100, 'Facturación'),
                     _leyendaCalendario(Colors.red.shade100, 'Vencimiento'),
                     _leyendaCalendario(Colors.green.shade100, 'Crédito'),
-                    _leyendaCalendario(Colors.purple.shade100, 'Recurrente'),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _leyendaCalendario(
+                      Colors.purple.shade100,
+                      'Gasto Recurrente',
+                    ),
+                    _leyendaCalendario(
+                      Colors.teal.shade100,
+                      'Ingreso Planificado',
+                    ),
                   ],
                 ),
               ],
@@ -8117,6 +8189,117 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
+  void _mostrarEventosDelDia(
+    DateTime date,
+    bool isBilling,
+    bool isDue,
+    List<Map<String, dynamic>> creditos,
+    List<Map<String, dynamic>> gastos,
+    List<Map<String, dynamic>> ingresos,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Eventos: ${date.day}/${date.month}/${date.year}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (isDue)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.red.withValues(alpha: 0.2),
+                    child: const Icon(Icons.warning, color: Colors.red),
+                  ),
+                  title: const Text('Vencimiento de Tarjeta'),
+                ),
+              if (isBilling)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.indigo.withValues(alpha: 0.2),
+                    child: const Icon(Icons.receipt_long, color: Colors.indigo),
+                  ),
+                  title: const Text('Cierre de Facturación'),
+                ),
+              for (final c in creditos)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.withValues(alpha: 0.2),
+                    child: const Icon(Icons.credit_card, color: Colors.green),
+                  ),
+                  title: Text(c['name']),
+                  subtitle: Text('Crédito - Cuota'),
+                  trailing: Text(
+                    _textoMonto(c['amount'] as int),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              for (final g in gastos)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.purple.withValues(alpha: 0.2),
+                    child: const Icon(
+                      Icons.arrow_downward,
+                      color: Colors.purple,
+                    ),
+                  ),
+                  title: Text(g['item']),
+                  subtitle: const Text('Gasto Recurrente'),
+                  trailing: Text(
+                    _textoMonto(g['monto'] as int),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purple,
+                    ),
+                  ),
+                ),
+              for (final i in ingresos)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.teal.withValues(alpha: 0.2),
+                    child: const Icon(Icons.arrow_upward, color: Colors.teal),
+                  ),
+                  title: Text(i['item']),
+                  subtitle: const Text('Ingreso Planificado'),
+                  trailing: Text(
+                    _textoMonto(i['monto'] as int),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cerrar'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _leyendaCalendario(Color color, String label) {
     return Row(
       children: [
@@ -8177,6 +8360,54 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             'monto': c['amount'],
             'color': Colors.green,
             'icon': Icons.account_balance,
+          });
+        }
+      }
+    }
+
+    eventos.sort((a, b) => (a['day'] as int).compareTo(b['day'] as int));
+
+    // Agregar también recurrentes del mes completo al listado inferior
+    for (final r in _recurrentes) {
+      final start = DateTime.parse(r['fecha_proximo_pago']);
+      final frecuencia = r['frecuencia'];
+      final tipo = r['tipo'] ?? 'Gasto';
+      final monto = r['monto'] as int;
+      final isIngreso = tipo == 'Ingreso';
+
+      final dates = <int>[];
+
+      if (frecuencia == 'Mensual') {
+        dates.add(start.day);
+      } else if (frecuencia == 'Anual' &&
+          start.month == _mesVisualizado.month) {
+        dates.add(start.day);
+      } else if (frecuencia == 'Semanal') {
+        // Encontrar todos los días en el mes que caen en este día de la semana
+        for (int day = 1; day <= daysInMonth; day++) {
+          final currentDate = DateTime(
+            _mesVisualizado.year,
+            _mesVisualizado.month,
+            day,
+          );
+          final startDate = DateTime(start.year, start.month, start.day);
+          if (!currentDate.isBefore(startDate)) {
+            final diff = currentDate.difference(startDate).inDays;
+            if (diff % 7 == 0) {
+              dates.add(day);
+            }
+          }
+        }
+      }
+
+      for (final payDay in dates) {
+        if (payDay <= daysInMonth) {
+          eventos.add({
+            'day': payDay,
+            'title': r['item'],
+            'monto': monto,
+            'color': isIngreso ? Colors.teal : Colors.purple,
+            'icon': isIngreso ? Icons.arrow_upward : Icons.arrow_downward,
           });
         }
       }
