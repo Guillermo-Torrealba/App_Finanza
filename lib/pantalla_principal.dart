@@ -78,7 +78,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'Analisis',
         'Metas',
         'Presupuestos',
-        'Crédito',
+        'Planificación',
         'Ajustes',
       ];
     } else {
@@ -1204,10 +1204,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   if (widget.settingsController.settings.hasCreditCard)
                     _navIcon(
-                      filled: Icons.credit_card,
-                      outlined: Icons.credit_card_outlined,
+                      filled: Icons.calendar_month,
+                      outlined: Icons.calendar_today_outlined,
                       index: 4,
-                      tooltip: 'Crédito',
+                      tooltip: 'Planificación',
                     ),
                   _navIcon(
                     filled: Icons.settings,
@@ -8413,57 +8413,91 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }
     }
 
-    eventos.sort((a, b) => (a['day'] as int).compareTo(b['day'] as int));
+    final eventosPorDia = <int, List<Map<String, dynamic>>>{};
+    for (final e in eventos) {
+      final day = e['day'] as int;
+      eventosPorDia.putIfAbsent(day, () => []).add(e);
+    }
+
+    final sortedDays = eventosPorDia.keys.toList()..sort();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
-      children: eventos.map((e) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          elevation: 0,
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-            ),
-          ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: (e['color'] as Color).withAlpha(
-                isDark ? 50 : 30,
-              ),
-              child: Icon(
-                e['icon'] as IconData,
-                color: e['color'] as Color,
-                size: 20,
-              ),
-            ),
-            title: Text(
-              e['title'] as String,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            trailing: e.containsKey('monto')
-                ? Text(
-                    _textoMonto(e['monto'] as int),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isDark
-                          ? Colors.green.shade300
-                          : Colors.green.shade800,
-                    ),
-                  )
-                : Text(
-                    'Día ${e['day']}',
-                    style: TextStyle(
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                    ),
+      children: sortedDays.map((day) {
+        final eventosDia = eventosPorDia[day]!;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: Text(
+                  'Día $day',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
+                ),
+              ),
+              Card(
+                margin: EdgeInsets.zero,
+                elevation: 0,
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < eventosDia.length; i++) ...[
+                      if (i > 0)
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          indent: 16,
+                          endIndent: 16,
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade200,
+                        ),
+                      ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: (eventosDia[i]['color'] as Color)
+                              .withAlpha(isDark ? 50 : 30),
+                          child: Icon(
+                            eventosDia[i]['icon'] as IconData,
+                            color: eventosDia[i]['color'] as Color,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(
+                          eventosDia[i]['title'] as String,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        trailing: eventosDia[i].containsKey('monto')
+                            ? Text(
+                                _textoMonto(eventosDia[i]['monto'] as int),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.green.shade300
+                                      : Colors.green.shade800,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       }).toList(),
