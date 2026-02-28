@@ -69,6 +69,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       'fecha_desc'; // fecha_desc, fecha_asc, monto_desc, monto_asc
   bool _ordenamientoVisible = false;
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
+  int? _limiteMovimientos = 15;
 
   List<String> get _titulosPestanas {
     final hasCreditCard = widget.settingsController.settings.hasCreditCard;
@@ -1481,6 +1482,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         );
     }
 
+    final totalFiltrados = movimientosFiltrados.length;
+    final int itemCount = _limiteMovimientos == null
+        ? totalFiltrados
+        : (totalFiltrados > _limiteMovimientos!
+              ? _limiteMovimientos!
+              : totalFiltrados);
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -1929,14 +1937,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_textoBusqueda.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _busquedaController.clear();
-                              setState(() => _textoBusqueda = '');
-                            },
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _busquedaController.clear();
+                            setState(() {
+                              _textoBusqueda = '';
+                              _limiteMovimientos = 15;
+                            });
+                          },
+                        ),
                         IconButton(
                           icon: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 200),
@@ -1981,7 +1991,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                     ),
                   ),
-                  onChanged: (v) => setState(() => _textoBusqueda = v),
+                  onChanged: (v) => setState(() {
+                    _textoBusqueda = v;
+                    _limiteMovimientos = 15;
+                  }),
                 ),
               ),
               // ── Type Filter ──
@@ -2008,8 +2021,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                     ],
                     selected: {_filtroTipo},
-                    onSelectionChanged: (sel) =>
-                        setState(() => _filtroTipo = sel.first),
+                    onSelectionChanged: (sel) => setState(() {
+                      _filtroTipo = sel.first;
+                      _limiteMovimientos = 15;
+                    }),
                     showSelectedIcon: false,
                     style: ButtonStyle(
                       visualDensity: VisualDensity.compact,
@@ -2121,7 +2136,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         child: TextButton(
                           onPressed: () {
                             _busquedaController.clear();
-                            setState(() => _textoBusqueda = '');
+                            setState(() {
+                              _textoBusqueda = '';
+                              _limiteMovimientos = 15;
+                            });
                           },
                           child: const Text('Limpiar búsqueda'),
                         ),
@@ -2226,7 +2244,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                 ),
               );
-            }, childCount: movimientosFiltrados.length),
+            }, childCount: itemCount),
+          ),
+        if (_limiteMovimientos != null && totalFiltrados > _limiteMovimientos!)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => setState(() => _limiteMovimientos = null),
+                  icon: const Icon(Icons.expand_more),
+                  label: Text('Ver más ($totalFiltrados)'),
+                ),
+              ),
+            ),
+          ),
+        if (_limiteMovimientos == null && totalFiltrados > 15)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _limiteMovimientos = 15),
+                  icon: const Icon(Icons.expand_less),
+                  label: const Text('Ver menos'),
+                ),
+              ),
+            ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 90)),
       ],
