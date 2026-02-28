@@ -2,10 +2,35 @@ import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'app_settings.dart';
+
+class RecurrentItem {
+  final String id;
+  String name;
+  double amount;
+
+  RecurrentItem(this.id, this.name, this.amount);
+}
+
+class VariableExpense {
+  final String category;
+  double amount;
+  double maxAmount;
+
+  VariableExpense(this.category, this.amount, this.maxAmount);
+}
 
 class SimuladorFinancieroScreen extends StatefulWidget {
-  const SimuladorFinancieroScreen({super.key});
+  final SettingsController settingsController;
+
+  const SimuladorFinancieroScreen({
+    super.key,
+    required this.settingsController,
+  });
 
   @override
   State<SimuladorFinancieroScreen> createState() =>
@@ -13,56 +38,158 @@ class SimuladorFinancieroScreen extends StatefulWidget {
 }
 
 class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
-  // --- Valores Iniciales ---
-  double _ingresoMensual = 1500000;
-  double _gastosFijos = 500000;
-  double _gastosVariables = 300000; // El valor más importante para jugar
-  double _tasaInversionAnual = 5.0; // En porcentaje (0 a 15%)
+  bool _cargando = true;
 
-  // Años de proyección
+  // Datos reales
+  double _saldoRealActual = 0;
+
+  // Listas locales para la simulación
+  final List<RecurrentItem> _ingresosRecurrentes = [];
+  final List<RecurrentItem> _gastosFijos = [];
+  final List<VariableExpense> _gastosVariables = [];
+
+  // Tasa de inversión anual esperada
+  double _tasaInversionAnual = 5.0;
+
+  // Resultados calculados
   final int _anosProyeccion = 20;
-
   final List<FlSpot> _puntosGrafico = [];
-
-  // Calculados
   double _patrimonioFinal = 0;
-  double _ahorroMensualActual = 0;
-  int? _anoLibertadFinanciera; // Año en el que el interés mensual > gastos
+  double _flujoMensualActual = 0;
+  int? _anoLibertadFinanciera;
 
   @override
   void initState() {
     super.initState();
-    _calcularProyeccion();
+    _cargarDatosIniciales();
+  }
+
+  Future<void> _cargarDatosIniciales() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final settings = widget.settingsController.settings;
+
+    try {
+      // 1. Calcular Saldo Real Total (Liquidez Débito)
+      final gastosResponse = await supabase
+          .from('gastos')
+          .select('monto, tipo, metodo_pago, cuenta')
+          .eq('user_id', user.id);
+
+      double saldoNeto = 0;
+      for (final g in gastosResponse) {
+        if ((g['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+        final cuenta = (g['cuenta'] ?? '').toString();
+        // Solo considerar cuentas activas
+        if (!settings.activeAccounts.contains(cuenta)) continue;
+
+        final m = (g['monto'] as num? ?? 0).toDouble();
+        if (g['tipo'] == 'Ingreso') {
+          saldoNeto += m;
+        } else {
+          saldoNeto -= m;
+        }
+      }
+      _saldoRealActual = saldoNeto;
+
+      // 2. Cargar Gastos Programados para inicializar Recurrentes y Fijos
+      final programadosResponse = await supabase
+          .from('gastos_programados')
+          .select('id, item, monto, tipo, activo')
+          .eq('user_id', user.id)
+          .eq('activo', true);
+
+      for (final p in programadosResponse) {
+        final tipo = p['tipo'].toString();
+        final item = RecurrentItem(
+          p['id'].toString(),
+          p['item'].toString(),
+          (p['monto'] as num).toDouble(),
+        );
+
+        if (tipo == 'Ingreso') {
+          _ingresosRecurrentes.add(item);
+        } else if (tipo == 'Gasto') {
+          _gastosFijos.add(item);
+        }
+      }
+
+      // 3. Inicializar Gastos Variables desde Presupuestos
+      for (final cat in settings.activeCategories) {
+        final presupuesto = settings.categoryBudgets[cat] ?? 0;
+        if (presupuesto > 0) {
+          _gastosVariables.add(
+            VariableExpense(
+              cat,
+              presupuesto.toDouble(),
+              max(presupuesto * 2.0, 1000000.0),
+            ),
+          );
+        } else {
+          _gastosVariables.add(
+            VariableExpense(cat, 0, 500000.0), // Default sin presupuesto
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error cargando iniciales para simulador: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _cargando = false;
+        _calcularProyeccion();
+      });
+    }
   }
 
   void _calcularProyeccion() {
     _puntosGrafico.clear();
-    double capitalAcumulado = 0;
+    double capitalAcumulado = _saldoRealActual;
 
-    _ahorroMensualActual = _ingresoMensual - _gastosFijos - _gastosVariables;
+    double sumaIngresos = _ingresosRecurrentes.fold(
+      0,
+      (sum, item) => sum + item.amount,
+    );
+    double sumaGastosFijos = _gastosFijos.fold(
+      0,
+      (sum, item) => sum + item.amount,
+    );
+    double sumaGastosVar = _gastosVariables.fold(
+      0,
+      (sum, item) => sum + item.amount,
+    );
+
+    _flujoMensualActual = sumaIngresos - sumaGastosFijos - sumaGastosVar;
     _anoLibertadFinanciera = null;
 
-    // Convertir tasa anual a mensual (ej: 5% anual / 12 = 0.416% mensual)
+    // Agregar el punto inicial (Mes 0)
+    _puntosGrafico.add(FlSpot(0, capitalAcumulado));
+
+    // Convertir tasa anual a mensual (ej: 5% anual = 0.416% mensual)
     double tasaMensual = (_tasaInversionAnual / 100) / 12;
 
     for (int mes = 1; mes <= _anosProyeccion * 12; mes++) {
       // 1. Interés generado sobre el capital del mes anterior
+      // Solo aplicamos interes si el capital es positivo (ahorro o inversiones)
       double interesGenerado = capitalAcumulado > 0
           ? capitalAcumulado * tasaMensual
-          : 0; // Si hay deuda, simplificamos asumiendo 0% de retorno o podríamos aplicar un costo de deuda.
+          : 0;
 
-      // 2. Nuevo capital: Capital anterior + Interés + Flujo mensual
-      capitalAcumulado += interesGenerado + _ahorroMensualActual;
+      // 2. Nuevo capital
+      capitalAcumulado += interesGenerado + _flujoMensualActual;
 
       // 3. Revisar Libertad Financiera
-      // Si el interés generado por sí solo cubre los gastos fijos + variables
+      // Se alcanza cuando los puros intereses generados en un mes cubren ambos gastos
       if (_anoLibertadFinanciera == null &&
-          interesGenerado >= (_gastosFijos + _gastosVariables) &&
+          interesGenerado >= (sumaGastosFijos + sumaGastosVar) &&
           mes > 0) {
         _anoLibertadFinanciera = (mes / 12).ceil();
       }
 
-      // Guardar el punto cada 12 meses (al final de cada año) para el gráfico
+      // Guardar punto cada 12 meses (fin de año)
       if (mes % 12 == 0) {
         int ano = mes ~/ 12;
         _puntosGrafico.add(FlSpot(ano.toDouble(), capitalAcumulado));
@@ -86,15 +213,84 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
     return '\$${formatCurrency.format(value)}';
   }
 
+  String _formatDineroFull(double value) {
+    final formatCurrency = NumberFormat.simpleCurrency(
+      decimalDigits: 0,
+      name: '',
+    );
+    return '\$${formatCurrency.format(value)}';
+  }
+
+  void _mostrarDialogoAgregar(String tipo, List<RecurrentItem> listaDestino) {
+    final nameCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Simular nuevo $tipo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Nombre (ej. Sueldo Extra)',
+                ),
+              ),
+              TextField(
+                controller: amountCtrl,
+                decoration: const InputDecoration(labelText: 'Monto mensual'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (nameCtrl.text.isNotEmpty && amountCtrl.text.isNotEmpty) {
+                  setState(() {
+                    listaDestino.add(
+                      RecurrentItem(
+                        DateTime.now().millisecondsSinceEpoch.toString(),
+                        nameCtrl.text,
+                        double.parse(amountCtrl.text),
+                      ),
+                    );
+                    _calcularProyeccion();
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Agregar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorPrincipal = Colors.teal;
     final colorDeuda = Colors.redAccent;
-    final formatterLong = NumberFormat.simpleCurrency(
-      decimalDigits: 0,
-      name: '',
-    );
+
+    if (_cargando) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Simulador Financiero'),
+          centerTitle: true,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -108,34 +304,30 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
           children: [
             // --- GRÁFICO ---
             Expanded(
-              flex: 5,
+              flex: 4,
               child: Padding(
                 padding: const EdgeInsets.only(
                   right: 24,
                   left: 16,
                   top: 24,
-                  bottom: 12,
+                  bottom: 8,
                 ),
                 child: LineChart(
                   LineChartData(
                     gridData: FlGridData(
                       show: true,
                       drawVerticalLine: true,
-                      horizontalInterval: _patrimonioFinal > 0
-                          ? max(1000000, _patrimonioFinal / 5)
-                          : 1000000,
-                      getDrawingHorizontalLine: (value) {
-                        return FlLine(
-                          color: isDark ? Colors.white12 : Colors.black12,
-                          strokeWidth: 1,
-                        );
-                      },
-                      getDrawingVerticalLine: (value) {
-                        return FlLine(
-                          color: isDark ? Colors.white12 : Colors.black12,
-                          strokeWidth: 1,
-                        );
-                      },
+                      horizontalInterval: _patrimonioFinal.abs() > 0
+                          ? max(1000000.0, _patrimonioFinal.abs() / 5)
+                          : 1000000.0,
+                      getDrawingHorizontalLine: (_) => FlLine(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        strokeWidth: 1,
+                      ),
+                      getDrawingVerticalLine: (_) => FlLine(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        strokeWidth: 1,
+                      ),
                     ),
                     titlesData: FlTitlesData(
                       show: true,
@@ -155,7 +347,7 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                             return Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Text(
-                                'Año ${value.toInt()}',
+                                'A ${value.toInt()}',
                                 style: TextStyle(
                                   color: isDark
                                       ? Colors.white54
@@ -171,9 +363,9 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          interval: _patrimonioFinal > 0
-                              ? max(1000000, _patrimonioFinal / 4)
-                              : 1000000,
+                          interval: _patrimonioFinal.abs() > 0
+                              ? max(1000000.0, _patrimonioFinal.abs() / 4)
+                              : 1000000.0,
                           reservedSize: 55,
                           getTitlesWidget: (value, meta) {
                             return Text(
@@ -194,7 +386,7 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                         color: isDark ? Colors.white12 : Colors.black12,
                       ),
                     ),
-                    minX: 1,
+                    minX: 0,
                     maxX: _anosProyeccion.toDouble(),
                     minY: min(0, _puntosGrafico.lastOrNull?.y ?? 0),
                     maxY: max(1000000, _patrimonioFinal * 1.1),
@@ -215,7 +407,7 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                               (_patrimonioFinal >= 0
                                       ? colorPrincipal
                                       : colorDeuda)
-                                  .withValues(alpha: 0.2),
+                                  .withAlpha(51),
                         ),
                       ),
                     ],
@@ -233,7 +425,7 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: '\$${formatterLong.format(spot.y)}',
+                                  text: _formatDineroFull(spot.y),
                                   style: TextStyle(
                                     color: spot.y >= 0
                                         ? Colors.teal
@@ -260,9 +452,9 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
               child: Row(
                 children: [
                   _buildKPICard(
-                    title: 'Ahorro Mensual',
-                    value: '\$${formatterLong.format(_ahorroMensualActual)}',
-                    color: _ahorroMensualActual >= 0
+                    title: 'Flujo Mensual',
+                    value: _formatDineroFull(_flujoMensualActual),
+                    color: _flujoMensualActual >= 0
                         ? colorPrincipal
                         : colorDeuda,
                     isDark: isDark,
@@ -276,7 +468,7 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildKPICard(
-                    title: 'Libertad Financiera',
+                    title: 'Libertad Finance',
                     value: _anoLibertadFinanciera != null
                         ? 'Año $_anoLibertadFinanciera'
                         : 'No Alcanzada',
@@ -292,128 +484,176 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
             const SizedBox(height: 16),
             const Divider(height: 1),
 
-            // --- CONTROLES (Sliders) ---
+            // --- PANELES ESTILO LISTA / PLANILLA ---
             Expanded(
-              flex: 6,
+              flex: 5,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 children: [
-                  _buildControlHeader(
-                    'Gastos Variables (Ocio, Restaurantes, etc)',
-                    _gastosVariables,
-                    colorPrincipal,
-                    isDark,
-                    true,
-                  ),
-                  Slider(
-                    value: _gastosVariables,
-                    min: 0,
-                    max: 2000000,
-                    divisions: 40,
-                    activeColor: colorPrincipal,
-                    label: '\$${formatterLong.format(_gastosVariables)}',
-                    onChanged: (val) {
-                      setState(() {
-                        _gastosVariables = val;
-                        _calcularProyeccion();
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  _buildControlHeader(
-                    'Gastos Fijos (Arriendo, Cuentas, etc)',
-                    _gastosFijos,
-                    Colors.grey,
-                    isDark,
-                    false,
-                  ),
-                  Slider(
-                    value: _gastosFijos,
-                    min: 0,
-                    max: 3000000,
-                    divisions: 60,
-                    activeColor: Colors.grey,
-                    label: '\$${formatterLong.format(_gastosFijos)}',
-                    onChanged: (val) {
-                      setState(() {
-                        _gastosFijos = val;
-                        _calcularProyeccion();
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  _buildControlHeader(
-                    'Ingreso Mensual',
-                    _ingresoMensual,
-                    Colors.blue,
-                    isDark,
-                    false,
-                  ),
-                  Slider(
-                    value: _ingresoMensual,
-                    min: 0,
-                    max: 5000000,
-                    divisions: 50,
-                    activeColor: Colors.blue,
-                    label: '\$${formatterLong.format(_ingresoMensual)}',
-                    onChanged: (val) {
-                      setState(() {
-                        _ingresoMensual = val;
-                        _calcularProyeccion();
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Rendimiento Anual Inversiones',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.grey.shade300
-                              : Colors.grey.shade700,
-                        ),
+                  // Tasa Inversión
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.grey.shade800
+                            : Colors.grey.shade200,
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.trending_up, color: Colors.green),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Tasa Inversión Anual',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '${_tasaInversionAnual.toStringAsFixed(1)}%',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+                        Slider(
+                          value: _tasaInversionAnual,
+                          min: 0,
+                          max: 15,
+                          divisions: 30,
+                          activeColor: Colors.green,
+                          label: '${_tasaInversionAnual.toStringAsFixed(1)}%',
+                          onChanged: (val) {
+                            setState(() {
+                              _tasaInversionAnual = val;
+                              _calcularProyeccion();
+                            });
+                          },
                         ),
-                        child: Text(
-                          '${_tasaInversionAnual.toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  Slider(
-                    value: _tasaInversionAnual,
-                    min: 0,
-                    max: 15,
-                    divisions: 30,
-                    activeColor: Colors.green,
-                    label: '${_tasaInversionAnual.toStringAsFixed(1)}%',
-                    onChanged: (val) {
+
+                  // INGRESOS
+                  _buildSectionCard(
+                    title: 'Ingresos Recurrentes',
+                    icon: Icons.arrow_upward,
+                    color: Colors.green,
+                    items: _ingresosRecurrentes,
+                    isDark: isDark,
+                    onAdd: () =>
+                        _mostrarDialogoAgregar('Ingreso', _ingresosRecurrentes),
+                    onDelete: (item) {
                       setState(() {
-                        _tasaInversionAnual = val;
+                        _ingresosRecurrentes.remove(item);
                         _calcularProyeccion();
                       });
                     },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // GASTOS FIJOS
+                  _buildSectionCard(
+                    title: 'Gastos Fijos',
+                    icon: Icons.arrow_downward,
+                    color: Colors.redAccent,
+                    items: _gastosFijos,
+                    isDark: isDark,
+                    onAdd: () =>
+                        _mostrarDialogoAgregar('Gasto Fijo', _gastosFijos),
+                    onDelete: (item) {
+                      setState(() {
+                        _gastosFijos.remove(item);
+                        _calcularProyeccion();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // GASTOS VARIABLES (SLIDERS)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.grey.shade800
+                            : Colors.grey.shade200,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.tune, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Presupuesto: Gastos Variables',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ..._gastosVariables.map((ve) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(ve.category),
+                                  Text(
+                                    _formatDineroFull(ve.amount),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Slider(
+                                value: ve.amount,
+                                min: 0,
+                                max: ve.maxAmount,
+                                activeColor: Colors.blue,
+                                onChanged: (val) {
+                                  setState(() {
+                                    ve.amount = val;
+                                    _calcularProyeccion();
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          );
+                        }),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -424,39 +664,87 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
     );
   }
 
-  Widget _buildControlHeader(
-    String title,
-    double value,
-    Color color,
-    bool isDark,
-    bool isHero,
-  ) {
-    final formatter = NumberFormat.simpleCurrency(decimalDigits: 0, name: '');
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontWeight: isHero ? FontWeight.w900 : FontWeight.bold,
-              fontSize: isHero ? 16 : 14,
-              color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<RecurrentItem> items,
+    required bool isDark,
+    required VoidCallback onAdd,
+    required Function(RecurrentItem) onDelete,
+  }) {
+    double total = items.fold(0, (sum, i) => sum + i.amount);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: color),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                _formatDineroFull(total),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No hay items aquí. Agrega uno para empezar.',
+                style: TextStyle(
+                  color: isDark ? Colors.white54 : Colors.black54,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
+          ...items.map((item) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(item.name)),
+                Text(_formatDineroFull(item.amount)),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                  onPressed: () => onDelete(item),
+                ),
+              ],
+            );
+          }),
+          TextButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: Text('Agregar $title'),
           ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '\$${formatter.format(value)}',
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -468,20 +756,13 @@ class _SimuladorFinancieroScreenState extends State<SimuladorFinancieroScreen> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Column(
           children: [

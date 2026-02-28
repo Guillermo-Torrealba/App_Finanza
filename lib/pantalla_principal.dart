@@ -4345,7 +4345,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const SimuladorFinancieroScreen()),
+          MaterialPageRoute(
+            builder: (_) => SimuladorFinancieroScreen(
+              settingsController: widget.settingsController,
+            ),
+          ),
         );
       },
       child: Container(
