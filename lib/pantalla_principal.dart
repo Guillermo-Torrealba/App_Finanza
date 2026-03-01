@@ -11,9 +11,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_settings.dart';
 import 'finance_alert.dart';
+import 'flujo_caja_screen.dart';
 import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
-import 'simulador_financiero_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -4346,9 +4346,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => SimuladorFinancieroScreen(
-              settingsController: widget.settingsController,
-            ),
+            builder: (_) =>
+                FlujoCajaScreen(settingsController: widget.settingsController),
           ),
         );
       },
@@ -4405,7 +4404,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Simulador Financiero',
+                    'Flujo de Caja',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -4414,7 +4413,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Calcula tu libertad financiera proyectada',
+                    'Proyección y control mensual',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark
