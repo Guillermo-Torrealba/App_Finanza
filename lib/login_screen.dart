@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'pantalla_principal.dart';
+import 'app/app_routes.dart';
 import 'app_settings.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -82,13 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) {
           await widget.settingsController.loadFromCloud();
           if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => PantallaPrincipal(
-                  settingsController: widget.settingsController,
-                ),
-              ),
-            );
+            Navigator.of(context).pushReplacementNamed(AppRoutes.home);
           }
         }
       }

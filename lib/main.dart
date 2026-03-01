@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app/app_routes.dart';
+import 'app/app_shell.dart';
 import 'app_settings.dart';
 import 'login_screen.dart';
-import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
 
 Future<void> main() async {
@@ -48,6 +49,27 @@ class AppFinanzas extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           themeMode: _themeMode(settings.themeMode),
+          onGenerateRoute: (routeSettings) {
+            switch (routeSettings.name) {
+              case AppRoutes.login:
+                return MaterialPageRoute(
+                  builder: (_) =>
+                      LoginScreen(settingsController: settingsController),
+                );
+              case AppRoutes.onboarding:
+                return MaterialPageRoute(
+                  builder: (_) =>
+                      OnboardingScreen(settingsController: settingsController),
+                );
+              case AppRoutes.home:
+                return MaterialPageRoute(
+                  builder: (_) =>
+                      AppShell(settingsController: settingsController),
+                );
+              default:
+                return null;
+            }
+          },
           theme: ThemeData(
             useMaterial3: true,
             colorSchemeSeed: seedColor,
@@ -66,10 +88,10 @@ class AppFinanzas extends StatelessWidget {
                 ? VisualDensity.compact
                 : VisualDensity.standard,
           ),
-          home: supabase.auth.currentSession == null
+          home: Supabase.instance.client.auth.currentSession == null
               ? LoginScreen(settingsController: settingsController)
               : settings.hasCompletedOnboarding
-              ? PantallaPrincipal(settingsController: settingsController)
+              ? AppShell(settingsController: settingsController)
               : OnboardingScreen(settingsController: settingsController),
         );
       },

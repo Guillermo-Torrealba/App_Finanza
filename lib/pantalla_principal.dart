@@ -9,13 +9,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app/app_routes.dart';
 import 'app_settings.dart';
 import 'finance_alert.dart';
 import 'flujo_caja_screen.dart';
-import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
 
 final supabase = Supabase.instance.client;
+enum _MasSection { menu, analisis, metas, credito, ajustes }
 
 class PantallaPrincipal extends StatefulWidget {
   const PantallaPrincipal({super.key, required this.settingsController});
@@ -71,9 +72,31 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   bool _ordenamientoVisible = false;
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
   int? _limiteMovimientos = 15;
+  _MasSection _masSection = _MasSection.menu;
 
   List<String> get _titulosPestanas {
-    final hasCreditCard = widget.settingsController.settings.hasCreditCard;
+    return const ['Inicio', 'Movimientos', 'Plan', 'Mas'];
+  }
+
+  String get _tituloActual {
+    if (_indicePestana != 3) {
+      return _titulosPestanas[_indicePestana];
+    }
+    switch (_masSection) {
+      case _MasSection.menu:
+        return 'Mas';
+      case _MasSection.analisis:
+        return 'Analisis';
+      case _MasSection.metas:
+        return 'Metas';
+      case _MasSection.credito:
+        return 'Credito';
+      case _MasSection.ajustes:
+        return 'Ajustes';
+    }
+  }
+
+  /* legacy titles removed
     if (hasCreditCard) {
       return const [
         'Mis Finanzas Cloud',
@@ -94,6 +117,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
   }
 
+  */
   @override
   void initState() {
     super.initState();
@@ -157,8 +181,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }
 
       // Ajustar índice de pestaña si deshabilitan la tarjeta
-      if (!settings.hasCreditCard && _indicePestana > 3) {
-        _indicePestana = 4; // Ajustes is now at index 4
+      if (!settings.hasCreditCard && _masSection == _MasSection.credito) {
+        _masSection = _MasSection.menu;
       }
     });
   }
@@ -470,7 +494,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ),
         ),
       ),
-      onPressed: () => setState(() => _indicePestana = index),
+      onPressed: () => setState(() {
+        _indicePestana = index;
+        if (index != 3) {
+          _masSection = _MasSection.menu;
+        }
+      }),
       tooltip: tooltip,
     );
   }
@@ -1088,11 +1117,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final scaffold = Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        leading: _indicePestana == 3 && _masSection != _MasSection.menu
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _masSection = _MasSection.menu),
+              )
+            : null,
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: Text(
-            _titulosPestanas[_indicePestana],
-            key: ValueKey<int>(_indicePestana),
+            _tituloActual,
+            key: ValueKey<String>(_tituloActual),
           ),
         ),
         centerTitle: true,
@@ -1110,34 +1145,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           }
           final todosLosDatos = snapshot.data!;
 
-          return AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            child: KeyedSubtree(
-              key: ValueKey<int>(_indicePestana),
-              child: () {
-                final hasCreditCard =
-                    widget.settingsController.settings.hasCreditCard;
-                if (_indicePestana == 0)
-                  return _construirPaginaInicio(todosLosDatos);
-                if (_indicePestana == 1)
-                  return _construirPaginaAnalisis(todosLosDatos);
-                if (_indicePestana == 2) return _construirPaginaMetas();
-                if (_indicePestana == 3)
-                  return _construirPaginaPresupuestos(todosLosDatos);
-                if (hasCreditCard) {
-                  if (_indicePestana == 4)
-                    return _construirPaginaCredito(todosLosDatos);
-                  return _construirPaginaAjustes();
-                } else {
-                  return _construirPaginaAjustes();
-                }
-              }(),
-            ),
+          return IndexedStack(
+            index: _indicePestana,
+            children: [
+              _construirPaginaAnalisis(todosLosDatos),
+              _construirPaginaInicio(todosLosDatos),
+              _construirPaginaPresupuestos(todosLosDatos),
+              _construirPaginaMas(todosLosDatos),
+            ],
           );
         },
       ),
@@ -1171,17 +1186,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     tooltip: 'Inicio',
                   ),
                   _navIcon(
-                    filled: Icons.pie_chart,
-                    outlined: Icons.pie_chart_outline,
+                    filled: Icons.receipt_long,
+                    outlined: Icons.receipt_long_outlined,
                     index: 1,
-                    tooltip: 'Análisis',
+                    tooltip: 'Movimientos',
                   ),
-                  _navIcon(
-                    filled: Icons.flag,
-                    outlined: Icons.flag_outlined,
-                    index: 2,
-                    tooltip: 'Metas',
-                  ),
+                  const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -1193,25 +1203,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _navIcon(
-                    filled: Icons.calculate,
-                    outlined: Icons.calculate_outlined,
-                    index: 3,
-                    tooltip: 'Presupuestos',
+                    filled: Icons.calendar_month,
+                    outlined: Icons.calendar_today_outlined,
+                    index: 2,
+                    tooltip: 'Plan',
                   ),
-                  if (widget.settingsController.settings.hasCreditCard)
-                    _navIcon(
-                      filled: Icons.calendar_month,
-                      outlined: Icons.calendar_today_outlined,
-                      index: 4,
-                      tooltip: 'Planificación',
-                    ),
                   _navIcon(
-                    filled: Icons.settings,
-                    outlined: Icons.settings_outlined,
-                    index: widget.settingsController.settings.hasCreditCard
-                        ? 5
-                        : 4,
-                    tooltip: 'Ajustes',
+                    filled: Icons.more_horiz,
+                    outlined: Icons.more_horiz,
+                    index: 3,
+                    tooltip: 'Mas',
                   ),
                 ],
               ),
@@ -3386,6 +3387,108 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
   }
 
+  Widget _construirPaginaMas(List<Map<String, dynamic>> todosLosDatos) {
+    switch (_masSection) {
+      case _MasSection.analisis:
+        return _construirPaginaAnalisis(todosLosDatos);
+      case _MasSection.metas:
+        return _construirPaginaMetas();
+      case _MasSection.credito:
+        if (!widget.settingsController.settings.hasCreditCard) {
+          return const Center(
+            child: Text('No tienes tarjeta de credito configurada'),
+          );
+        }
+        return _construirPaginaCredito(todosLosDatos);
+      case _MasSection.ajustes:
+        return _construirPaginaAjustes();
+      case _MasSection.menu:
+        break;
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasCreditCard = widget.settingsController.settings.hasCreditCard;
+
+    Widget tile({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return Card(
+        elevation: 0,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          ),
+        ),
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+      children: [
+        Text(
+          'Herramientas y secciones avanzadas',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        tile(
+          icon: Icons.analytics_outlined,
+          title: 'Analisis',
+          subtitle: 'KPIs, alertas y proyecciones',
+          onTap: () => setState(() => _masSection = _MasSection.analisis),
+        ),
+        tile(
+          icon: Icons.flag_outlined,
+          title: 'Metas',
+          subtitle: 'Gestiona y abona tus metas de ahorro',
+          onTap: () => setState(() => _masSection = _MasSection.metas),
+        ),
+        if (hasCreditCard)
+          tile(
+            icon: Icons.credit_card_outlined,
+            title: 'Credito',
+            subtitle: 'Facturado, por facturar y calendario',
+            onTap: () => setState(() => _masSection = _MasSection.credito),
+          ),
+        tile(
+          icon: Icons.account_tree_outlined,
+          title: 'Flujo de Caja',
+          subtitle: 'Vista anual de caja acumulada',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FlujoCajaScreen(
+                  settingsController: widget.settingsController,
+                ),
+              ),
+            );
+          },
+        ),
+        tile(
+          icon: Icons.settings_outlined,
+          title: 'Ajustes',
+          subtitle: 'Configuracion, seguridad y mantenimiento',
+          onTap: () => setState(() => _masSection = _MasSection.ajustes),
+        ),
+      ],
+    );
+  }
+
   Widget _construirPaginaAjustes() {
     return AnimatedBuilder(
       animation: widget.settingsController,
@@ -4054,13 +4157,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   onPressed: () async {
                     await supabase.auth.signOut();
                     if (context.mounted) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (_) => LoginScreen(
-                            settingsController: widget.settingsController,
-                          ),
-                        ),
-                      );
+                      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
                     }
                   },
                   icon: const Icon(Icons.logout),
@@ -6012,7 +6109,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
 
     try {
-      await supabase.from('gastos').delete().gte('id', 0);
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        _mostrarSnack('No hay sesion activa');
+        return;
+      }
+      await supabase.from('gastos').delete().eq('user_id', userId);
       _mostrarSnack('Todos los movimientos fueron eliminados');
     } catch (e) {
       _mostrarSnack('No se pudieron borrar movimientos: $e');
@@ -6042,12 +6144,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       // Intentar borrar todos los datos vinculados (si RLS lo permite, normalmente el user_id está en RLS)
       await supabase.from('gastos').delete().eq('user_id', userId);
-      try {
-        await supabase.from('recurrentes').delete().eq('user_id', userId);
-        await supabase.from('metas_ahorro').delete().eq('user_id', userId);
-      } catch (_) {
-        // ignora si estas tablas no existen
-      }
+      await supabase.from('gastos_programados').delete().eq('user_id', userId);
+      await supabase.from('metas_ahorro').delete().eq('user_id', userId);
 
       // Resetear configuraciones locales
       await widget.settingsController.resetSettings();
@@ -6062,12 +6160,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       await supabase.auth.signOut();
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                LoginScreen(settingsController: widget.settingsController),
-          ),
-        );
+        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
       }
     } catch (e) {
       _mostrarSnack('Error al eliminar cuenta: $e');

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'app/app_routes.dart';
 import 'app_settings.dart';
-import 'pantalla_principal.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final SettingsController settingsController;
@@ -187,14 +187,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       // Navegar a PantallaPrincipal
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PantallaPrincipal(
-              settingsController: widget.settingsController,
-            ),
-          ),
-        );
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
       }
     } catch (e) {
       if (mounted) {
