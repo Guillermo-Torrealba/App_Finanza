@@ -98,21 +98,16 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
           .lte('fecha', '$_anoSeleccionado-12-31');
 
       // Helper to check if a manual entry matches a recurring item rule
-      bool _isDuplicateOfFixedItem(
-        String tipo,
-        String? itemName,
-        String? catName,
-      ) {
+      bool _isDuplicateOfFixedItem(String tipo, String? itemName) {
         final fixedList = tipo == 'Ingreso' ? _ingresosFijos : _gastosFijos;
         // The user issue shows "mesada" vs "Mesada"
-        // Also it might match the `item` field of `gastos_programados` with the `categoria` or `item` of `gastos`
         final searchNameItem = (itemName ?? '').toLowerCase().trim();
-        final searchNameCat = (catName ?? '').toLowerCase().trim();
+
+        if (searchNameItem.isEmpty) return false;
 
         for (final fixedItem in fixedList) {
           final fixedName = (fixedItem['item'] as String).toLowerCase().trim();
-          if (fixedName.isNotEmpty &&
-              (fixedName == searchNameItem || fixedName == searchNameCat)) {
+          if (fixedName == searchNameItem) {
             return true;
           }
         }
@@ -120,17 +115,18 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       }
 
       for (final tx in gastosAnualesResp) {
-        if ((tx['metodo_pago'] ?? 'Debito') == 'Credito') continue;
         final cuenta = (tx['cuenta'] ?? '').toString();
         if (!settings.activeAccounts.contains(cuenta)) continue;
 
         try {
           final tipo = tx['tipo'] as String;
           final cat = tx['categoria']?.toString() ?? 'Varios';
+          if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+
           final itemName = tx['item']?.toString();
 
           // Skip if this looks like a manual entry for a recurring item
-          if (_isDuplicateOfFixedItem(tipo, itemName, cat)) {
+          if (_isDuplicateOfFixedItem(tipo, itemName)) {
             continue;
           }
 
@@ -161,15 +157,17 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       // Todo lo anterior al 1 de Enero del año seleccionado
       final historicoResp = await supabase
           .from('gastos')
-          .select('monto, tipo, metodo_pago, cuenta')
+          .select('monto, tipo, categoria, metodo_pago, cuenta')
           .eq('user_id', user.id)
           .lt('fecha', '$_anoSeleccionado-01-01');
 
       _saldoInicialAno = 0;
       for (final tx in historicoResp) {
-        if ((tx['metodo_pago'] ?? 'Debito') == 'Credito') continue;
         final cuenta = (tx['cuenta'] ?? '').toString();
         if (!settings.activeAccounts.contains(cuenta)) continue;
+
+        final cat = tx['categoria']?.toString() ?? 'Varios';
+        if (cat == 'Transferencia' || cat == 'Ajuste') continue;
 
         final monto = (tx['monto'] as num? ?? 0).toDouble();
         if (tx['tipo'] == 'Ingreso') {
@@ -251,12 +249,17 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = widget.settingsController.settings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Preparar listas de categorías a renderizar (evitar renders vacíos si se desea, pero listemos todas por ahora)
-    final incomesCats = settings.activeIncomeCategories;
-    final expensesCats = settings.activeCategories;
+    // Preparar listas de categorías a renderizar dinámicamente según la tabla
+    final Set<String> allIncomes = {};
+    final Set<String> allExpenses = {};
+    for (int m = 1; m <= 12; m++) {
+      allIncomes.addAll(_ingresosVariables[m]?.keys ?? []);
+      allExpenses.addAll(_gastosVariables[m]?.keys ?? []);
+    }
+    final incomesCats = allIncomes.toList()..sort();
+    final expensesCats = allExpenses.toList()..sort();
 
     return Scaffold(
       appBar: AppBar(
