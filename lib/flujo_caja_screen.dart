@@ -17,7 +17,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
   bool _cargando = true;
   int _anoSeleccionado = DateTime.now().year;
   bool _ingresosExpandidos = false;
-  bool _gastosExpandidos = false;
+  bool _gastosFijosExpandidos = false;
+  bool _gastosVariablesExpandidos = false;
 
   // Estructura de datos: Mes (1 al 12) -> Categoría -> Monto Total
   final Map<int, Map<String, double>> _ingresosVariables = {};
@@ -32,6 +33,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
   final ScrollController _verticalScroll = ScrollController();
   final ScrollController _horizontalScroll = ScrollController();
+  final ScrollController _headerHorizontalScroll = ScrollController();
 
   static const double _columnWidth = 100.0;
   static const double _firstColumnWidth = 140.0;
@@ -41,12 +43,18 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
   void initState() {
     super.initState();
     _cargarDatos();
+    _horizontalScroll.addListener(() {
+      if (_headerHorizontalScroll.hasClients) {
+        _headerHorizontalScroll.jumpTo(_horizontalScroll.offset);
+      }
+    });
   }
 
   @override
   void dispose() {
     _verticalScroll.dispose();
     _horizontalScroll.dispose();
+    _headerHorizontalScroll.dispose();
     super.dispose();
   }
 
@@ -435,32 +443,29 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       }
     }
 
-    // 3. GASTOS
-    List<double> tGas = [];
+    // 3. GASTOS FIJOS
+    List<double> tGasFijos = [];
     for (int m = 1; m <= 12; m++) {
       double s = 0;
       for (final f in _gastosFijos) {
-        s += f['monto'];
+        s += (f['monto'] as num).toDouble();
       }
-      for (final cat in expensesCats) {
-        s += _gastosVariables[m]?[cat] ?? 0.0;
-      }
-      tGas.add(s);
+      tGasFijos.add(s);
     }
 
     addRow(
-      'GASTOS',
-      tGas,
+      'GASTOS FIJOS',
+      tGasFijos,
       isSection: true,
       textColor: Colors.redAccent,
-      icon: _gastosExpandidos
+      icon: _gastosFijosExpandidos
           ? Icons.keyboard_arrow_up
           : Icons.keyboard_arrow_down,
-      onTap: () => setState(() => _gastosExpandidos = !_gastosExpandidos),
+      onTap: () =>
+          setState(() => _gastosFijosExpandidos = !_gastosFijosExpandidos),
     );
 
-    if (_gastosExpandidos) {
-      // Fijos
+    if (_gastosFijosExpandidos) {
       for (final fijo in _gastosFijos) {
         List<double> vals = [];
         for (int m = 1; m <= 12; m++) {
@@ -468,7 +473,32 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         }
         addRow('  ${fijo['item']}', vals);
       }
-      // Variables
+    }
+
+    // 4. GASTOS VARIABLES
+    List<double> tGasVariables = [];
+    for (int m = 1; m <= 12; m++) {
+      double s = 0;
+      for (final cat in expensesCats) {
+        s += _gastosVariables[m]?[cat] ?? 0.0;
+      }
+      tGasVariables.add(s);
+    }
+
+    addRow(
+      'GASTOS VARIABLES',
+      tGasVariables,
+      isSection: true,
+      textColor: Colors.redAccent,
+      icon: _gastosVariablesExpandidos
+          ? Icons.keyboard_arrow_up
+          : Icons.keyboard_arrow_down,
+      onTap: () => setState(
+        () => _gastosVariablesExpandidos = !_gastosVariablesExpandidos,
+      ),
+    );
+
+    if (_gastosVariablesExpandidos) {
       for (final cat in expensesCats) {
         List<double> vals = [];
         for (int m = 1; m <= 12; m++) {
@@ -480,7 +510,19 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       }
     }
 
-    // 4. RESULTADOS
+    // TOTAL GASTOS
+    List<double> tGasTotal = [];
+    for (int m = 1; m <= 12; m++) {
+      tGasTotal.add(tGasFijos[m - 1] + tGasVariables[m - 1]);
+    }
+    addRow(
+      'TOTAL GASTOS F+V',
+      tGasTotal,
+      isSubtotal: true,
+      textColor: Colors.red,
+    );
+
+    // 5. RESULTADOS
     addRow('RESULTADOS', [], isSection: true, textColor: Colors.blue);
     List<double> flujos = [];
     List<double> cajas = [];
@@ -511,11 +553,9 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
             ), // Top-left blank
             Expanded(
               child: SingleChildScrollView(
-                controller:
-                    ScrollController(), // Idealmente sincronizado, pero como no podemos instalar packages facil, vamos a dejar que el scroll horizontal mueva toda la tabla inferior junta
+                controller: _headerHorizontalScroll,
                 scrollDirection: Axis.horizontal,
-                physics:
-                    const NeverScrollableScrollPhysics(), // Este será movido por el body
+                physics: const NeverScrollableScrollPhysics(),
                 child: Row(children: headerMonths),
               ),
             ),
