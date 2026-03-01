@@ -16,6 +16,8 @@ class FlujoCajaScreen extends StatefulWidget {
 class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
   bool _cargando = true;
   int _anoSeleccionado = DateTime.now().year;
+  bool _ingresosExpandidos = false;
+  bool _gastosExpandidos = false;
 
   // Estructura de datos: Mes (1 al 12) -> Categoría -> Monto Total
   final Map<int, Map<String, double>> _ingresosVariables = {};
@@ -340,6 +342,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       bool isSection = false,
       bool isSubtotal = false,
       Color? textColor,
+      IconData? icon,
+      VoidCallback? onTap,
     }) {
       firstColumnCells.add(
         _buildCell(
@@ -350,6 +354,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
           alignLeft: true,
           textColor: textColor,
           isFirstCol: true,
+          icon: icon,
+          onTap: onTap,
         ),
       );
 
@@ -358,10 +364,10 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         final val = monthValues.isEmpty ? 0.0 : monthValues[m - 1];
         rowData.add(
           _buildCell(
-            isSection ? '' : _formatDinero(val),
+            monthValues.isEmpty ? '' : _formatDinero(val),
             isHeader: isSection,
             isDark: isDark,
-            bold: isSubtotal,
+            bold: isSubtotal || isSection,
             textColor: val < 0 ? Colors.red : textColor,
           ),
         );
@@ -384,27 +390,6 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     }
 
     // 2. INGRESOS
-    addRow('INGRESOS', [], isSection: true, textColor: Colors.green);
-    // Fijos
-    for (final fijo in _ingresosFijos) {
-      List<double> vals = [];
-      for (int m = 1; m <= 12; m++) {
-        vals.add((fijo['monto'] as num).toDouble());
-      }
-      addRow('  ${fijo['item']}', vals);
-    }
-    // Variables
-    for (final cat in incomesCats) {
-      List<double> vals = [];
-      for (int m = 1; m <= 12; m++) {
-        vals.add(_ingresosVariables[m]![cat]!);
-      }
-      if (vals.any((v) => v > 0)) {
-        // Mostrar solo si hay data en algun mes para ahorrar espacio
-        addRow('  $cat', vals);
-      }
-    }
-    // Total Ingresos
     List<double> tIng = [];
     for (int m = 1; m <= 12; m++) {
       double s = 0;
@@ -412,33 +397,45 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         s += f['monto'];
       }
       for (final cat in incomesCats) {
-        s += _ingresosVariables[m]![cat]!;
+        s += _ingresosVariables[m]?[cat] ?? 0.0;
       }
       tIng.add(s);
     }
-    addRow('Total Ingresos', tIng, isSubtotal: true, textColor: Colors.green);
+
+    addRow(
+      'INGRESOS',
+      tIng,
+      isSection: true,
+      textColor: Colors.green,
+      icon: _ingresosExpandidos
+          ? Icons.keyboard_arrow_up
+          : Icons.keyboard_arrow_down,
+      onTap: () => setState(() => _ingresosExpandidos = !_ingresosExpandidos),
+    );
+
+    if (_ingresosExpandidos) {
+      // Fijos
+      for (final fijo in _ingresosFijos) {
+        List<double> vals = [];
+        for (int m = 1; m <= 12; m++) {
+          vals.add((fijo['monto'] as num).toDouble());
+        }
+        addRow('  ${fijo['item']}', vals);
+      }
+      // Variables
+      for (final cat in incomesCats) {
+        List<double> vals = [];
+        for (int m = 1; m <= 12; m++) {
+          vals.add(_ingresosVariables[m]?[cat] ?? 0.0);
+        }
+        if (vals.any((v) => v > 0)) {
+          // Mostrar solo si hay data en algun mes para ahorrar espacio
+          addRow('  $cat', vals);
+        }
+      }
+    }
 
     // 3. GASTOS
-    addRow('GASTOS', [], isSection: true, textColor: Colors.redAccent);
-    // Fijos
-    for (final fijo in _gastosFijos) {
-      List<double> vals = [];
-      for (int m = 1; m <= 12; m++) {
-        vals.add((fijo['monto'] as num).toDouble());
-      }
-      addRow('  ${fijo['item']}', vals);
-    }
-    // Variables
-    for (final cat in expensesCats) {
-      List<double> vals = [];
-      for (int m = 1; m <= 12; m++) {
-        vals.add(_gastosVariables[m]![cat]!);
-      }
-      if (vals.any((v) => v > 0)) {
-        addRow('  $cat', vals);
-      }
-    }
-    // Total Gastos
     List<double> tGas = [];
     for (int m = 1; m <= 12; m++) {
       double s = 0;
@@ -446,11 +443,42 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         s += f['monto'];
       }
       for (final cat in expensesCats) {
-        s += _gastosVariables[m]![cat]!;
+        s += _gastosVariables[m]?[cat] ?? 0.0;
       }
       tGas.add(s);
     }
-    addRow('Total Gastos', tGas, isSubtotal: true, textColor: Colors.redAccent);
+
+    addRow(
+      'GASTOS',
+      tGas,
+      isSection: true,
+      textColor: Colors.redAccent,
+      icon: _gastosExpandidos
+          ? Icons.keyboard_arrow_up
+          : Icons.keyboard_arrow_down,
+      onTap: () => setState(() => _gastosExpandidos = !_gastosExpandidos),
+    );
+
+    if (_gastosExpandidos) {
+      // Fijos
+      for (final fijo in _gastosFijos) {
+        List<double> vals = [];
+        for (int m = 1; m <= 12; m++) {
+          vals.add((fijo['monto'] as num).toDouble());
+        }
+        addRow('  ${fijo['item']}', vals);
+      }
+      // Variables
+      for (final cat in expensesCats) {
+        List<double> vals = [];
+        for (int m = 1; m <= 12; m++) {
+          vals.add(_gastosVariables[m]?[cat] ?? 0.0);
+        }
+        if (vals.any((v) => v > 0)) {
+          addRow('  $cat', vals);
+        }
+      }
+    }
 
     // 4. RESULTADOS
     addRow('RESULTADOS', [], isSection: true, textColor: Colors.blue);
@@ -533,6 +561,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     bool isFirstCol = false,
     double height = _rowHeight,
     bool isStickyTop = false,
+    IconData? icon,
+    VoidCallback? onTap,
   }) {
     Color bgColor = isDark
         ? (isHeader ? const Color(0xFF1E1E1E) : Colors.transparent)
@@ -543,7 +573,27 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
     }
 
-    return Container(
+    Widget content = Text(
+      text,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: isHeader ? 12 : 13,
+        fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+        color: textColor,
+      ),
+    );
+
+    if (icon != null) {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(child: content),
+          Icon(icon, size: 16, color: textColor),
+        ],
+      );
+    }
+
+    Widget cell = Container(
       width: isFirstCol ? _firstColumnWidth : _columnWidth,
       height: height,
       alignment: alignLeft ? Alignment.centerLeft : Alignment.centerRight,
@@ -561,15 +611,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
           ),
         ),
       ),
-      child: Text(
-        text,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: isHeader ? 12 : 13,
-          fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-          color: textColor,
-        ),
-      ),
+      child: content,
     );
+
+    if (onTap != null) {
+      return InkWell(onTap: onTap, child: cell);
+    }
+    return cell;
   }
 }
