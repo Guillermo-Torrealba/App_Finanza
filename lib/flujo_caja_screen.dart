@@ -24,6 +24,9 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
   final Map<int, Map<String, double>> _ingresosVariables = {};
   final Map<int, Map<String, double>> _gastosVariables = {};
 
+  final Map<int, Map<String, double>> _ingresosFijosMontoReal = {};
+  final Map<int, Map<String, double>> _gastosFijosMontoReal = {};
+
   final List<Map<String, dynamic>> _ingresosFijos = [];
   final List<Map<String, dynamic>> _gastosFijos = [];
 
@@ -70,6 +73,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     for (int i = 1; i <= 12; i++) {
       _ingresosVariables[i] = {};
       _gastosVariables[i] = {};
+      _ingresosFijosMontoReal[i] = {};
+      _gastosFijosMontoReal[i] = {};
       _flujoMensual[i] = 0;
       _cajaAcumulada[i] = 0;
 
@@ -135,14 +140,34 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
           final itemName = tx['item']?.toString();
 
-          // Skip if this looks like a manual entry for a recurring item
-          if (_isDuplicateOfFixedItem(tipo, itemName)) {
-            continue;
-          }
+          final esFijo = _isDuplicateOfFixedItem(tipo, itemName);
 
           final fecha = DateTime.parse(tx['fecha']);
           final mes = fecha.month;
           final monto = (tx['monto'] as num? ?? 0).toDouble();
+
+          // If it matches a fixed item, we save the REAL manual amount
+          if (esFijo) {
+            String cleanName = itemName!.toLowerCase().trim();
+            final fixedList = tipo == 'Ingreso' ? _ingresosFijos : _gastosFijos;
+            String fixedKey = cleanName;
+            for (final fixedItem in fixedList) {
+              if ((fixedItem['item'] as String).toLowerCase().trim() ==
+                  cleanName) {
+                fixedKey = fixedItem['item'] as String;
+                break;
+              }
+            }
+
+            if (tipo == 'Ingreso') {
+              _ingresosFijosMontoReal[mes]![fixedKey] =
+                  (_ingresosFijosMontoReal[mes]![fixedKey] ?? 0.0) + monto;
+            } else {
+              _gastosFijosMontoReal[mes]![fixedKey] =
+                  (_gastosFijosMontoReal[mes]![fixedKey] ?? 0.0) + monto;
+            }
+            continue; // Already processed as Fixed
+          }
 
           if (tipo == 'Ingreso') {
             if (_ingresosVariables[mes]!.containsKey(cat)) {
@@ -206,8 +231,13 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
       // Sumar Ingresos Fijos
       for (final fijo in _ingresosFijos) {
-        // Asume mensual para simplificar. Si es anual, habría que evaluar el mes de inicio.
-        totalIngresos += (fijo['monto'] as num).toDouble();
+        String fName = fijo['item'];
+        bool hasReal =
+            _ingresosFijosMontoReal[mes]?.containsKey(fName) ?? false;
+        double val = hasReal
+            ? _ingresosFijosMontoReal[mes]![fName]!
+            : (fijo['monto'] as num).toDouble();
+        totalIngresos += val;
       }
 
       // Sumar Ingresos Variables
@@ -217,7 +247,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
       // Sumar Gastos Fijos
       for (final fijo in _gastosFijos) {
-        totalGastos += (fijo['monto'] as num).toDouble();
+        String fName = fijo['item'];
+        bool hasReal = _gastosFijosMontoReal[mes]?.containsKey(fName) ?? false;
+        double val = hasReal
+            ? _gastosFijosMontoReal[mes]![fName]!
+            : (fijo['monto'] as num).toDouble();
+        totalGastos += val;
       }
 
       // Sumar Gastos Variables
@@ -402,7 +437,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     for (int m = 1; m <= 12; m++) {
       double s = 0;
       for (final f in _ingresosFijos) {
-        s += f['monto'];
+        String fName = f['item'];
+        bool hasReal = _ingresosFijosMontoReal[m]?.containsKey(fName) ?? false;
+        double val = hasReal
+            ? _ingresosFijosMontoReal[m]![fName]!
+            : (f['monto'] as num).toDouble();
+        s += val;
       }
       for (final cat in incomesCats) {
         s += _ingresosVariables[m]?[cat] ?? 0.0;
@@ -426,7 +466,13 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       for (final fijo in _ingresosFijos) {
         List<double> vals = [];
         for (int m = 1; m <= 12; m++) {
-          vals.add((fijo['monto'] as num).toDouble());
+          String fName = fijo['item'];
+          bool hasReal =
+              _ingresosFijosMontoReal[m]?.containsKey(fName) ?? false;
+          double val = hasReal
+              ? _ingresosFijosMontoReal[m]![fName]!
+              : (fijo['monto'] as num).toDouble();
+          vals.add(val);
         }
         addRow('  ${fijo['item']}', vals);
       }
@@ -448,7 +494,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     for (int m = 1; m <= 12; m++) {
       double s = 0;
       for (final f in _gastosFijos) {
-        s += (f['monto'] as num).toDouble();
+        String fName = f['item'];
+        bool hasReal = _gastosFijosMontoReal[m]?.containsKey(fName) ?? false;
+        double val = hasReal
+            ? _gastosFijosMontoReal[m]![fName]!
+            : (f['monto'] as num).toDouble();
+        s += val;
       }
       tGasFijos.add(s);
     }
@@ -469,7 +520,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       for (final fijo in _gastosFijos) {
         List<double> vals = [];
         for (int m = 1; m <= 12; m++) {
-          vals.add((fijo['monto'] as num).toDouble());
+          String fName = fijo['item'];
+          bool hasReal = _gastosFijosMontoReal[m]?.containsKey(fName) ?? false;
+          double val = hasReal
+              ? _gastosFijosMontoReal[m]![fName]!
+              : (fijo['monto'] as num).toDouble();
+          vals.add(val);
         }
         addRow('  ${fijo['item']}', vals);
       }
