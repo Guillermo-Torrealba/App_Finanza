@@ -92,10 +92,32 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       // 2. Cargar Transacciones Reales (Variables) para el año actual
       final gastosAnualesResp = await supabase
           .from('gastos')
-          .select('monto, tipo, categoria, fecha, metodo_pago, cuenta')
+          .select('item, monto, tipo, categoria, fecha, metodo_pago, cuenta')
           .eq('user_id', user.id)
           .gte('fecha', '$_anoSeleccionado-01-01')
           .lte('fecha', '$_anoSeleccionado-12-31');
+
+      // Helper to check if a manual entry matches a recurring item rule
+      bool _isDuplicateOfFixedItem(
+        String tipo,
+        String? itemName,
+        String? catName,
+      ) {
+        final fixedList = tipo == 'Ingreso' ? _ingresosFijos : _gastosFijos;
+        // The user issue shows "mesada" vs "Mesada"
+        // Also it might match the `item` field of `gastos_programados` with the `categoria` or `item` of `gastos`
+        final searchNameItem = (itemName ?? '').toLowerCase().trim();
+        final searchNameCat = (catName ?? '').toLowerCase().trim();
+
+        for (final fixedItem in fixedList) {
+          final fixedName = (fixedItem['item'] as String).toLowerCase().trim();
+          if (fixedName.isNotEmpty &&
+              (fixedName == searchNameItem || fixedName == searchNameCat)) {
+            return true;
+          }
+        }
+        return false;
+      }
 
       for (final tx in gastosAnualesResp) {
         if ((tx['metodo_pago'] ?? 'Debito') == 'Credito') continue;
@@ -103,12 +125,20 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         if (!settings.activeAccounts.contains(cuenta)) continue;
 
         try {
+          final tipo = tx['tipo'] as String;
+          final cat = tx['categoria']?.toString() ?? 'Varios';
+          final itemName = tx['item']?.toString();
+
+          // Skip if this looks like a manual entry for a recurring item
+          if (_isDuplicateOfFixedItem(tipo, itemName, cat)) {
+            continue;
+          }
+
           final fecha = DateTime.parse(tx['fecha']);
           final mes = fecha.month;
-          final cat = tx['categoria']?.toString() ?? 'Varios';
           final monto = (tx['monto'] as num? ?? 0).toDouble();
 
-          if (tx['tipo'] == 'Ingreso') {
+          if (tipo == 'Ingreso') {
             if (_ingresosVariables[mes]!.containsKey(cat)) {
               _ingresosVariables[mes]![cat] =
                   _ingresosVariables[mes]![cat]! + monto;
