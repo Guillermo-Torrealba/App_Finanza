@@ -14,6 +14,7 @@ import 'finance_alert.dart';
 import 'flujo_caja_screen.dart';
 import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
+import 'gastos_compartidos_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -81,6 +82,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'Metas',
         'Presupuestos',
         'Planificación',
+        'Compartidos',
         'Ajustes',
       ];
     } else {
@@ -89,6 +91,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'Analisis',
         'Metas',
         'Presupuestos',
+        'Compartidos',
         'Ajustes',
       ];
     }
@@ -1122,18 +1125,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               child: () {
                 final hasCreditCard =
                     widget.settingsController.settings.hasCreditCard;
-                if (_indicePestana == 0)
+                if (_indicePestana == 0) {
                   return _construirPaginaInicio(todosLosDatos);
-                if (_indicePestana == 1)
+                }
+                if (_indicePestana == 1) {
                   return _construirPaginaAnalisis(todosLosDatos);
+                }
                 if (_indicePestana == 2) return _construirPaginaMetas();
-                if (_indicePestana == 3)
+                if (_indicePestana == 3) {
                   return _construirPaginaPresupuestos(todosLosDatos);
+                }
                 if (hasCreditCard) {
-                  if (_indicePestana == 4)
+                  if (_indicePestana == 4) {
                     return _construirPaginaCredito(todosLosDatos);
+                  }
+                  if (_indicePestana == 5) {
+                    return GastosCompartidosScreen(movimientos: todosLosDatos);
+                  }
                   return _construirPaginaAjustes();
                 } else {
+                  if (_indicePestana == 4) {
+                    return GastosCompartidosScreen(movimientos: todosLosDatos);
+                  }
                   return _construirPaginaAjustes();
                 }
               }(),
@@ -1206,11 +1219,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       tooltip: 'Planificación',
                     ),
                   _navIcon(
-                    filled: Icons.settings,
-                    outlined: Icons.settings_outlined,
+                    filled: Icons.people,
+                    outlined: Icons.people_outline,
                     index: widget.settingsController.settings.hasCreditCard
                         ? 5
                         : 4,
+                    tooltip: 'Compartidos',
+                  ),
+                  _navIcon(
+                    filled: Icons.settings,
+                    outlined: Icons.settings_outlined,
+                    index: widget.settingsController.settings.hasCreditCard
+                        ? 6
+                        : 5,
                     tooltip: 'Ajustes',
                   ),
                 ],
@@ -2691,7 +2712,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
           const SizedBox(height: 16),
-          if (tarjetaSupervivencia != null) tarjetaSupervivencia,
+          ?tarjetaSupervivencia,
           Text(
             'Rendimiento del Mes',
             style: TextStyle(
@@ -6723,6 +6744,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     String? cuentaDestinoSeleccionada;
     String? categoriaSeleccionada;
     bool esCredito = false;
+    bool esCompartido = false;
+    final amigosCompartidos = <Map<String, dynamic>>[];
+    final nombreControllers = <TextEditingController>[];
+    final montoControllers = <TextEditingController>[];
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
@@ -6823,9 +6848,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     'metodo_pago': 'Debito',
                   });
 
-                  if (mounted) Navigator.pop(context);
+                  if (context.mounted) Navigator.pop(context);
                 } catch (e) {
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Error al transferir: $e')),
                     );
@@ -6854,21 +6879,43 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else {
-                  await supabase.from('gastos').insert({
-                    'user_id': supabase.auth.currentUser!.id,
-                    'fecha': fechaSeleccionada.toIso8601String(),
-                    'item': item.isEmpty ? 'Sin nombre' : item,
-                    'detalle': detalle,
-                    'monto': monto,
-                    'categoria': categoria,
-                    'cuenta': cuentaSeleccionada,
-                    'tipo': tipo,
-                    'metodo_pago': metodo,
-                  });
+                  final result = await supabase
+                      .from('gastos')
+                      .insert({
+                        'user_id': supabase.auth.currentUser!.id,
+                        'fecha': fechaSeleccionada.toIso8601String(),
+                        'item': item.isEmpty ? 'Sin nombre' : item,
+                        'detalle': detalle,
+                        'monto': monto,
+                        'categoria': categoria,
+                        'cuenta': cuentaSeleccionada,
+                        'tipo': tipo,
+                        'metodo_pago': metodo,
+                      })
+                      .select()
+                      .single();
+
+                  if (esGasto && esCompartido && amigosCompartidos.isNotEmpty) {
+                    final gastoId = result['id'];
+                    for (int i = 0; i < amigosCompartidos.length; i++) {
+                      final n = nombreControllers[i].text.trim();
+                      final m =
+                          int.tryParse(montoControllers[i].text.trim()) ?? 0;
+                      if (n.isNotEmpty && m > 0) {
+                        await supabase.from('gastos_compartidos').insert({
+                          'user_id': supabase.auth.currentUser!.id,
+                          'gasto_id': gastoId,
+                          'persona': n,
+                          'monto': m,
+                          'pagado': false,
+                        });
+                      }
+                    }
+                  }
                 }
-                if (mounted) Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               } catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -7194,6 +7241,171 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
+                      ],
+                      if (esGasto) ...[
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          title: const Text('Compartir gasto con amigos'),
+                          value: esCompartido,
+                          onChanged: (val) {
+                            setStateSB(() {
+                              esCompartido = val;
+                              if (val && amigosCompartidos.isEmpty) {
+                                amigosCompartidos.add({
+                                  'nombre': '',
+                                  'monto': '',
+                                });
+                                nombreControllers.add(TextEditingController());
+                                montoControllers.add(TextEditingController());
+                              }
+                            });
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          activeThumbColor: colorTipo.shade400,
+                        ),
+                        if (esCompartido) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Amigos',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        final montoTotal =
+                                            int.tryParse(
+                                              _montoController.text.trim(),
+                                            ) ??
+                                            0;
+                                        if (montoTotal > 0 &&
+                                            amigosCompartidos.isNotEmpty) {
+                                          final partes =
+                                              amigosCompartidos.length +
+                                              1; // yo + amigos
+                                          final porPersona =
+                                              (montoTotal / partes).round();
+                                          setStateSB(() {
+                                            for (
+                                              int i = 0;
+                                              i < amigosCompartidos.length;
+                                              i++
+                                            ) {
+                                              amigosCompartidos[i]['monto'] =
+                                                  porPersona.toString();
+                                              montoControllers[i].text =
+                                                  porPersona.toString();
+                                            }
+                                          });
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.pie_chart,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Partes iguales'),
+                                    ),
+                                  ],
+                                ),
+                                ...amigosCompartidos.asMap().entries.map((
+                                  entry,
+                                ) {
+                                  final idx = entry.key;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextField(
+                                            controller: nombreControllers[idx],
+                                            decoration: const InputDecoration(
+                                              hintText: 'Nombre',
+                                              isDense: true,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          flex: 1,
+                                          child: TextField(
+                                            controller: montoControllers[idx],
+                                            decoration: const InputDecoration(
+                                              hintText: 'Monto',
+                                              prefixText: '\$ ',
+                                              isDense: true,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove_circle,
+                                            color: Colors.red,
+                                          ),
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.only(
+                                            left: 8,
+                                          ),
+                                          onPressed: () {
+                                            setStateSB(() {
+                                              amigosCompartidos.removeAt(idx);
+                                              nombreControllers[idx].dispose();
+                                              nombreControllers.removeAt(idx);
+                                              montoControllers[idx].dispose();
+                                              montoControllers.removeAt(idx);
+                                              if (amigosCompartidos.isEmpty) {
+                                                esCompartido = false;
+                                              }
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    setStateSB(() {
+                                      amigosCompartidos.add({
+                                        'nombre': '',
+                                        'monto': '',
+                                      });
+                                      nombreControllers.add(
+                                        TextEditingController(),
+                                      );
+                                      montoControllers.add(
+                                        TextEditingController(),
+                                      );
+                                    });
+                                  },
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Agregar amigo'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                       const SizedBox(height: 20),
 
