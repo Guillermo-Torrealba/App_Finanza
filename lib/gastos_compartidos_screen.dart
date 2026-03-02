@@ -92,7 +92,8 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
         'detalle':
             'Reembolso asociado al gasto: ${gastoOrignal?['item'] ?? 'Gasto'}',
         'monto': deuda['monto'],
-        'categoria': 'Otros Ingresos', // Asumiendo que esta es una cat válida
+        'categoria':
+            'Cuentas por Cobrar', // Compensa el préstamo ficticio de la Opción C
         'cuenta': cuenta,
         'tipo': 'Ingreso',
         'metodo_pago':

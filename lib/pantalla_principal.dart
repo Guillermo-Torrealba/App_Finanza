@@ -46,6 +46,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       .stream(primaryKey: ['id'])
       .order('created_at', ascending: false);
 
+  final _porCobrarStream = supabase
+      .from('gastos_compartidos')
+      .stream(primaryKey: ['id'])
+      .eq('pagado', false);
+
   final _itemController = TextEditingController();
   final _detalleController = TextEditingController();
   final _montoController = TextEditingController();
@@ -708,7 +713,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     for (final mov in movimientosDelMes) {
       if (mov['tipo'] != 'Gasto' ||
           mov['categoria'] == 'Transferencia' ||
-          mov['categoria'] == 'Ajuste') {
+          mov['categoria'] == 'Ajuste' ||
+          mov['categoria'] == 'Cuentas por Cobrar') {
         continue;
       }
       final cat = (mov['categoria'] ?? 'Varios').toString();
@@ -734,7 +740,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var ingresos = 0;
     var gastos = 0;
     for (final mov in movimientos) {
-      if (mov['categoria'] == 'Transferencia' || mov['categoria'] == 'Ajuste') {
+      if (mov['categoria'] == 'Transferencia' ||
+          mov['categoria'] == 'Ajuste' ||
+          mov['categoria'] == 'Cuentas por Cobrar') {
         continue;
       }
       final fechaMov = DateTime.parse(mov['fecha']);
@@ -832,7 +840,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var total = 0;
     for (final mov in movimientos) {
       final cat = (mov['categoria'] ?? '').toString();
-      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+      if (cat == 'Transferencia' ||
+          cat == 'Ajuste' ||
+          cat == 'Cuentas por Cobrar') {
+        continue;
+      }
       final fecha = DateTime.parse(mov['fecha']);
       if (fecha.isBefore(inicio) || fecha.isAfter(finInclusive)) {
         continue;
@@ -861,7 +873,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var gastosCiclo = 0;
     for (final mov in cicloMov) {
       final cat = (mov['categoria'] ?? '').toString();
-      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+      if (cat == 'Transferencia' ||
+          cat == 'Ajuste' ||
+          cat == 'Cuentas por Cobrar') {
+        continue;
+      }
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         ingresosCiclo += monto;
@@ -1336,7 +1352,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     var gastoMes = 0;
     for (final mov in datosDelMes) {
       final cat = (mov['categoria'] ?? '').toString();
-      if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+      if (cat == 'Transferencia' ||
+          cat == 'Ajuste' ||
+          cat == 'Cuentas por Cobrar') {
+        continue;
+      }
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
         ingresoMes += monto;
@@ -2714,7 +2734,67 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
           const SizedBox(height: 16),
-          ?tarjetaSupervivencia,
+          // Widget Por Cobrar
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _porCobrarStream,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              final data = snapshot.data!;
+              final total = data.fold<int>(
+                0,
+                (sum, item) => sum + (item['monto'] as num).toInt(),
+              );
+              if (total == 0) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.orange.shade900.withAlpha(50)
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.people_outline, color: Colors.orange.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Por Cobrar (Amigos)',
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.orange.shade200
+                                  : Colors.orange.shade900,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Te deben un total de ${_textoMonto(total)}',
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.orange.shade100
+                                  : Colors.orange.shade800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          if (tarjetaSupervivencia != null) tarjetaSupervivencia,
           Text(
             'Rendimiento del Mes',
             style: TextStyle(
@@ -6881,6 +6961,30 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else {
+                  int montoReal = monto;
+                  int montoAmigos = 0;
+                  List<Map<String, dynamic>> amigosData = [];
+
+                  if (esGasto && esCompartido && amigosCompartidos.isNotEmpty) {
+                    for (int i = 0; i < amigosCompartidos.length; i++) {
+                      final n = nombreControllers[i].text.trim();
+                      final m =
+                          int.tryParse(montoControllers[i].text.trim()) ?? 0;
+                      if (n.isNotEmpty && m > 0) {
+                        montoAmigos += m;
+                        amigosData.add({
+                          'persona': n,
+                          'monto': m,
+                          'pagado': false,
+                        });
+                      }
+                    }
+                    if (montoAmigos > 0) {
+                      montoReal = monto - montoAmigos;
+                      if (montoReal < 0) montoReal = 0;
+                    }
+                  }
+
                   final result = await supabase
                       .from('gastos')
                       .insert({
@@ -6888,7 +6992,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         'fecha': fechaSeleccionada.toIso8601String(),
                         'item': item.isEmpty ? 'Sin nombre' : item,
                         'detalle': detalle,
-                        'monto': monto,
+                        // Guardamos SOLO el gasto real del usuario (Opción C)
+                        'monto': montoReal,
                         'categoria': categoria,
                         'cuenta': cuentaSeleccionada,
                         'tipo': tipo,
@@ -6897,22 +7002,31 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       .select()
                       .single();
 
-                  if (esGasto && esCompartido && amigosCompartidos.isNotEmpty) {
+                  if (montoAmigos > 0 && amigosData.isNotEmpty) {
                     final gastoId = result['id'];
-                    for (int i = 0; i < amigosCompartidos.length; i++) {
-                      final n = nombreControllers[i].text.trim();
-                      final m =
-                          int.tryParse(montoControllers[i].text.trim()) ?? 0;
-                      if (n.isNotEmpty && m > 0) {
-                        await supabase.from('gastos_compartidos').insert({
-                          'user_id': supabase.auth.currentUser!.id,
-                          'gasto_id': gastoId,
-                          'persona': n,
-                          'monto': m,
-                          'pagado': false,
-                        });
-                      }
+
+                    // 1. Insertar transacción "espejo/préstamo" en gastos para balancear la cuenta bancaria
+                    await supabase.from('gastos').insert({
+                      'user_id': supabase.auth.currentUser!.id,
+                      'fecha': fechaSeleccionada.toIso8601String(),
+                      'item':
+                          'Por Cobrar: ${item.isEmpty ? 'Gasto Compartido' : item}',
+                      'detalle': 'Deuda de amigos',
+                      'monto': montoAmigos,
+                      'categoria': 'Cuentas por Cobrar',
+                      'cuenta': cuentaSeleccionada,
+                      'tipo': 'Gasto',
+                      'metodo_pago': metodo,
+                    });
+
+                    // 2. Insertar los detalles de los amigos en gastos_compartidos
+                    for (final a in amigosData) {
+                      a['user_id'] = supabase.auth.currentUser!.id;
+                      a['gasto_id'] = gastoId;
                     }
+                    await supabase
+                        .from('gastos_compartidos')
+                        .insert(amigosData);
                   }
                 }
                 if (context.mounted) Navigator.pop(context);
