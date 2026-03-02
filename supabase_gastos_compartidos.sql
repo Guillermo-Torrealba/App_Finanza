@@ -4,7 +4,7 @@
 CREATE TABLE public.gastos_compartidos (
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id      uuid REFERENCES auth.users(id) NOT NULL DEFAULT auth.uid(),
-  gasto_id     bigint NOT NULL, -- ID del gasto padre en la tabla "gastos"
+  gasto_id     bigint REFERENCES public.gastos(id) ON DELETE CASCADE NOT NULL,
   persona      text NOT NULL,
   monto        bigint NOT NULL,
   pagado       boolean NOT NULL DEFAULT false,

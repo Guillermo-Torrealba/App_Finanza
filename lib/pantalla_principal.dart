@@ -455,26 +455,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required String tooltip,
   }) {
     final isSelected = _indicePestana == index;
-    return IconButton(
-      icon: AnimatedScale(
-        scale: isSelected ? 1.15 : 1.0,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutBack,
-        child: AnimatedSwitcher(
+    return Expanded(
+      child: IconButton(
+        icon: AnimatedScale(
+          scale: isSelected ? 1.15 : 1.0,
           duration: const Duration(milliseconds: 250),
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: Icon(
-            isSelected ? filled : outlined,
-            key: ValueKey<bool>(isSelected),
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Colors.grey,
+          curve: Curves.easeOutBack,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: Icon(
+              isSelected ? filled : outlined,
+              key: ValueKey<bool>(isSelected),
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey,
+            ),
           ),
         ),
+        onPressed: () => setState(() => _indicePestana = index),
+        tooltip: tooltip,
       ),
-      onPressed: () => setState(() => _indicePestana = index),
-      tooltip: tooltip,
     );
   }
 
