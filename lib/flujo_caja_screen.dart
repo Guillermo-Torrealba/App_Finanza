@@ -136,7 +136,10 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         try {
           final tipo = tx['tipo'] as String;
           final cat = tx['categoria']?.toString() ?? 'Varios';
-          if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+          if (cat == 'Transferencia' ||
+              cat == 'Ajuste' ||
+              cat == 'Cuentas por Cobrar')
+            continue;
 
           final itemName = tx['item']?.toString();
 
@@ -202,7 +205,10 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         if (!settings.activeAccounts.contains(cuenta)) continue;
 
         final cat = tx['categoria']?.toString() ?? 'Varios';
-        if (cat == 'Transferencia' || cat == 'Ajuste') continue;
+        if (cat == 'Transferencia' ||
+            cat == 'Ajuste' ||
+            cat == 'Cuentas por Cobrar')
+          continue;
 
         final monto = (tx['monto'] as num? ?? 0).toDouble();
         if (tx['tipo'] == 'Ingreso') {
