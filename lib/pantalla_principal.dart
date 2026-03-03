@@ -34,10 +34,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     with WidgetsBindingObserver {
   static const String _itemAbonoTarjeta = 'Abono TC';
   static const String _itemPagoFacturadoTarjeta = 'Pago Facturado TC';
-  static const Set<String> _itemsAbonoTarjeta = {
-    _itemAbonoTarjeta,
-    _itemPagoFacturadoTarjeta,
-  };
 
   final _stream = supabase
       .from('gastos')
@@ -621,6 +617,52 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return saldo;
   }
 
+  DateTime _inicioDelDia(DateTime date) => DateTime(
+    date.year,
+    date.month,
+    date.day,
+  );
+
+  DateTime _finDelDia(DateTime date) => DateTime(
+    date.year,
+    date.month,
+    date.day,
+    23,
+    59,
+    59,
+  );
+
+  DateTime _fechaMesSegura(
+    int year,
+    int month,
+    int preferredDay, {
+    bool finDeDia = false,
+  }) {
+    final diasDelMes = DateUtils.getDaysInMonth(year, month);
+    final diaSeguro = preferredDay.clamp(1, diasDelMes);
+    return finDeDia
+        ? DateTime(year, month, diaSeguro, 23, 59, 59)
+        : DateTime(year, month, diaSeguro);
+  }
+
+  bool _esCuentaCreditoPorNombre(String cuenta) {
+    final lower = cuenta.toLowerCase();
+    return lower.contains('credito') ||
+        lower.contains('crédito') ||
+        lower.contains('tc') ||
+        lower.contains('visa') ||
+        lower.contains('master');
+  }
+
+  DateTime _proximoVencimientoTarjeta(DateTime referencia, int dueDay) {
+    final hoy = _inicioDelDia(referencia);
+    final venceEsteMes = _fechaMesSegura(hoy.year, hoy.month, dueDay);
+    if (!hoy.isAfter(venceEsteMes)) {
+      return venceEsteMes;
+    }
+    return _fechaMesSegura(hoy.year, hoy.month + 1, dueDay);
+  }
+
   /// Devuelve la fecha de corte efectiva para el mes actual.
   /// Si el usuario cerró el ciclo manualmente este mes, usa esa fecha.
   /// De lo contrario, usa el billingDay configurado.
@@ -631,14 +673,105 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       if (parsed != null &&
           parsed.year == referenceDate.year &&
           parsed.month == referenceDate.month) {
-        return parsed;
+        return _inicioDelDia(parsed);
       }
     }
-    return DateTime(
+    return _fechaMesSegura(
       referenceDate.year,
       referenceDate.month,
       settings.creditCardBillingDay,
     );
+  }
+
+  Map<String, DateTime> _obtenerRangosCicloCredito(
+    AppSettings settings, {
+    DateTime? referenceDate,
+  }) {
+    final now = referenceDate ?? DateTime.now();
+    final billingDay = settings.creditCardBillingDay;
+    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
+
+    late DateTime cycleStart;
+    late DateTime cycleEnd;
+    if (now.isAfter(cutoffThisMonth)) {
+      cycleStart = _inicioDelDia(cutoffThisMonth.add(const Duration(days: 1)));
+      cycleEnd = _fechaMesSegura(
+        now.year,
+        now.month + 1,
+        billingDay,
+        finDeDia: true,
+      );
+    } else {
+      cycleEnd = _finDelDia(cutoffThisMonth);
+      final previousCutoff = _fechaMesSegura(now.year, now.month - 1, billingDay);
+      cycleStart = _inicioDelDia(previousCutoff.add(const Duration(days: 1)));
+    }
+
+    return {
+      'curStart': cycleStart,
+      'curEnd': cycleEnd,
+      'nowEnd': _finDelDia(now),
+    };
+  }
+
+  Map<String, List<Map<String, dynamic>>> _agruparMovimientosCreditoPorCuenta(
+    List<Map<String, dynamic>> movimientos,
+  ) {
+    final agrupado = <String, List<Map<String, dynamic>>>{};
+    for (final mov in movimientos) {
+      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+      if (cuenta.isEmpty) continue;
+      agrupado.putIfAbsent(cuenta, () => []).add(mov);
+    }
+    return agrupado;
+  }
+
+  Map<String, int> _calcularResumenDeudaCreditoCuenta({
+    required List<Map<String, dynamic>> movimientosCuenta,
+    required DateTime cycleStart,
+    required DateTime nowEnd,
+  }) {
+    var gastosFacturadosBruto = 0;
+    var gastosPorFacturarBruto = 0;
+    var pagosAcumulados = 0;
+
+    for (final mov in movimientosCuenta) {
+      final fecha = DateTime.tryParse((mov['fecha'] ?? '').toString());
+      if (fecha == null || fecha.isAfter(nowEnd)) continue;
+
+      final monto = (mov['monto'] as num? ?? 0).toInt();
+      final tipo = (mov['tipo'] ?? '').toString();
+      if (tipo == 'Gasto') {
+        if (fecha.isBefore(cycleStart)) {
+          gastosFacturadosBruto += monto;
+        } else {
+          gastosPorFacturarBruto += monto;
+        }
+      } else if (tipo == 'Ingreso') {
+        pagosAcumulados += monto;
+      }
+    }
+
+    final pagoAFacturado = pagosAcumulados > gastosFacturadosBruto
+        ? gastosFacturadosBruto
+        : pagosAcumulados;
+    final pagoRestante = pagosAcumulados - pagoAFacturado;
+    final facturadoPendiente = gastosFacturadosBruto - pagoAFacturado;
+    final porFacturarPendiente = (gastosPorFacturarBruto - pagoRestante).clamp(
+      0,
+      1 << 31,
+    );
+    final deudaTotal = (facturadoPendiente + porFacturarPendiente)
+        .clamp(0, 1 << 31)
+        .toInt();
+
+    return {
+      'facturadoPendiente': facturadoPendiente,
+      'porFacturarPendiente': porFacturarPendiente.toInt(),
+      'pagos': pagosAcumulados,
+      'deudaTotal': deudaTotal,
+    };
   }
 
   int _parseMonto(String value) {
@@ -991,51 +1124,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // Alerta de vencimiento de tarjeta de crédito
     if (settings.enableCreditDueAlerts) {
       final dueDay = settings.creditCardDueDay;
-      final billingDay = settings.creditCardBillingDay;
       final daysBefore = settings.creditDueAlertDaysBefore;
 
       // Calcular la próxima fecha de vencimiento
-      DateTime nextDue;
-      if (ahora.day <= dueDay) {
-        nextDue = DateTime(ahora.year, ahora.month, dueDay);
-      } else {
-        nextDue = DateTime(ahora.year, ahora.month + 1, dueDay);
-      }
+      final nextDue = _proximoVencimientoTarjeta(ahora, dueDay);
       final diasRestantes = nextDue
           .difference(DateTime(ahora.year, ahora.month, ahora.day))
           .inDays;
 
       if (diasRestantes <= daysBefore && diasRestantes >= 0) {
-        // Calcular monto facturado (ciclo anterior)
-        final cutoffThisMonth = _getEffectiveCutoff(settings, ahora);
-        DateTime lastCycleStart;
-        DateTime lastCycleEnd;
-        if (ahora.isAfter(cutoffThisMonth)) {
-          lastCycleEnd = cutoffThisMonth;
-          lastCycleStart = DateTime(
-            ahora.year,
-            ahora.month - 1,
-            billingDay,
-          ).add(const Duration(days: 1));
-        } else {
-          lastCycleEnd = DateTime(ahora.year, ahora.month - 1, billingDay);
-          lastCycleStart = DateTime(
-            ahora.year,
-            ahora.month - 2,
-            billingDay,
-          ).add(const Duration(days: 1));
-        }
-        final creditExpenses = movimientos.where(
-          (m) =>
-              (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
-              m['tipo'] == 'Gasto',
+        // Calcular monto facturado pendiente consolidado.
+        final rangosCredito = _obtenerRangosCicloCredito(
+          settings,
+          referenceDate: ahora,
+        );
+        final curStart = rangosCredito['curStart']!;
+        final nowEnd = rangosCredito['nowEnd']!;
+        final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
+          movimientos,
         );
         var facturado = 0;
-        for (final m in creditExpenses) {
-          final d = DateTime.parse(m['fecha']);
-          if (!d.isBefore(lastCycleStart) && !d.isAfter(lastCycleEnd)) {
-            facturado += (m['monto'] as num? ?? 0).toInt();
-          }
+        for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
+          final resumen = _calcularResumenDeudaCreditoCuenta(
+            movimientosCuenta: movimientosCuenta,
+            cycleStart: curStart,
+            nowEnd: nowEnd,
+          );
+          facturado += resumen['facturadoPendiente'] ?? 0;
         }
 
         final diasTexto = diasRestantes == 0
@@ -1382,120 +1497,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final totalNetoMes = ingresoMes - gastoMes;
     final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
 
-    // 5. TC Utilizado:
-    // (Facturado pendiente + Por facturar pendiente), aplicando pagos/abonos.
-    final now = DateTime.now();
-    final billingDay = settings.creditCardBillingDay;
-    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
-    DateTime cycleStart;
-    DateTime cycleEnd;
-    DateTime lastCycleStart;
-    DateTime lastCycleEnd;
-    if (now.isAfter(cutoffThisMonth)) {
-      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
-      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
-      lastCycleEnd = cutoffThisMonth;
-      lastCycleStart = DateTime(
-        now.year,
-        now.month - 1,
-        billingDay,
-      ).add(const Duration(days: 1));
-    } else {
-      cycleEnd = cutoffThisMonth;
-      cycleStart = DateTime(
-        now.year,
-        now.month - 1,
-        billingDay,
-      ).add(const Duration(days: 1));
-      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
-      lastCycleStart = DateTime(
-        now.year,
-        now.month - 2,
-        billingDay,
-      ).add(const Duration(days: 1));
-    }
-    final curStart = DateTime(
-      cycleStart.year,
-      cycleStart.month,
-      cycleStart.day,
+    // 5. TC Utilizado total pendiente (considera todo el histórico).
+    final rangosCredito = _obtenerRangosCicloCredito(settings);
+    final curStart = rangosCredito['curStart']!;
+    final nowEnd = rangosCredito['nowEnd']!;
+    final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
+      datosFiltrados,
     );
-    final curEnd = DateTime(
-      cycleEnd.year,
-      cycleEnd.month,
-      cycleEnd.day,
-      23,
-      59,
-      59,
-    );
-    final lastStart = DateTime(
-      lastCycleStart.year,
-      lastCycleStart.month,
-      lastCycleStart.day,
-    );
-    final lastEnd = DateTime(
-      lastCycleEnd.year,
-      lastCycleEnd.month,
-      lastCycleEnd.day,
-      23,
-      59,
-      59,
-    );
-    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-    int calcularTotalRango(
-      List<Map<String, dynamic>> movimientos,
-      DateTime start,
-      DateTime end,
-    ) {
-      var total = 0;
-      for (final m in movimientos) {
-        final fecha = DateTime.parse((m['fecha'] ?? '').toString());
-        if (!fecha.isBefore(start) && !fecha.isAfter(end)) {
-          total += (m['monto'] as num? ?? 0).toInt();
-        }
-      }
-      return total;
-    }
-
-    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
-    for (final mov in datosFiltrados) {
-      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
-      final cuenta = (mov['cuenta'] ?? '').toString().trim();
-      if (cuenta.isEmpty) continue;
-      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
-    }
 
     var saldoCreditoUtilizado = 0;
     for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
-      final creditExpenses = movimientosCuenta
-          .where((m) => (m['tipo'] ?? '') == 'Gasto')
-          .toList();
-      final creditPagos = movimientosCuenta
-          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
-          .toList();
-
-      final porFacturarBruto = calcularTotalRango(
-        creditExpenses,
-        curStart,
-        curEnd,
+      final resumen = _calcularResumenDeudaCreditoCuenta(
+        movimientosCuenta: movimientosCuenta,
+        cycleStart: curStart,
+        nowEnd: nowEnd,
       );
-      final facturadoBruto = calcularTotalRango(
-        creditExpenses,
-        lastStart,
-        lastEnd,
-      );
-      final pagosPeriodo = calcularTotalRango(creditPagos, lastStart, nowEnd);
-      final pagoAFacturado = pagosPeriodo > facturadoBruto
-          ? facturadoBruto
-          : pagosPeriodo;
-      final pagoRestante = pagosPeriodo - pagoAFacturado;
-      final facturadoPendiente = facturadoBruto - pagoAFacturado;
-      final porFacturarPendiente = (porFacturarBruto - pagoRestante).clamp(
-        0,
-        1 << 31,
-      );
-      saldoCreditoUtilizado += (facturadoPendiente + porFacturarPendiente)
-          .toInt();
+      saldoCreditoUtilizado += resumen['deudaTotal'] ?? 0;
     }
 
     // Apply search & sort
@@ -3476,17 +3493,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      // 1. Obtener movimientos para calcular saldo actual y filtrar ajustes previos
       final List<dynamic> response = await supabase
           .from('gastos')
-          .select('monto, tipo, categoria, metodo_pago')
+          .select('monto, tipo, categoria, metodo_pago, fecha, item')
           .eq('user_id', user.id)
           .eq('cuenta', cuenta);
+
+      final movimientos = List<Map<String, dynamic>>.from(response);
+      final hasCredit = movimientos.any(
+        (mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito',
+      );
+      final hasDebit = movimientos.any(
+        (mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito',
+      );
+      final ajustarComoCredito =
+          _esCuentaCreditoPorNombre(cuenta) || (hasCredit && !hasDebit);
+      if (ajustarComoCredito) {
+        await _ajustarDeudaTarjetaCuenta(
+          cuenta,
+          movimientosCuenta: movimientos,
+        );
+        return;
+      }
 
       var saldoVisual = 0;
       var saldoRealSinAjustes = 0;
 
-      for (final mov in response) {
+      for (final mov in movimientos) {
         if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
           continue;
         }
@@ -3564,6 +3597,76 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           context,
         ).showSnackBar(SnackBar(content: Text('Error al ajustar saldo: $e')));
       }
+    }
+  }
+
+  Future<void> _ajustarDeudaTarjetaCuenta(
+    String cuenta, {
+    List<Map<String, dynamic>>? movimientosCuenta,
+  }) async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      final movimientos = movimientosCuenta ??
+          List<Map<String, dynamic>>.from(
+            await supabase
+                .from('gastos')
+                .select('monto, tipo, categoria, metodo_pago')
+                .eq('user_id', user.id)
+                .eq('cuenta', cuenta),
+          );
+
+      var deudaVisual = 0;
+      var deudaRealSinAjustes = 0;
+      for (final mov in movimientos) {
+        if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+        final monto = (mov['monto'] as num? ?? 0).toInt();
+        final esGasto = (mov['tipo'] ?? '') == 'Gasto';
+        final signed = esGasto ? monto : -monto;
+        deudaVisual += signed;
+        if (mov['categoria'] != 'Ajuste') {
+          deudaRealSinAjustes += signed;
+        }
+      }
+
+      final deudaActual = deudaVisual < 0 ? 0 : deudaVisual;
+      if (!mounted) return;
+      final nuevoMontoStr = await _pedirTexto(
+        titulo: 'Ajustar deuda TC: $cuenta',
+        etiqueta:
+            'Nueva deuda utilizada (Actual: ${_textoMonto(deudaActual, ocultable: false)})',
+        inicial: deudaActual.toString(),
+      );
+      if (nuevoMontoStr == null) return;
+
+      final deudaObjetivo = _parseMonto(nuevoMontoStr);
+
+      await supabase.from('gastos').delete().match({
+        'user_id': user.id,
+        'cuenta': cuenta,
+        'categoria': 'Ajuste',
+        'metodo_pago': 'Credito',
+      });
+
+      final diferencia = deudaObjetivo - deudaRealSinAjustes;
+      if (diferencia != 0) {
+        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': fechaStr,
+          'item': 'Ajuste de Deuda TC',
+          'monto': diferencia.abs(),
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': diferencia > 0 ? 'Gasto' : 'Ingreso',
+          'metodo_pago': 'Credito',
+        });
+      }
+
+      _mostrarSnack('Deuda de tarjeta ajustada (ajustes previos reemplazados)');
+    } catch (e) {
+      _mostrarSnack('Error al ajustar deuda de tarjeta: $e');
     }
   }
 
@@ -6405,7 +6508,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Ingresa los montos pendientes. AL GUARDAR SE REEMPLAZARÁN los saldos iniciales previos de esta cuenta.',
+                    'Ingresa los montos pendientes. Se usará la suma para fijar la deuda total actual de la tarjeta y se reemplazarán ajustes previos.',
                     style: TextStyle(fontSize: 13, color: Colors.orange),
                   ),
                   const SizedBox(height: 16),
@@ -6488,67 +6591,53 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      // 1. ELIMINAR ANTERIORES para esta cuenta (Evitar duplicados)
-      await supabase
-          .from('gastos')
-          .delete()
-          .match({'user_id': user.id, 'cuenta': cuenta, 'categoria': 'Ajuste'})
-          .or(
-            'item.eq."Saldo Inicial Importado (Facturado)",item.eq."Saldo Inicial Importado (Actual)"',
-          );
+      final deudaObjetivo = mFacturado + mNoFacturado;
 
-      if (mFacturado == 0 && mNoFacturado == 0) {
-        _mostrarSnack('Saldos iniciales eliminados/limpiados.');
-        return;
+      final movimientosCuenta = List<Map<String, dynamic>>.from(
+        await supabase
+            .from('gastos')
+            .select('monto, tipo, categoria, metodo_pago')
+            .eq('user_id', user.id)
+            .eq('cuenta', cuenta),
+      );
+
+      var deudaBaseSinAjustes = 0;
+      for (final mov in movimientosCuenta) {
+        if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+        if (mov['categoria'] == 'Ajuste') continue;
+        final monto = (mov['monto'] as num? ?? 0).toInt();
+        if ((mov['tipo'] ?? '') == 'Gasto') {
+          deudaBaseSinAjustes += monto;
+        } else if ((mov['tipo'] ?? '') == 'Ingreso') {
+          deudaBaseSinAjustes -= monto;
+        }
       }
 
-      final ahora = DateTime.now();
-      final billingDay =
-          widget.settingsController.settings.creditCardBillingDay;
+      await supabase.from('gastos').delete().match({
+        'user_id': user.id,
+        'cuenta': cuenta,
+        'categoria': 'Ajuste',
+        'metodo_pago': 'Credito',
+      });
 
-      // Calcular fecha para "Facturado" (debe ser anterior al inicio del ciclo actual de TC)
-      DateTime fechaFacturado;
-      if (ahora.day > billingDay) {
-        // Estamos en ciclo que cierra este mes
-        fechaFacturado = DateTime(ahora.year, ahora.month, billingDay);
-      } else {
-        // Estamos en ciclo que cerró el mes pasado
-        final mesAnterior = ahora.month == 1 ? 12 : ahora.month - 1;
-        final anioAnterior = ahora.month == 1 ? ahora.year - 1 : ahora.year;
-        fechaFacturado = DateTime(anioAnterior, mesAnterior, billingDay);
-      }
-
-      // 2. Insertar Facturado (Ciclo anterior)
-      if (mFacturado > 0) {
+      final diferencia = deudaObjetivo - deudaBaseSinAjustes;
+      if (diferencia != 0) {
+        final fechaStr = DateTime.now().toIso8601String().split('T').first;
         await supabase.from('gastos').insert({
           'user_id': user.id,
-          'fecha': fechaFacturado.toIso8601String().split('T').first,
-          'item': 'Saldo Inicial Importado (Facturado)',
-          'monto': mFacturado,
+          'fecha': fechaStr,
+          'item': 'Ajuste de Deuda TC',
+          'monto': diferencia.abs(),
           'categoria': 'Ajuste',
           'cuenta': cuenta,
-          'tipo': 'Gasto',
+          'tipo': diferencia > 0 ? 'Gasto' : 'Ingreso',
           'metodo_pago': 'Credito',
         });
       }
 
-      // 3. Insertar No Facturado (Ciclo actual - fecha hoy)
-      if (mNoFacturado > 0) {
-        await supabase.from('gastos').insert({
-          'user_id': user.id,
-          'fecha': ahora.toIso8601String().split('T').first,
-          'item': 'Saldo Inicial Importado (Actual)',
-          'monto': mNoFacturado,
-          'categoria': 'Ajuste',
-          'cuenta': cuenta,
-          'tipo': 'Gasto',
-          'metodo_pago': 'Credito',
-        });
-      }
-
-      _mostrarSnack('Saldos iniciales actualizados (anteriores reemplazados)');
+      _mostrarSnack('Deuda de tarjeta actualizada (ajustes previos reemplazados)');
     } catch (e) {
-      _mostrarSnack('Error al guardar saldo inicial: $e');
+      _mostrarSnack('Error al actualizar deuda de tarjeta: $e');
     }
   }
 
@@ -7827,47 +7916,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final now = DateTime.now();
     final billingDay = settings.creditCardBillingDay;
     final dueDay = settings.creditCardDueDay;
-
-    // --- Lógica de Ciclos de Tarjeta ---
-    // Calculamos el cutoff del mes actual
-    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
-
-    // Si hoy es después del corte, el ciclo actual empezó el día siguiente al corte (BillingDay + 1)
-    // y termina el próximo BillingDay.
-    // Si hoy es antes del corte, el ciclo actual empezó el mes pasado.
-
-    DateTime cycleStart;
-    DateTime cycleEnd;
-    DateTime lastCycleStart;
-    DateTime lastCycleEnd;
-
-    if (now.isAfter(cutoffThisMonth)) {
-      // Estamos en el ciclo que cierra el mes que viene
-      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
-      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
-
-      lastCycleEnd = cutoffThisMonth;
-      lastCycleStart = DateTime(
-        now.year,
-        now.month - 1,
-        billingDay,
-      ).add(const Duration(days: 1));
-    } else {
-      // Estamos en el ciclo que cierra este mes
-      cycleEnd = cutoffThisMonth;
-      cycleStart = DateTime(
-        now.year,
-        now.month - 1,
-        billingDay,
-      ).add(const Duration(days: 1));
-
-      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
-      lastCycleStart = DateTime(
-        now.year,
-        now.month - 2,
-        billingDay,
-      ).add(const Duration(days: 1));
-    }
+    final rangosCredito = _obtenerRangosCicloCredito(
+      settings,
+      referenceDate: now,
+    );
+    final curStart = rangosCredito['curStart']!;
+    final curEnd = rangosCredito['curEnd']!;
+    final nowEnd = rangosCredito['nowEnd']!;
 
     final creditExpenses = todosLosDatos
         .where(
@@ -7880,106 +7935,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         .where(
           (m) =>
               (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
-              (m['tipo'] == 'Ingreso') &&
-              _itemsAbonoTarjeta.contains((m['item'] ?? '').toString()),
+              (m['tipo'] == 'Ingreso'),
         )
         .toList();
-
-    int calcularTotal(List<dynamic> movimientos, DateTime start, DateTime end) {
-      var total = 0;
-      for (final m in movimientos) {
-        final d = DateTime.parse(m['fecha']);
-        // start <= d <= end
-        // Simplificación: check year/month/day comparisons or just logic
-        // Usando compareTo para asegurar
-        if (!d.isBefore(start) && !d.isAfter(end)) {
-          total += (m['monto'] as num).toInt();
-        }
-      }
-      return total;
-    }
-
-    // Nota: cycleStart es inclusive, cycleEnd es inclusive (el día de corte entra)
-    // Ajustar lógica de "isBefore" / "isAfter"
-    // isBefore(start) falsificará si es == start? No. isBefore es estricto.
-    // !isBefore(start) -> >= start
-    // !isAfter(end) -> <= end
-
-    // Ajuste fino de fechas a inicio/fin de día
-    final curStart = DateTime(
-      cycleStart.year,
-      cycleStart.month,
-      cycleStart.day,
+    final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
+      todosLosDatos,
     );
-    final curEnd = DateTime(
-      cycleEnd.year,
-      cycleEnd.month,
-      cycleEnd.day,
-      23,
-      59,
-      59,
-    );
-
-    final lastStart = DateTime(
-      lastCycleStart.year,
-      lastCycleStart.month,
-      lastCycleStart.day,
-    );
-    final lastEnd = DateTime(
-      lastCycleEnd.year,
-      lastCycleEnd.month,
-      lastCycleEnd.day,
-      23,
-      59,
-      59,
-    );
-    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
-    for (final mov in todosLosDatos) {
-      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
-      final cuenta = (mov['cuenta'] ?? '').toString().trim();
-      if (cuenta.isEmpty) continue;
-      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
-    }
 
     var porFacturarPendiente = 0;
     var facturadoPendiente = 0;
     var pagosPeriodo = 0;
     for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
-      final gastosCuenta = movimientosCuenta
-          .where((m) => (m['tipo'] ?? '') == 'Gasto')
-          .toList();
-      final ingresosCuenta = movimientosCuenta
-          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
-          .toList();
-
-      final porFacturarBrutoCuenta = calcularTotal(
-        gastosCuenta,
-        curStart,
-        curEnd,
+      final resumen = _calcularResumenDeudaCreditoCuenta(
+        movimientosCuenta: movimientosCuenta,
+        cycleStart: curStart,
+        nowEnd: nowEnd,
       );
-      final facturadoBrutoCuenta = calcularTotal(
-        gastosCuenta,
-        lastStart,
-        lastEnd,
-      );
-      final pagosPeriodoCuenta = calcularTotal(
-        ingresosCuenta,
-        lastStart,
-        nowEnd,
-      );
-
-      final pagoAFacturado = pagosPeriodoCuenta > facturadoBrutoCuenta
-          ? facturadoBrutoCuenta
-          : pagosPeriodoCuenta;
-      final pagoRestante = pagosPeriodoCuenta - pagoAFacturado;
-
-      facturadoPendiente += facturadoBrutoCuenta - pagoAFacturado;
-      porFacturarPendiente += (porFacturarBrutoCuenta - pagoRestante)
-          .clamp(0, 1 << 31)
-          .toInt();
-      pagosPeriodo += pagosPeriodoCuenta;
+      facturadoPendiente += resumen['facturadoPendiente'] ?? 0;
+      porFacturarPendiente += resumen['porFacturarPendiente'] ?? 0;
+      pagosPeriodo += resumen['pagos'] ?? 0;
     }
 
     final cuentasCredito = <String>[];
@@ -7991,14 +7965,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
     if (cuentasCredito.isEmpty) {
       for (final acc in settings.activeAccounts) {
-        final lower = acc.toLowerCase();
-        final pareceCredito =
-            lower.contains('credito') ||
-            lower.contains('crédito') ||
-            lower.contains('tc') ||
-            lower.contains('visa') ||
-            lower.contains('master');
-        if (pareceCredito) {
+        if (_esCuentaCreditoPorNombre(acc)) {
           cuentasCredito.add(acc);
         }
       }
@@ -8010,12 +7977,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // --- Fin Lógica ---
 
     // Countdown al día de vencimiento
-    DateTime nextDue;
-    if (now.day <= dueDay) {
-      nextDue = DateTime(now.year, now.month, dueDay);
-    } else {
-      nextDue = DateTime(now.year, now.month + 1, dueDay);
-    }
+    final nextDue = _proximoVencimientoTarjeta(now, dueDay);
     final diasAlVencimiento = nextDue
         .difference(DateTime(now.year, now.month, now.day))
         .inDays;
@@ -8023,21 +7985,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // Filtrar movimientos de cada ciclo para las listas de detalle
     final movimientosPorFacturar = creditExpenses.where((m) {
       final d = DateTime.parse(m['fecha']);
-      return !d.isBefore(curStart) && !d.isAfter(curEnd);
+      return !d.isBefore(curStart) && !d.isAfter(nowEnd);
     }).toList();
     final movimientosFacturados = creditExpenses.where((m) {
       final d = DateTime.parse(m['fecha']);
-      return !d.isBefore(lastStart) && !d.isAfter(lastEnd);
+      return d.isBefore(curStart);
     }).toList();
     final movimientosAbonos =
         creditAbonos.where((m) {
           final d = DateTime.parse(m['fecha']);
-          return !d.isBefore(lastStart) && !d.isAfter(nowEnd);
+          return !d.isAfter(nowEnd);
         }).toList()..sort((a, b) {
           final fa = DateTime.parse((a['fecha'] ?? '').toString());
           final fb = DateTime.parse((b['fecha'] ?? '').toString());
           return fb.compareTo(fa);
         });
+    movimientosFacturados.sort((a, b) {
+      final fa = DateTime.parse((a['fecha'] ?? '').toString());
+      final fb = DateTime.parse((b['fecha'] ?? '').toString());
+      return fb.compareTo(fa);
+    });
 
     // Calcular fechas para el mes visualizado
     final firstDayOfMonth = DateTime(
@@ -8208,7 +8175,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         ),
                       ),
                       Text(
-                        '${lastStart.day}/${lastStart.month} - ${lastEnd.day}/${lastEnd.month}',
+                        'Anterior a ${curStart.day}/${curStart.month}',
                         style: TextStyle(
                           fontSize: 10,
                           color: Theme.of(context).brightness == Brightness.dark
