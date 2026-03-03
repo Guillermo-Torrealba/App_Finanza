@@ -6145,7 +6145,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             titulo,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           backgroundColor: bgColor,
           collapsedBackgroundColor: bgColor,
           shape: const Border(),
