@@ -87,8 +87,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'Metas',
         'Presupuestos',
         'Planificación',
-        'Compartidos',
-        'Ajustes',
+        'Más',
       ];
     } else {
       return const [
@@ -96,8 +95,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'Analisis',
         'Metas',
         'Presupuestos',
-        'Compartidos',
-        'Ajustes',
+        'Más',
       ];
     }
   }
@@ -166,7 +164,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       // Ajustar índice de pestaña si deshabilitan la tarjeta
       if (!settings.hasCreditCard && _indicePestana > 3) {
-        _indicePestana = 4; // Ajustes is now at index 4
+        _indicePestana = 4; // 'Más' is now at index 4 if no credit card
       }
     });
   }
@@ -1158,14 +1156,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     return _construirPaginaCredito(todosLosDatos);
                   }
                   if (_indicePestana == 5) {
-                    return GastosCompartidosScreen(movimientos: todosLosDatos);
+                    return _construirPaginaMas(todosLosDatos);
                   }
-                  return _construirPaginaAjustes();
+                  return const SizedBox.shrink();
                 } else {
                   if (_indicePestana == 4) {
-                    return GastosCompartidosScreen(movimientos: todosLosDatos);
+                    return _construirPaginaMas(todosLosDatos);
                   }
-                  return _construirPaginaAjustes();
+                  return const SizedBox.shrink();
                 }
               }(),
             ),
@@ -1237,20 +1235,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       tooltip: 'Planificación',
                     ),
                   _navIcon(
-                    filled: Icons.people,
-                    outlined: Icons.people_outline,
+                    filled: Icons.menu,
+                    outlined: Icons.menu_open,
                     index: widget.settingsController.settings.hasCreditCard
                         ? 5
                         : 4,
-                    tooltip: 'Compartidos',
-                  ),
-                  _navIcon(
-                    filled: Icons.settings,
-                    outlined: Icons.settings_outlined,
-                    index: widget.settingsController.settings.hasCreditCard
-                        ? 6
-                        : 5,
-                    tooltip: 'Ajustes',
+                    tooltip: 'Más',
                   ),
                 ],
               ),
@@ -3115,59 +3105,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          // ── Botón Simular Compra ──
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [Colors.deepPurple.shade700, Colors.indigo.shade700]
-                    : [Colors.deepPurple.shade400, Colors.indigo.shade400],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.deepPurple.withAlpha(isDark ? 60 : 40),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => _mostrarSimuladorCompra(todosLosDatos),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 16,
-                    horizontal: 20,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.auto_awesome,
-                        color: Colors.white.withAlpha(220),
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Simular Compra',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -3177,71 +3114,100 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   //  SIMULADOR DE COMPRAS
   // ═══════════════════════════════════════════════════════
 
-  void _mostrarSimuladorCompra(List<Map<String, dynamic>> todosLosDatos) {
-    // Calcular promedio de ingresos y gastos de los últimos 3 meses
-    final now = DateTime.now();
-    var sumaIngresos = 0;
-    var sumaGastos = 0;
-    var mesesConDatos = 0;
-    for (var i = 1; i <= 3; i++) {
-      final mes = DateTime(now.year, now.month - i, 1);
-      final resumen = _calcularResumenMes(todosLosDatos, mes);
-      final ing = resumen['ingresos'] ?? 0;
-      final gas = resumen['gastos'] ?? 0;
-      if (ing > 0 || gas > 0) {
-        sumaIngresos += ing;
-        sumaGastos += gas;
-        mesesConDatos++;
-      }
-    }
-    final ingresoPromedio = mesesConDatos > 0
-        ? sumaIngresos ~/ mesesConDatos
-        : 0;
-    final gastoPromedio = mesesConDatos > 0 ? sumaGastos ~/ mesesConDatos : 0;
-    final flujoBasePromedio = ingresoPromedio - gastoPromedio;
+  Future<void> _mostrarSimuladorCompra() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
 
-    // Calcular patrimonio actual (Liquidez Neta)
-    final datosFiltrados = todosLosDatos.where((mov) {
-      final cuenta = (mov['cuenta'] ?? '').toString();
-      return _cuentasSeleccionadas.contains(cuenta);
-    }).toList();
-    var saldoCuentaCorriente = 0;
-    for (final mov in datosFiltrados) {
-      if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
-      final m = (mov['monto'] as num? ?? 0).toInt();
-      if (mov['tipo'] == 'Ingreso') {
-        saldoCuentaCorriente += m;
-      } else {
-        saldoCuentaCorriente -= m;
-      }
-    }
-    // Calcular crédito utilizado (simplificado)
-    var saldoCreditoUtilizado = 0;
-    for (final mov in datosFiltrados) {
-      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
-      final m = (mov['monto'] as num? ?? 0).toInt();
-      if (mov['tipo'] == 'Gasto') {
-        saldoCreditoUtilizado += m;
-      } else {
-        saldoCreditoUtilizado -= m;
-      }
-    }
-    final patrimonioActual = saldoCuentaCorriente - saldoCreditoUtilizado;
-
-    showModalBottomSheet(
+    // Show a loading indicator while fetching data
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return _SimuladorCompraSheet(
-          ingresoPromedio: ingresoPromedio,
-          gastoPromedio: gastoPromedio,
-          flujoBasePromedio: flujoBasePromedio,
-          patrimonioActual: patrimonioActual,
-          formatoMoneda: (num n) => _textoMonto(n.toInt(), ocultable: false),
-        );
-      },
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+
+    try {
+      final response = await supabase
+          .from('gastos')
+          .select()
+          .eq('user_id', user.id)
+          .order('fecha', ascending: false);
+
+      final todosLosDatos = List<Map<String, dynamic>>.from(response);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      // Calcular promedio de ingresos y gastos de los últimos 3 meses
+      final now = DateTime.now();
+      var sumaIngresos = 0;
+      var sumaGastos = 0;
+      var mesesConDatos = 0;
+      for (var i = 1; i <= 3; i++) {
+        final mes = DateTime(now.year, now.month - i, 1);
+        final resumen = _calcularResumenMes(todosLosDatos, mes);
+        final ing = resumen['ingresos'] ?? 0;
+        final gas = resumen['gastos'] ?? 0;
+        if (ing > 0 || gas > 0) {
+          sumaIngresos += ing;
+          sumaGastos += gas;
+          mesesConDatos++;
+        }
+      }
+      final ingresoPromedio = mesesConDatos > 0
+          ? sumaIngresos ~/ mesesConDatos
+          : 0;
+      final gastoPromedio = mesesConDatos > 0 ? sumaGastos ~/ mesesConDatos : 0;
+      final flujoBasePromedio = ingresoPromedio - gastoPromedio;
+
+      // Calcular patrimonio actual (Liquidez Neta)
+      final datosFiltrados = todosLosDatos.where((mov) {
+        final cuenta = (mov['cuenta'] ?? '').toString();
+        return _cuentasSeleccionadas.contains(cuenta);
+      }).toList();
+      var saldoCuentaCorriente = 0;
+      for (final mov in datosFiltrados) {
+        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+        final m = (mov['monto'] as num? ?? 0).toInt();
+        if (mov['tipo'] == 'Ingreso') {
+          saldoCuentaCorriente += m;
+        } else {
+          saldoCuentaCorriente -= m;
+        }
+      }
+      // Calcular crédito utilizado (simplificado)
+      var saldoCreditoUtilizado = 0;
+      for (final mov in datosFiltrados) {
+        if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+        final m = (mov['monto'] as num? ?? 0).toInt();
+        if (mov['tipo'] == 'Gasto') {
+          saldoCreditoUtilizado += m;
+        } else {
+          saldoCreditoUtilizado -= m;
+        }
+      }
+      final patrimonioActual = saldoCuentaCorriente - saldoCreditoUtilizado;
+
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) {
+          return _SimuladorCompraSheet(
+            ingresoPromedio: ingresoPromedio,
+            gastoPromedio: gastoPromedio,
+            flujoBasePromedio: flujoBasePromedio,
+            patrimonioActual: patrimonioActual,
+            formatoMoneda: (num n) => _textoMonto(n.toInt(), ocultable: false),
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        _mostrarSnack('No se pudieron cargar los datos para simular: $e');
+      }
+    }
   }
 
   Widget _filaDetalleBarra(
@@ -3487,6 +3453,146 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         ).showSnackBar(SnackBar(content: Text('Error al ajustar saldo: $e')));
       }
     }
+  }
+
+  Widget _construirPaginaMas(List<Map<String, dynamic>> todosLosDatos) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _tarjetaNavegacionMas(
+          titulo: 'Flujo de Caja',
+          subtitulo: 'Proyección futura de liquidez',
+          icono: Icons.insights_rounded,
+          color: Colors.blue,
+          isDark: isDark,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => FlujoCajaScreen(
+                  settingsController: widget.settingsController,
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _tarjetaNavegacionMas(
+          titulo: 'Gastos Compartidos',
+          subtitulo: 'Cuentas por cobrar y pagos divididos',
+          icono: Icons.people_outline,
+          color: Colors.purple,
+          isDark: isDark,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    GastosCompartidosScreen(movimientos: todosLosDatos),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _tarjetaNavegacionMas(
+          titulo: 'Ajustes',
+          subtitulo: 'Configuración de cuentas, categorías y seguridad',
+          icono: Icons.settings_outlined,
+          color: Colors.grey,
+          isDark: isDark,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => _construirPaginaAjustesParaRoute(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _tarjetaNavegacionMas({
+    required String titulo,
+    required String subtitulo,
+    required IconData icono,
+    required MaterialColor color,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 0,
+      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(isDark ? 50 : 30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icono,
+                  color: isDark ? color.shade200 : color.shade700,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitulo,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Wrapper para la página de ajustes que ahora funciona como una ruta normal
+  Widget _construirPaginaAjustesParaRoute() {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ajustes'), centerTitle: true),
+      body: _construirPaginaAjustes(),
+    );
   }
 
   Widget _construirPaginaAjustes() {
@@ -6734,14 +6840,34 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ],
                 ),
                 const SizedBox(height: 16),
-                _tarjetaTipo(
-                  icono: Icons.swap_horiz_rounded,
-                  titulo: 'Transferencia',
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _mostrarFormulario(tipo: 'Transferencia');
-                  },
+                Row(
+                  children: [
+                    Expanded(
+                      child: _tarjetaTipo(
+                        icono: Icons.swap_horiz_rounded,
+                        titulo: 'Transferencia',
+                        color: Colors.blue,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _mostrarFormulario(tipo: 'Transferencia');
+                        },
+                      ),
+                    ),
+                    if (widget.settingsController.settings.hasCreditCard) ...[
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _tarjetaTipo(
+                          icono: Icons.auto_awesome,
+                          titulo: 'Simular Compra',
+                          color: Colors.deepPurple,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _mostrarSimuladorCompra();
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
