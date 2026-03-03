@@ -40,11 +40,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       .stream(primaryKey: ['id'])
       .order('fecha', ascending: false);
 
-  final _metasStream = supabase
-      .from('metas_ahorro')
-      .stream(primaryKey: ['id'])
-      .order('created_at', ascending: false);
-
   final _porCobrarStream = supabase
       .from('gastos_compartidos')
       .stream(primaryKey: ['id'])
@@ -67,6 +62,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   List<String> _cuentasSeleccionadas = [];
   bool _mostrarPorcentaje = false;
   List<Map<String, dynamic>> _recurrentes = [];
+  int _metasRefreshNonce = 0;
 
   // Search & sort state
   final _busquedaController = TextEditingController();
@@ -777,6 +773,23 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   int _parseMonto(String value) {
     final onlyNumbers = value.replaceAll(RegExp(r'[^0-9-]'), '');
     return int.tryParse(onlyNumbers) ?? 0;
+  }
+
+  Stream<List<Map<String, dynamic>>> _streamMetasUsuario() {
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      return Stream.value(const <Map<String, dynamic>>[]);
+    }
+    return supabase
+        .from('metas_ahorro')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
+  }
+
+  void _forzarRefrescoMetas() {
+    if (!mounted) return;
+    setState(() => _metasRefreshNonce++);
   }
 
   void _cambiarMes(int salto) {
@@ -4638,7 +4651,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _metasStream,
+      key: ValueKey(_metasRefreshNonce),
+      stream: _streamMetasUsuario(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
@@ -5125,7 +5139,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 })
                                 .eq('id', meta['id'])
                                 .then(
-                                  (_) => _mostrarSnack('¡Meta completada! 🎉'),
+                                  (_) {
+                                    _forzarRefrescoMetas();
+                                    _mostrarSnack('¡Meta completada! 🎉');
+                                  },
                                 );
                           case 'reactivate':
                             supabase
@@ -5135,7 +5152,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   'updated_at': DateTime.now()
                                       .toIso8601String(),
                                 })
-                                .eq('id', meta['id']);
+                                .eq('id', meta['id'])
+                                .then((_) => _forzarRefrescoMetas());
                           case 'delete':
                             _confirmarEliminarMeta(meta);
                         }
@@ -5324,6 +5342,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           'updated_at': DateTime.now().toIso8601String(),
                         })
                         .eq('id', meta['id']);
+                    _forzarRefrescoMetas();
                     _mostrarSnack('¡Meta completada! 🎉');
                   },
                 ),
@@ -5340,6 +5359,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           'updated_at': DateTime.now().toIso8601String(),
                         })
                         .eq('id', meta['id']);
+                    _forzarRefrescoMetas();
                   },
                 ),
               ListTile(
@@ -5382,6 +5402,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
     if (confirm == true) {
       await supabase.from('metas_ahorro').delete().eq('id', meta['id']);
+      _forzarRefrescoMetas();
       _mostrarSnack('Meta eliminada');
     }
   }
@@ -5409,6 +5430,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               'user_id': supabase.auth.currentUser!.id,
             });
           }
+          _forzarRefrescoMetas();
         },
       ),
     );
@@ -5503,29 +5525,55 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   onPressed: () async {
                     final monto = int.tryParse(controller.text.trim()) ?? 0;
                     if (monto <= 0) return;
-                    final nuevoMonto = montoActual + monto;
+                    final user = supabase.auth.currentUser;
+                    if (user == null) {
+                      _mostrarSnack('No hay sesión activa');
+                      return;
+                    }
+                    final montoAplicado = monto > restante && restante > 0
+                        ? restante
+                        : monto;
+                    final nuevoMonto = montoActual + montoAplicado;
                     final completada = nuevoMonto >= montoMeta;
-                    await supabase
-                        .from('metas_ahorro')
-                        .update({
-                          'monto_actual': nuevoMonto,
-                          'completada': completada,
-                          'updated_at': DateTime.now().toIso8601String(),
-                        })
-                        .eq('id', meta['id']);
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
+                    try {
+                      await supabase
+                          .from('metas_ahorro')
+                          .update({
+                            'monto_actual': nuevoMonto,
+                            'completada': completada,
+                            'updated_at': DateTime.now().toIso8601String(),
+                          })
+                          .eq('id', meta['id']);
+
+                      // El abono impacta la liquidez como salida de débito.
+                      await supabase.from('gastos').insert({
+                        'user_id': user.id,
+                        'fecha': DateTime.now().toIso8601String(),
+                        'item': 'Abono meta: ${meta['nombre']}',
+                        'detalle': 'Aporte a meta de ahorro',
+                        'monto': montoAplicado,
+                        'categoria': 'Transferencia',
+                        'cuenta': widget.settingsController.settings.defaultAccount,
+                        'tipo': 'Gasto',
+                        'metodo_pago': 'Debito',
+                      });
+
+                      _forzarRefrescoMetas();
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
                       if (completada) {
-                        _mostrarSnack(
-                          '🎉 ¡Meta "${meta['nombre']}" completada!',
-                        );
+                        _mostrarSnack('🎉 ¡Meta "${meta['nombre']}" completada!');
                       } else {
                         _mostrarSnack(
-                          'Abono de ${_textoMonto(monto)} registrado ✓',
+                          'Abono de ${_textoMonto(montoAplicado)} registrado ✓',
                         );
                       }
+                    } catch (e) {
+                      _mostrarSnack('No se pudo registrar el abono: $e');
+                    } finally {
+                      controller.dispose();
                     }
-                    controller.dispose();
                   },
                   style: FilledButton.styleFrom(
                     shape: RoundedRectangleBorder(
@@ -5557,6 +5605,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       builder: (context, _) {
         final settings = widget.settingsController.settings;
         final globalBudget = settings.globalMonthlyBudget ?? 0;
+        var totalPresupuestoCategorias = 0;
+        for (final cat in settings.activeCategories) {
+          totalPresupuestoCategorias += settings.categoryBudgets[cat] ?? 0;
+        }
+        final presupuestoBase = globalBudget > 0
+            ? globalBudget
+            : totalPresupuestoCategorias;
+        final usaPresupuestoCategorias =
+            globalBudget <= 0 && totalPresupuestoCategorias > 0;
+        final tienePresupuestoDefinido = presupuestoBase > 0;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
         // Modo Edicion: Logica de distribucion (Slider/Inputs)
@@ -5774,16 +5832,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         final gastoPorCategoria = <String, int>{};
 
         for (final mov in datosDelMes) {
-          if (mov['tipo'] == 'Gasto' && mov['categoria'] != 'Transferencia') {
-            final monto = (mov['monto'] as num? ?? 0).toInt();
-            gastoTotalMes += monto;
-            final cat = (mov['categoria'] ?? 'Varios').toString();
-            gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
+          if (mov['tipo'] != 'Gasto') continue;
+          final categoria = (mov['categoria'] ?? '').toString();
+          if (categoria == 'Transferencia' ||
+              categoria == 'Ajuste' ||
+              categoria == 'Cuentas por Cobrar') {
+            continue;
           }
+          final monto = (mov['monto'] as num? ?? 0).toInt();
+          gastoTotalMes += monto;
+          final cat = categoria.isEmpty ? 'Varios' : categoria;
+          gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
         }
 
-        final porcentajeGlobalEjecutado = globalBudget > 0
-            ? (gastoTotalMes / globalBudget).clamp(0.0, 1.0)
+        final porcentajeGlobalEjecutado = presupuestoBase > 0
+            ? (gastoTotalMes / presupuestoBase).clamp(0.0, 1.0)
             : 0.0;
 
         return SingleChildScrollView(
@@ -5844,9 +5907,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Gasto Total vs Presupuesto',
-                      style: TextStyle(color: Colors.white70),
+                    Text(
+                      tienePresupuestoDefinido
+                          ? (usaPresupuestoCategorias
+                                ? 'Gasto Total vs Presupuesto por categorias'
+                                : 'Gasto Total vs Presupuesto')
+                          : 'Gasto Total del mes',
+                      style: const TextStyle(color: Colors.white70),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -5860,18 +5927,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             color: Colors.white,
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4, left: 6),
-                          child: Text(
-                            '/ ${_textoMonto(globalBudget, ocultable: false)}',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
+                        if (tienePresupuestoDefinido)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4, left: 6),
+                            child: Text(
+                              '/ ${_textoMonto(presupuestoBase, ocultable: false)}',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
+                    if (!tienePresupuestoDefinido)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Sin presupuesto asignado (global ni por categoria)',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
@@ -5886,7 +5962,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Align(
                       alignment: Alignment.centerRight,
                       child: Text(
-                        '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado',
+                        tienePresupuestoDefinido
+                            ? '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado'
+                            : 'Configura presupuestos para ver avance',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -7981,6 +8059,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final diasAlVencimiento = nextDue
         .difference(DateTime(now.year, now.month, now.day))
         .inDays;
+    final esMesActualVisualizado =
+        _mesVisualizado.year == now.year && _mesVisualizado.month == now.month;
+    final vencimientoMesActual = _fechaMesSegura(
+      now.year,
+      now.month,
+      dueDay,
+      finDeDia: true,
+    );
+    final mostrarFacturadosYAbonos =
+        esMesActualVisualizado && !now.isAfter(vencimientoMesActual);
 
     // Filtrar movimientos de cada ciclo para las listas de detalle
     final movimientosPorFacturar = creditExpenses.where((m) {
@@ -8005,6 +8093,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final fb = DateTime.parse((b['fecha'] ?? '').toString());
       return fb.compareTo(fa);
     });
+    final movimientosFacturadosVisibles = mostrarFacturadosYAbonos
+        ? movimientosFacturados
+        : <Map<String, dynamic>>[];
+    final movimientosAbonosVisibles = mostrarFacturadosYAbonos
+        ? movimientosAbonos
+        : <Map<String, dynamic>>[];
+    final facturadoPendienteVisible = mostrarFacturadosYAbonos
+        ? facturadoPendiente
+        : 0;
+    final pagosPeriodoVisible = mostrarFacturadosYAbonos ? pagosPeriodo : 0;
 
     // Calcular fechas para el mes visualizado
     final firstDayOfMonth = DateTime(
@@ -8155,7 +8253,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _textoMonto(facturadoPendiente),
+                        _textoMonto(facturadoPendienteVisible),
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -8166,7 +8264,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Pagos/abonos: ${_textoMonto(pagosPeriodo)}',
+                        'Pagos/abonos: ${_textoMonto(pagosPeriodoVisible)}',
                         style: TextStyle(
                           fontSize: 10,
                           color: Theme.of(context).brightness == Brightness.dark
@@ -8285,77 +8383,97 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             },
           ),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade800
-                    : Colors.grey.shade200,
+          if (mostrarFacturadosYAbonos)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.shade800
+                      : Colors.grey.shade200,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payments_outlined, color: Colors.teal.shade600),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Pagos de tarjeta',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Facturado pendiente: ${_textoMonto(facturadoPendienteVisible)}',
+                    style: TextStyle(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed:
+                            cuentasCredito.isEmpty ||
+                                facturadoPendienteVisible <= 0
+                            ? null
+                            : () => _mostrarDialogoAbonoTarjeta(
+                                cuentasCredito: cuentasCredito,
+                                itemAbono: _itemPagoFacturadoTarjeta,
+                                montoInicial: facturadoPendienteVisible,
+                                titulo: 'Pagar monto facturado',
+                              ),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Pagar facturado'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: cuentasCredito.isEmpty
+                            ? null
+                            : () => _mostrarDialogoAbonoTarjeta(
+                                cuentasCredito: cuentasCredito,
+                                itemAbono: _itemAbonoTarjeta,
+                                titulo: 'Registrar abono',
+                              ),
+                        icon: const Icon(Icons.add_card),
+                        label: const Text('Registrar abono'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.shade800
+                      : Colors.grey.shade200,
+                ),
+              ),
+              child: const Text(
+                'Facturados y abonos solo se muestran en el periodo actual antes del vencimiento.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.payments_outlined, color: Colors.teal.shade600),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Pagos de tarjeta',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Facturado pendiente: ${_textoMonto(facturadoPendiente)}',
-                  style: TextStyle(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey.shade300
-                        : Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed:
-                          cuentasCredito.isEmpty || facturadoPendiente <= 0
-                          ? null
-                          : () => _mostrarDialogoAbonoTarjeta(
-                              cuentasCredito: cuentasCredito,
-                              itemAbono: _itemPagoFacturadoTarjeta,
-                              montoInicial: facturadoPendiente,
-                              titulo: 'Pagar monto facturado',
-                            ),
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Pagar facturado'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: cuentasCredito.isEmpty
-                          ? null
-                          : () => _mostrarDialogoAbonoTarjeta(
-                              cuentasCredito: cuentasCredito,
-                              itemAbono: _itemAbonoTarjeta,
-                              titulo: 'Registrar abono',
-                            ),
-                      icon: const Icon(Icons.add_card),
-                      label: const Text('Registrar abono'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -8762,106 +8880,107 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   }).toList(),
           ),
 
-          // --- Detalle de movimientos facturados ---
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Row(
-              children: [
-                Icon(
-                  Icons.receipt,
-                  color: Colors.deepOrange.shade600,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Movimientos Facturados (${movimientosFacturados.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+          // --- Detalle de movimientos facturados y abonos ---
+          if (mostrarFacturadosYAbonos)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.receipt,
+                    color: Colors.deepOrange.shade600,
+                    size: 20,
                   ),
-                ),
-              ],
-            ),
-            children: movimientosFacturados.isEmpty
-                ? [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'Sin movimientos facturados',
-                        style: TextStyle(color: Colors.grey),
-                      ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Movimientos Facturados (${movimientosFacturadosVisibles.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ]
-                : movimientosFacturados.map((m) {
-                    final fecha = DateTime.parse(m['fecha']);
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
-                      title: Text(m['item'] ?? 'Sin nombre'),
-                      subtitle: Text(
-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
-                      ),
-                      trailing: Text(
-                        _textoMonto((m['monto'] as num).toInt()),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange.shade700,
+                  ),
+                ],
+              ),
+              children: movimientosFacturadosVisibles.isEmpty
+                  ? [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Sin movimientos facturados',
+                          style: TextStyle(color: Colors.grey),
                         ),
                       ),
-                    );
-                  }).toList(),
-          ),
-
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Row(
-              children: [
-                Icon(Icons.payments, color: Colors.green.shade700, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Abonos registrados (${movimientosAbonos.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+                    ]
+                  : movimientosFacturadosVisibles.map((m) {
+                      final fecha = DateTime.parse(m['fecha']);
+                      return ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
+                        title: Text(m['item'] ?? 'Sin nombre'),
+                        subtitle: Text(
+                          '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
+                        ),
+                        trailing: Text(
+                          _textoMonto((m['monto'] as num).toInt()),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepOrange.shade700,
+                          ),
+                        ),
+                      );
+                    }).toList(),
             ),
-            children: movimientosAbonos.isEmpty
-                ? [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'Sin abonos en el periodo actual',
-                        style: TextStyle(color: Colors.grey),
-                      ),
+          if (mostrarFacturadosYAbonos)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Row(
+                children: [
+                  Icon(Icons.payments, color: Colors.green.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Abonos registrados (${movimientosAbonosVisibles.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ]
-                : movimientosAbonos.map((m) {
-                    final fecha = DateTime.parse(m['fecha']);
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: Icon(
-                        Icons.arrow_circle_down_rounded,
-                        color: Colors.green.shade700,
-                        size: 20,
+                  ),
+                ],
+              ),
+              children: movimientosAbonosVisibles.isEmpty
+                  ? [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Sin abonos en el periodo actual',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                       ),
-                      title: Text(m['item'] ?? _itemAbonoTarjeta),
-                      subtitle: Text(
-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
-                      ),
-                      trailing: Text(
-                        _textoMonto((m['monto'] as num).toInt()),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
+                    ]
+                  : movimientosAbonosVisibles.map((m) {
+                      final fecha = DateTime.parse(m['fecha']);
+                      return ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        leading: Icon(
+                          Icons.arrow_circle_down_rounded,
                           color: Colors.green.shade700,
+                          size: 20,
                         ),
-                      ),
-                    );
-                  }).toList(),
-          ),
+                        title: Text(m['item'] ?? _itemAbonoTarjeta),
+                        subtitle: Text(
+                          '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
+                        ),
+                        trailing: Text(
+                          _textoMonto((m['monto'] as num).toInt()),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+            ),
 
           const SizedBox(height: 24),
           const Text(
