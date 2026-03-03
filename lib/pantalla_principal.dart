@@ -656,6 +656,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Future<void> guardarNuevo(String tipo, DateTime fecha) async {
+    HapticFeedback.lightImpact();
     final settings = widget.settingsController.settings;
     final monto = _parseMonto(_montoController.text);
     final categoria = _categoriaSeleccionada ?? 'Varios';
@@ -677,6 +678,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Future<void> actualizarExistente(int id, DateTime fecha) async {
+    HapticFeedback.lightImpact();
     final settings = widget.settingsController.settings;
     final monto = _parseMonto(_montoController.text);
     final categoria = _categoriaSeleccionada ?? 'Varios';
@@ -3767,7 +3769,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   title: const Text('Modo compacto'),
                   subtitle: const Text('Reduce espacios y altura de tarjetas'),
                   value: settings.compactMode,
-                  onChanged: widget.settingsController.setCompactMode,
+                  onChanged: (val) {
+                    HapticFeedback.lightImpact();
+                    widget.settingsController.setCompactMode(val);
+                  },
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -3776,7 +3781,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     'Enmascara valores en Inicio y Analisis',
                   ),
                   value: settings.hideAmounts,
-                  onChanged: widget.settingsController.setHideAmounts,
+                  onChanged: (val) {
+                    HapticFeedback.lightImpact();
+                    widget.settingsController.setHideAmounts(val);
+                  },
                 ),
               ],
             ),
