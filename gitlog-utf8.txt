@@ -1,0 +1,1307 @@
+commit 2eb51b4c43d4d8c47578f5f949808ea770d94e98
+Author: GuillermoTorrealba <gntorrealbam@gmail.com>
+Date:   Tue Mar 3 19:35:52 2026 -0300
+
+    correcion de errores interfaz
+
+diff --git a/lib/pantalla_principal.dart b/lib/pantalla_principal.dart
+index d173ea4..2dc74a2 100644
+--- a/lib/pantalla_principal.dart
++++ b/lib/pantalla_principal.dart
+@@ -1829,7 +1829,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 margin: EdgeInsets.symmetric(horizontal: margin),
+                 padding: const EdgeInsets.symmetric(vertical: 4),
+                 decoration: BoxDecoration(
+-                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                  color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                   borderRadius: BorderRadius.circular(12),
+                   border: Border.all(
+                     color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -2509,7 +2509,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     return Container(
+       margin: const EdgeInsets.only(bottom: 12),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -2823,13 +2823,208 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 fontStyle: FontStyle.italic,
+               ),
+             ),
++    }
++    final gastoDiarioPromedio = gastoMes / diasTranscurridos;
++    final ingresoDiarioPromedio = ingresoMes / diasTranscurridos;
++    final proyeccionIngreso = (ingresoDiarioPromedio * diasDelMes).round();
++    final proyeccionGasto = (gastoDiarioPromedio * diasDelMes).round();
++    final proyeccionFlujo = proyeccionIngreso - proyeccionGasto;
++
++    final serieFlujo = _calcularSerieFlujoCaja(todosLosDatos, meses: 6);
++    var sumaFlujo = 0;
++    var maxAbsFlujo = 1.0;
++    for (final punto in serieFlujo) {
++      final flujo = punto['flujo'] as int;
++      sumaFlujo += flujo;
++      final absFlujo = flujo.abs().toDouble();
++      if (absFlujo > maxAbsFlujo) {
++        maxAbsFlujo = absFlujo;
++      }
++    }
++    final flujoPromedio6Meses = (sumaFlujo / serieFlujo.length).round();
++
++    final categoriaTop = _obtenerCategoriaTop(datosDelMes);
++    final nombreCategoriaTop = categoriaTop['categoria'] as String;
++    final montoCategoriaTop = categoriaTop['monto'] as int;
++    final porcentajeCategoriaTop = categoriaTop['porcentaje'] as double;
++
++    final presupuestoGlobal = settings.globalMonthlyBudget;
++    final consumoPresupuesto =
++        presupuestoGlobal != null && presupuestoGlobal > 0
++        ? gastoMes / presupuestoGlobal
++        : null;
++    final cumplimientoMetaAhorro =
++        settings.savingsTargetPercent <= 0 || ingresoMes <= 0
++        ? null
++        : (tasaAhorro * 100) / settings.savingsTargetPercent;
++    final alertas = _generarAlertas(todosLosDatos);
++
++    // Calcular Dinero Libre Hoy solo si es el mes actual
++    Widget? tarjetaSupervivencia;
++    if (esMesActual) {
++      final datosFiltradosSupervivencia = todosLosDatos.where((mov) {
++        final cuenta = (mov['cuenta'] ?? '').toString();
++        return _cuentasSeleccionadas.contains(cuenta);
++      }).toList();
++
++      var saldoDebito = 0;
++      var deudaCredito = 0;
++      for (final mov in datosFiltradosSupervivencia) {
++        final m = (mov['monto'] as num? ?? 0).toInt();
++        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
++          if (mov['tipo'] == 'Gasto') {
++            deudaCredito += m;
++          } else {
++            deudaCredito -= m;
++          }
++        } else {
++          if (mov['tipo'] == 'Ingreso') {
++            saldoDebito += m;
++          } else {
++            saldoDebito -= m;
++          }
++        }
++      }
++
++      final dineroLibreHoy = saldoDebito - deudaCredito;
++      final diasRestantes = diasDelMes - hoy.day + 1; // +1 to include today
++      final presupuestoDiarioSugerido = diasRestantes > 0
++          ? (dineroLibreHoy / diasRestantes).round()
++          : 0;
++
++      tarjetaSupervivencia = Container(
++        margin: const EdgeInsets.only(bottom: 16),
++        padding: const EdgeInsets.all(20),
++        decoration: BoxDecoration(
++          gradient: LinearGradient(
++            colors: isDark
++                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
++                : [Colors.blue.shade50, Colors.blue.shade100.withAlpha(150)],
++            begin: Alignment.topLeft,
++            end: Alignment.bottomRight,
++          ),
++          borderRadius: BorderRadius.circular(20),
++          border: Border.all(
++            color: isDark
++                ? Colors.blue.shade700.withAlpha(100)
++                : Colors.blue.shade300,
++          ),
++          boxShadow: [
++            BoxShadow(
++              color: (isDark ? Colors.black : Colors.blue.shade200).withAlpha(
++                100,
++              ),
++              blurRadius: 10,
++              offset: const Offset(0, 4),
++            ),
++          ],
++        ),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            Row(
++              children: [
++                Icon(
++                  Icons.account_balance_wallet,
++                  color: isDark ? Colors.blueAccent : Colors.blue.shade700,
++                  size: 24,
++                ),
++                const SizedBox(width: 8),
++                Text(
++                  'Dinero Libre Hoy',
++                  style: TextStyle(
++                    fontSize: 16,
++                    fontWeight: FontWeight.w600,
++                    color: isDark ? Colors.blue.shade100 : Colors.blue.shade900,
++                  ),
++                ),
++              ],
++            ),
++            const SizedBox(height: 12),
++            Text(
++              _textoMonto(dineroLibreHoy),
++              style: TextStyle(
++                fontSize: 32,
++                fontWeight: FontWeight.bold,
++                color: isDark ? Colors.white : Colors.blue.shade900,
++              ),
++            ),
++            const SizedBox(height: 16),
++            Container(
++              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
++              decoration: BoxDecoration(
++                color: (isDark ? Colors.black : Colors.white).withAlpha(150),
++                borderRadius: BorderRadius.circular(12),
++              ),
++              child: Row(
++                mainAxisAlignment: MainAxisAlignment.spaceBetween,
++                children: [
++                  Column(
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    children: [
++                      Text(
++                        'Presupuesto Sugerido',
++                        style: TextStyle(
++                          fontSize: 12,
++                          color: isDark
++                              ? Colors.grey.shade400
++                              : Colors.grey.shade600,
++                        ),
++                      ),
++                      Text(
++                        '${_textoMonto(presupuestoDiarioSugerido)} / día',
++                        style: TextStyle(
++                          fontWeight: FontWeight.bold,
++                          color: isDark
++                              ? Colors.greenAccent.shade400
++                              : Colors.green.shade700,
++                        ),
++                      ),
++                    ],
++                  ),
++                  Column(
++                    crossAxisAlignment: CrossAxisAlignment.end,
++                    children: [
++                      Text(
++                        'Restante',
++                        style: TextStyle(
++                          fontSize: 12,
++                          color: isDark
++                              ? Colors.grey.shade400
++                              : Colors.grey.shade600,
++                        ),
++                      ),
++                      Text(
++                        '$diasRestantes días',
++                        style: TextStyle(
++                          fontWeight: FontWeight.bold,
++                          color: isDark
++                              ? Colors.grey.shade300
++                              : Colors.grey.shade800,
++                        ),
++                      ),
++                    ],
++                  ),
++                ],
++              ),
++            ),
++            const SizedBox(height: 8),
++            Text(
++              // Explicacion sutil
++              '(Calculado como Cuentas Débito - Pagos pendientes Tarjeta)',
++              style: TextStyle(
++                fontSize: 11,
++                color: isDark ? Colors.blue.shade200 : Colors.blue.shade800,
++                fontStyle: FontStyle.italic,
++              ),
++            ),
+           ],
+         ),
+       );
+     }
+ 
+     return SingleChildScrollView(
+-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
++      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+       child: Column(
+         crossAxisAlignment: CrossAxisAlignment.start,
+         children: [
+@@ -2838,7 +3033,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+           Container(
+             padding: const EdgeInsets.symmetric(vertical: 4),
+             decoration: BoxDecoration(
+-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++              color: isDark ? const Color(0xFF1E2433) : Colors.white,
+               borderRadius: BorderRadius.circular(12),
+               border: Border.all(
+                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -3411,7 +3606,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -3822,7 +4017,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+   }) {
+     return Card(
+       elevation: 0,
+-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+       shape: RoundedRectangleBorder(
+         borderRadius: BorderRadius.circular(16),
+         side: BorderSide(
+@@ -4866,7 +5061,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       decoration: BoxDecoration(
+         gradient: LinearGradient(
+           colors: isDark
+-              ? [const Color(0xFF1A2E2A), const Color(0xFF1E1E1E)]
++              ? [const Color(0xFF1A2E2A), const Color(0xFF1E2433)]
+               : [Colors.teal.shade50, Colors.white],
+           begin: Alignment.topLeft,
+           end: Alignment.bottomRight,
+@@ -4993,7 +5188,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+ 
+     return Container(
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(24),
+         border: Border.all(
+           color: completada
+@@ -5671,7 +5866,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 Container(
+                   padding: const EdgeInsets.all(20),
+                   decoration: BoxDecoration(
+-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                    color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                     borderRadius: BorderRadius.circular(20),
+                     boxShadow: [
+                       BoxShadow(
+@@ -5760,7 +5955,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   'Asignar por Categoría',
+                   style: TextStyle(
+                     fontSize: 16,
+-                    fontWeight: FontWeight.bold,
++                    fontWeight: FontWeight.w600,
+                     color: Colors.grey,
+                   ),
+                 ),
+@@ -5968,200 +6163,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                         style: const TextStyle(
+                           color: Colors.white,
+                           fontSize: 12,
+-                          fontWeight: FontWeight.bold,
+-                        ),
+-                      ),
+-                    ),
+-                  ],
+-                ),
+-              ),
+-
+-              const SizedBox(height: 24),
+-              const Text(
+-                'Progreso por Categoría',
+-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+-              ),
+-              const SizedBox(height: 12),
+-
+-              // Lista Progreso Categorias
+-              ...settings.activeCategories.map((categoria) {
+-                final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+-                if (presupuestoCat == 0) {
+-                  return const SizedBox.shrink();
+-                }
+-
+-                final gastado = gastoPorCategoria[categoria] ?? 0;
+-                final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
+-                final saldoRestante = presupuestoCat - gastado;
+-
+-                Color colorStatus = Colors.green;
+-                if (progress > 1.0 || saldoRestante < 0) {
+-                  colorStatus = Colors.red;
+-                } else if (progress > 0.8) {
+-                  colorStatus = Colors.orange;
+-                }
+-
+-                final isDark = Theme.of(context).brightness == Brightness.dark;
+-
+-                return Container(
+-                  margin: const EdgeInsets.only(bottom: 12),
+-                  padding: const EdgeInsets.all(16),
+-                  decoration: BoxDecoration(
+-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+-                    borderRadius: BorderRadius.circular(16),
+-                    boxShadow: [
+-                      BoxShadow(
+-                        color: Colors.black.withAlpha(isDark ? 50 : 8),
+-                        blurRadius: 8,
+-                        offset: const Offset(0, 2),
+-                      ),
+-                    ],
+-                    border: isDark
+-                        ? Border.all(color: Colors.grey.shade800)
+-                        : null,
+-                  ),
+-                  child: Column(
+-                    children: [
+-                      Row(
+-                        children: [
+-                          _iconoCategoria(
+-                            categoria,
+-                            size: 20,
+-                            color: isDark
+-                                ? Colors.grey.shade400
+-                                : Colors.grey.shade700,
+-                          ),
+-                          const SizedBox(width: 12),
+-                          Expanded(
+-                            child: Text(
+-                              categoria,
+-                              style: const TextStyle(
+-                                fontWeight: FontWeight.w600,
+-                                fontSize: 15,
+-                              ),
+-                            ),
+-                          ),
+-                          Text(
+-                            _textoMonto(gastado, ocultable: false),
+-                            style: TextStyle(
+-                              fontWeight: FontWeight.bold,
+-                              color: saldoRestante < 0
+-                                  ? Colors.red
+-                                  : (isDark ? Colors.white : Colors.black87),
+-                            ),
+-                          ),
+-                          Text(
+-                            ' / ${_textoMonto(presupuestoCat, ocultable: false)}',
+-                            style: TextStyle(
+-                              color: isDark
+-                                  ? Colors.grey.shade500
+-                                  : Colors.grey.shade500,
+-                              fontSize: 12,
+-                            ),
+-                          ),
+-                        ],
+-                      ),
+-                      const SizedBox(height: 10),
+-                      ClipRRect(
+-                        borderRadius: BorderRadius.circular(6),
+-                        child: LinearProgressIndicator(
+-                          value: progress,
+-                          minHeight: 6,
+-                          backgroundColor: isDark
+-                              ? Colors.grey.shade800
+-                              : Colors.grey.shade100,
+-                          color: colorStatus,
+-                        ),
+-                      ),
+-                      const SizedBox(height: 6),
+-                      Align(
+-                        alignment: Alignment.centerRight,
+-                        child: Text(
+-                          saldoRestante >= 0
+-                              ? 'Quedan ${_textoMonto(saldoRestante, ocultable: false)}'
+-                              : 'Excedido por ${_textoMonto(saldoRestante.abs(), ocultable: false)}',
+-                          style: TextStyle(
+-                            color: saldoRestante >= 0
+-                                ? (isDark
+-                                      ? Colors.grey.shade400
+-                                      : Colors.grey.shade600)
+-                                : Colors.red,
+-                            fontSize: 11,
+-                            fontWeight: FontWeight.w500,
+-                          ),
+-                        ),
+-                      ),
+-                    ],
+-                  ),
+-                );
+-              }),
+-
+-              const SizedBox(height: 24),
+-              if (settings.activeCategories.any(
+-                (c) => (settings.categoryBudgets[c] ?? 0) == 0,
+-              ))
+-                Center(
+-                  child: TextButton.icon(
+-                    icon: const Icon(Icons.info_outline, size: 16),
+-                    label: const Text(
+-                      'Hay categorías sin presupuesto asignado',
+-                    ),
+-                    onPressed: () =>
+-                        setState(() => _editandoPresupuesto = true),
+-                  ),
+-                ),
+-            ],
+-          ),
+-        );
+-      },
+-    );
+-  }
+-
+-  Widget _seccionAjustes({
+-    required String titulo,
+-    required List<Widget> children,
+-    IconData? icono,
+-  }) {
+-    final isDark = Theme.of(context).brightness == Brightness.dark;
+-    // En modo oscuro usamos un gris oscuro (surface) y en claro blanco
+-    final bgColor = isDark
+-        ? Theme.of(context).colorScheme.surfaceContainerHighest
+-        : Colors.white;
+-    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+-
+-    return Card(
+-      elevation: 0,
+-      margin: const EdgeInsets.only(bottom: 12),
+-      color: bgColor,
+-      shape: RoundedRectangleBorder(
+-        borderRadius: BorderRadius.circular(16),
+-        side: BorderSide(color: borderColor),
+-      ),
+-      clipBehavior: Clip.antiAlias,
+-      child: Theme(
+-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+-        child: ExpansionTile(
+-          leading: icono != null
+-              ? Icon(icono, color: Theme.of(context).colorScheme.primary)
+-              : null,
+-          title: Text(
+-            titulo,
+-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+-          ),
+-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+-          backgroundColor: bgColor,
+-          collapsedBackgroundColor: bgColor,
+-          shape: const Border(),
+-          collapsedShape: const Border(),
+-          children: children,
+-        ),
+-      ),
+-    );
+-  }
+-
+-  Future<String?> _pedirTexto({
+-    required String titulo,
+-    required String etiqueta,
+     String? inicial,
+   }) async {
+     return showDialog<String>(
+@@ -7045,7 +7046,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+             padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+             decoration: BoxDecoration(
+               color: Theme.of(context).brightness == Brightness.dark
+-                  ? const Color(0xFF1E1E1E)
++                  ? const Color(0xFF1E2433)
+                   : Colors.white,
+               borderRadius: const BorderRadius.vertical(
+                 top: Radius.circular(32),
+@@ -9021,7 +9022,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+         return Container(
+           padding: const EdgeInsets.all(24),
+           decoration: BoxDecoration(
+-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++            color: isDark ? const Color(0xFF1E2433) : Colors.white,
+             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+           ),
+           child: Column(
+@@ -9259,7 +9260,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+               Card(
+                 margin: EdgeInsets.zero,
+                 elevation: 0,
+-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                 shape: RoundedRectangleBorder(
+                   borderRadius: BorderRadius.circular(12),
+                   side: BorderSide(
+@@ -9333,7 +9334,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       margin: const EdgeInsets.only(bottom: 12),
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -10689,7 +10690,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+                   Container(
+                     width: double.infinity,
+                     decoration: BoxDecoration(
+-                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                       borderRadius: BorderRadius.circular(12),
+                       border: Border.all(
+                         color: isDark
+@@ -10941,7 +10942,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+         hintText: hint,
+         prefixIcon: Icon(icon, size: 20),
+         filled: true,
+-        fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        fillColor: isDark ? const Color(0xFF1E2433) : Colors.white,
+         border: OutlineInputBorder(
+           borderRadius: BorderRadius.circular(12),
+           borderSide: BorderSide(
+@@ -10973,7 +10974,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11104,7 +11105,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11237,7 +11238,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11566,7 +11567,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+
+commit 08023f94132c8e0886e65c3e04e16296966949eb
+Author: GuillermoTorrealba <gntorrealbam@gmail.com>
+Date:   Mon Mar 2 23:49:22 2026 -0300
+
+    cambios y mejoras en metas, credito y presupuesto
+
+diff --git a/lib/pantalla_principal.dart b/lib/pantalla_principal.dart
+index df087c2..d173ea4 100644
+--- a/lib/pantalla_principal.dart
++++ b/lib/pantalla_principal.dart
+@@ -40,11 +40,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       .stream(primaryKey: ['id'])
+       .order('fecha', ascending: false);
+ 
+-  final _metasStream = supabase
+-      .from('metas_ahorro')
+-      .stream(primaryKey: ['id'])
+-      .order('created_at', ascending: false);
+-
+   final _porCobrarStream = supabase
+       .from('gastos_compartidos')
+       .stream(primaryKey: ['id'])
+@@ -67,6 +62,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+   List<String> _cuentasSeleccionadas = [];
+   bool _mostrarPorcentaje = false;
+   List<Map<String, dynamic>> _recurrentes = [];
++  int _metasRefreshNonce = 0;
+ 
+   // Search & sort state
+   final _busquedaController = TextEditingController();
+@@ -779,6 +775,23 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     return int.tryParse(onlyNumbers) ?? 0;
+   }
+ 
++  Stream<List<Map<String, dynamic>>> _streamMetasUsuario() {
++    final user = supabase.auth.currentUser;
++    if (user == null) {
++      return Stream.value(const <Map<String, dynamic>>[]);
++    }
++    return supabase
++        .from('metas_ahorro')
++        .stream(primaryKey: ['id'])
++        .eq('user_id', user.id)
++        .order('created_at', ascending: false);
++  }
++
++  void _forzarRefrescoMetas() {
++    if (!mounted) return;
++    setState(() => _metasRefreshNonce++);
++  }
++
+   void _cambiarMes(int salto) {
+     setState(() {
+       _mesVisualizado = DateTime(
+@@ -4638,7 +4651,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     final isDark = Theme.of(context).brightness == Brightness.dark;
+ 
+     return StreamBuilder<List<Map<String, dynamic>>>(
+-      stream: _metasStream,
++      key: ValueKey(_metasRefreshNonce),
++      stream: _streamMetasUsuario(),
+       builder: (context, snapshot) {
+         if (snapshot.hasError) {
+           return Center(child: Text('Error: ${snapshot.error}'));
+@@ -5125,7 +5139,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                                 })
+                                 .eq('id', meta['id'])
+                                 .then(
+-                                  (_) => _mostrarSnack('¡Meta completada! 🎉'),
++                                  (_) {
++                                    _forzarRefrescoMetas();
++                                    _mostrarSnack('¡Meta completada! 🎉');
++                                  },
+                                 );
+                           case 'reactivate':
+                             supabase
+@@ -5135,7 +5152,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                                   'updated_at': DateTime.now()
+                                       .toIso8601String(),
+                                 })
+-                                .eq('id', meta['id']);
++                                .eq('id', meta['id'])
++                                .then((_) => _forzarRefrescoMetas());
+                           case 'delete':
+                             _confirmarEliminarMeta(meta);
+                         }
+@@ -5324,6 +5342,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                           'updated_at': DateTime.now().toIso8601String(),
+                         })
+                         .eq('id', meta['id']);
++                    _forzarRefrescoMetas();
+                     _mostrarSnack('¡Meta completada! 🎉');
+                   },
+                 ),
+@@ -5340,6 +5359,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                           'updated_at': DateTime.now().toIso8601String(),
+                         })
+                         .eq('id', meta['id']);
++                    _forzarRefrescoMetas();
+                   },
+                 ),
+               ListTile(
+@@ -5382,6 +5402,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     );
+     if (confirm == true) {
+       await supabase.from('metas_ahorro').delete().eq('id', meta['id']);
++      _forzarRefrescoMetas();
+       _mostrarSnack('Meta eliminada');
+     }
+   }
+@@ -5409,6 +5430,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+               'user_id': supabase.auth.currentUser!.id,
+             });
+           }
++          _forzarRefrescoMetas();
+         },
+       ),
+     );
+@@ -5503,29 +5525,55 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   onPressed: () async {
+                     final monto = int.tryParse(controller.text.trim()) ?? 0;
+                     if (monto <= 0) return;
+-                    final nuevoMonto = montoActual + monto;
++                    final user = supabase.auth.currentUser;
++                    if (user == null) {
++                      _mostrarSnack('No hay sesión activa');
++                      return;
++                    }
++                    final montoAplicado = monto > restante && restante > 0
++                        ? restante
++                        : monto;
++                    final nuevoMonto = montoActual + montoAplicado;
+                     final completada = nuevoMonto >= montoMeta;
+-                    await supabase
+-                        .from('metas_ahorro')
+-                        .update({
+-                          'monto_actual': nuevoMonto,
+-                          'completada': completada,
+-                          'updated_at': DateTime.now().toIso8601String(),
+-                        })
+-                        .eq('id', meta['id']);
+-                    if (ctx.mounted) {
+-                      Navigator.pop(ctx);
++                    try {
++                      await supabase
++                          .from('metas_ahorro')
++                          .update({
++                            'monto_actual': nuevoMonto,
++                            'completada': completada,
++                            'updated_at': DateTime.now().toIso8601String(),
++                          })
++                          .eq('id', meta['id']);
++
++                      // El abono impacta la liquidez como salida de débito.
++                      await supabase.from('gastos').insert({
++                        'user_id': user.id,
++                        'fecha': DateTime.now().toIso8601String(),
++                        'item': 'Abono meta: ${meta['nombre']}',
++                        'detalle': 'Aporte a meta de ahorro',
++                        'monto': montoAplicado,
++                        'categoria': 'Transferencia',
++                        'cuenta': widget.settingsController.settings.defaultAccount,
++                        'tipo': 'Gasto',
++                        'metodo_pago': 'Debito',
++                      });
++
++                      _forzarRefrescoMetas();
++                      if (ctx.mounted) {
++                        Navigator.pop(ctx);
++                      }
+                       if (completada) {
+-                        _mostrarSnack(
+-                          '🎉 ¡Meta "${meta['nombre']}" completada!',
+-                        );
++                        _mostrarSnack('🎉 ¡Meta "${meta['nombre']}" completada!');
+                       } else {
+                         _mostrarSnack(
+-                          'Abono de ${_textoMonto(monto)} registrado ✓',
++                          'Abono de ${_textoMonto(montoAplicado)} registrado ✓',
+                         );
+                       }
++                    } catch (e) {
++                      _mostrarSnack('No se pudo registrar el abono: $e');
++                    } finally {
++                      controller.dispose();
+                     }
+-                    controller.dispose();
+                   },
+                   style: FilledButton.styleFrom(
+                     shape: RoundedRectangleBorder(
+@@ -5557,6 +5605,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       builder: (context, _) {
+         final settings = widget.settingsController.settings;
+         final globalBudget = settings.globalMonthlyBudget ?? 0;
++        var totalPresupuestoCategorias = 0;
++        for (final cat in settings.activeCategories) {
++          totalPresupuestoCategorias += settings.categoryBudgets[cat] ?? 0;
++        }
++        final presupuestoBase = globalBudget > 0
++            ? globalBudget
++            : totalPresupuestoCategorias;
++        final usaPresupuestoCategorias =
++            globalBudget <= 0 && totalPresupuestoCategorias > 0;
++        final tienePresupuestoDefinido = presupuestoBase > 0;
+         final isDark = Theme.of(context).brightness == Brightness.dark;
+ 
+         // Modo Edicion: Logica de distribucion (Slider/Inputs)
+@@ -5774,16 +5832,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+         final gastoPorCategoria = <String, int>{};
+ 
+         for (final mov in datosDelMes) {
+-          if (mov['tipo'] == 'Gasto' && mov['categoria'] != 'Transferencia') {
+-            final monto = (mov['monto'] as num? ?? 0).toInt();
+-            gastoTotalMes += monto;
+-            final cat = (mov['categoria'] ?? 'Varios').toString();
+-            gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
++          if (mov['tipo'] != 'Gasto') continue;
++          final categoria = (mov['categoria'] ?? '').toString();
++          if (categoria == 'Transferencia' ||
++              categoria == 'Ajuste' ||
++              categoria == 'Cuentas por Cobrar') {
++            continue;
+           }
++          final monto = (mov['monto'] as num? ?? 0).toInt();
++          gastoTotalMes += monto;
++          final cat = categoria.isEmpty ? 'Varios' : categoria;
++          gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
+         }
+ 
+-        final porcentajeGlobalEjecutado = globalBudget > 0
+-            ? (gastoTotalMes / globalBudget).clamp(0.0, 1.0)
++        final porcentajeGlobalEjecutado = presupuestoBase > 0
++            ? (gastoTotalMes / presupuestoBase).clamp(0.0, 1.0)
+             : 0.0;
+ 
+         return SingleChildScrollView(
+@@ -5844,9 +5907,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 child: Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+-                    const Text(
+-                      'Gasto Total vs Presupuesto',
+-                      style: TextStyle(color: Colors.white70),
++                    Text(
++                      tienePresupuestoDefinido
++                          ? (usaPresupuestoCategorias
++                                ? 'Gasto Total vs Presupuesto por categorias'
++                                : 'Gasto Total vs Presupuesto')
++                          : 'Gasto Total del mes',
++                      style: const TextStyle(color: Colors.white70),
+                     ),
+                     const SizedBox(height: 8),
+                     Row(
+@@ -5860,18 +5927,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                             color: Colors.white,
+                           ),
+                         ),
+-                        Padding(
+-                          padding: const EdgeInsets.only(bottom: 4, left: 6),
+-                          child: Text(
+-                            '/ ${_textoMonto(globalBudget, ocultable: false)}',
+-                            style: const TextStyle(
+-                              color: Colors.white70,
+-                              fontSize: 14,
++                        if (tienePresupuestoDefinido)
++                          Padding(
++                            padding: const EdgeInsets.only(bottom: 4, left: 6),
++                            child: Text(
++                              '/ ${_textoMonto(presupuestoBase, ocultable: false)}',
++                              style: const TextStyle(
++                                color: Colors.white70,
++                                fontSize: 14,
++                              ),
+                             ),
+                           ),
+-                        ),
+                       ],
+                     ),
++                    if (!tienePresupuestoDefinido)
++                      const Padding(
++                        padding: EdgeInsets.only(top: 4),
++                        child: Text(
++                          'Sin presupuesto asignado (global ni por categoria)',
++                          style: TextStyle(color: Colors.white70, fontSize: 12),
++                        ),
++                      ),
+                     const SizedBox(height: 16),
+                     ClipRRect(
+                       borderRadius: BorderRadius.circular(10),
+@@ -5886,7 +5962,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                     Align(
+                       alignment: Alignment.centerRight,
+                       child: Text(
+-                        '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado',
++                        tienePresupuestoDefinido
++                            ? '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado'
++                            : 'Configura presupuestos para ver avance',
+                         style: const TextStyle(
+                           color: Colors.white,
+                           fontSize: 12,
+@@ -7981,6 +8059,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     final diasAlVencimiento = nextDue
+         .difference(DateTime(now.year, now.month, now.day))
+         .inDays;
++    final esMesActualVisualizado =
++        _mesVisualizado.year == now.year && _mesVisualizado.month == now.month;
++    final vencimientoMesActual = _fechaMesSegura(
++      now.year,
++      now.month,
++      dueDay,
++      finDeDia: true,
++    );
++    final mostrarFacturadosYAbonos =
++        esMesActualVisualizado && !now.isAfter(vencimientoMesActual);
+ 
+     // Filtrar movimientos de cada ciclo para las listas de detalle
+     final movimientosPorFacturar = creditExpenses.where((m) {
+@@ -8005,6 +8093,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       final fb = DateTime.parse((b['fecha'] ?? '').toString());
+       return fb.compareTo(fa);
+     });
++    final movimientosFacturadosVisibles = mostrarFacturadosYAbonos
++        ? movimientosFacturados
++        : <Map<String, dynamic>>[];
++    final movimientosAbonosVisibles = mostrarFacturadosYAbonos
++        ? movimientosAbonos
++        : <Map<String, dynamic>>[];
++    final facturadoPendienteVisible = mostrarFacturadosYAbonos
++        ? facturadoPendiente
++        : 0;
++    final pagosPeriodoVisible = mostrarFacturadosYAbonos ? pagosPeriodo : 0;
+ 
+     // Calcular fechas para el mes visualizado
+     final firstDayOfMonth = DateTime(
+@@ -8155,7 +8253,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                       ),
+                       const SizedBox(height: 4),
+                       Text(
+-                        _textoMonto(facturadoPendiente),
++                        _textoMonto(facturadoPendienteVisible),
+                         style: TextStyle(
+                           fontSize: 20,
+                           fontWeight: FontWeight.bold,
+@@ -8166,7 +8264,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                       ),
+                       const SizedBox(height: 2),
+                       Text(
+-                        'Pagos/abonos: ${_textoMonto(pagosPeriodo)}',
++                        'Pagos/abonos: ${_textoMonto(pagosPeriodoVisible)}',
+                         style: TextStyle(
+                           fontSize: 10,
+                           color: Theme.of(context).brightness == Brightness.dark
+@@ -8285,77 +8383,97 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+             },
+           ),
+           const SizedBox(height: 12),
+-          Container(
+-            width: double.infinity,
+-            padding: const EdgeInsets.all(14),
+-            decoration: BoxDecoration(
+-              color: Theme.of(context).cardColor,
+-              borderRadius: BorderRadius.circular(14),
+-              border: Border.all(
+-                color: Theme.of(context).brightness == Brightness.dark
+-                    ? Colors.grey.shade800
+-                    : Colors.grey.shade200,
++          if (mostrarFacturadosYAbonos)
++            Container(
++              width: double.infinity,
++              padding: const EdgeInsets.all(14),
++              decoration: BoxDecoration(
++                color: Theme.of(context).cardColor,
++                borderRadius: BorderRadius.circular(14),
++                border: Border.all(
++                  color: Theme.of(context).brightness == Brightness.dark
++                      ? Colors.grey.shade800
++                      : Colors.grey.shade200,
++                ),
+               ),
+-            ),
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.start,
+-              children: [
+-                Row(
+-                  children: [
+-                    Icon(Icons.payments_outlined, color: Colors.teal.shade600),
+-                    const SizedBox(width: 8),
+-                    const Text(
+-                      'Pagos de tarjeta',
+-                      style: TextStyle(
+-                        fontSize: 15,
+-                        fontWeight: FontWeight.w700,
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                children: [
++                  Row(
++                    children: [
++                      Icon(Icons.payments_outlined, color: Colors.teal.shade600),
++                      const SizedBox(width: 8),
++                      const Text(
++                        'Pagos de tarjeta',
++                        style: TextStyle(
++                          fontSize: 15,
++                          fontWeight: FontWeight.w700,
++                        ),
+                       ),
+-                    ),
+-                  ],
+-                ),
+-                const SizedBox(height: 6),
+-                Text(
+-                  'Facturado pendiente: ${_textoMonto(facturadoPendiente)}',
+-                  style: TextStyle(
+-                    color: Theme.of(context).brightness == Brightness.dark
+-                        ? Colors.grey.shade300
+-                        : Colors.grey.shade700,
++                    ],
+                   ),
+-                ),
+-                const SizedBox(height: 10),
+-                Wrap(
+-                  spacing: 8,
+-                  runSpacing: 8,
+-                  children: [
+-                    FilledButton.icon(
+-                      onPressed:
+-                          cuentasCredito.isEmpty || facturadoPendiente <= 0
+-                          ? null
+-                          : () => _mostrarDialogoAbonoTarjeta(
+-                              cuentasCredito: cuentasCredito,
+-                              itemAbono: _itemPagoFacturadoTarjeta,
+-                              montoInicial: facturadoPendiente,
+-                              titulo: 'Pagar monto facturado',
+-                            ),
+-                      icon: const Icon(Icons.check_circle_outline),
+-                      label: const Text('Pagar facturado'),
+-                    ),
+-                    OutlinedButton.icon(
+-                      onPressed: cuentasCredito.isEmpty
+-                          ? null
+-                          : () => _mostrarDialogoAbonoTarjeta(
+-                              cuentasCredito: cuentasCredito,
+-                              itemAbono: _itemAbonoTarjeta,
+-                              titulo: 'Registrar abono',
+-                            ),
+-                      icon: const Icon(Icons.add_card),
+-                      label: const Text('Registrar abono'),
++                  const SizedBox(height: 6),
++                  Text(
++                    'Facturado pendiente: ${_textoMonto(facturadoPendienteVisible)}',
++                    style: TextStyle(
++                      color: Theme.of(context).brightness == Brightness.dark
++                          ? Colors.grey.shade300
++                          : Colors.grey.shade700,
+                     ),
+-                  ],
++                  ),
++                  const SizedBox(height: 10),
++                  Wrap(
++                    spacing: 8,
++                    runSpacing: 8,
++                    children: [
++                      FilledButton.icon(
++                        onPressed:
++                            cuentasCredito.isEmpty ||
++                                facturadoPendienteVisible <= 0
++                            ? null
++                            : () => _mostrarDialogoAbonoTarjeta(
++                                cuentasCredito: cuentasCredito,
++                                itemAbono: _itemPagoFacturadoTarjeta,
++                                montoInicial: facturadoPendienteVisible,
++                                titulo: 'Pagar monto facturado',
++                              ),
++                        icon: const Icon(Icons.check_circle_outline),
++                        label: const Text('Pagar facturado'),
++                      ),
++                      OutlinedButton.icon(
++                        onPressed: cuentasCredito.isEmpty
++                            ? null
++                            : () => _mostrarDialogoAbonoTarjeta(
++                                cuentasCredito: cuentasCredito,
++                                itemAbono: _itemAbonoTarjeta,
++                                titulo: 'Registrar abono',
++                              ),
++                        icon: const Icon(Icons.add_card),
++                        label: const Text('Registrar abono'),
++                      ),
++                    ],
++                  ),
++                ],
++              ),
++            )
++          else
++            Container(
++              width: double.infinity,
++              padding: const EdgeInsets.all(14),
++              decoration: BoxDecoration(
++                color: Theme.of(context).cardColor,
++                borderRadius: BorderRadius.circular(14),
++                border: Border.all(
++                  color: Theme.of(context).brightness == Brightness.dark
++                      ? Colors.grey.shade800
++                      : Colors.grey.shade200,
+                 ),
+-              ],
++              ),
++              child: const Text(
++                'Facturados y abonos solo se muestran en el periodo actual antes del vencimiento.',
++                style: TextStyle(fontSize: 12, color: Colors.grey),
++              ),
+             ),
+-          ),
+           const SizedBox(height: 14),
+           Container(
+             padding: const EdgeInsets.symmetric(vertical: 4),
+@@ -8762,106 +8880,107 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   }).toList(),
+           ),
+ 
+-          // --- Detalle de movimientos facturados ---
+-          ExpansionTile(
+-            tilePadding: EdgeInsets.zero,
+-            title: Row(
+-              children: [
+-                Icon(
+-                  Icons.receipt,
+-                  color: Colors.deepOrange.shade600,
+-                  size: 20,
+-                ),
+-                const SizedBox(width: 8),
+-                Text(
+-                  'Movimientos Facturados (${movimientosFacturados.length})',
+-                  style: const TextStyle(
+-                    fontSize: 16,
+-                    fontWeight: FontWeight.bold,
++          // --- Detalle de movimientos facturados y abonos ---
++          if (mostrarFacturadosYAbonos)
++            ExpansionTile(
++              tilePadding: EdgeInsets.zero,
++              title: Row(
++                children: [
++                  Icon(
++                    Icons.receipt,
++                    color: Colors.deepOrange.shade600,
++                    size: 20,
+                   ),
+-                ),
+-              ],
+-            ),
+-            children: movimientosFacturados.isEmpty
+-                ? [
+-                    const Padding(
+-                      padding: EdgeInsets.symmetric(vertical: 8),
+-                      child: Text(
+-                        'Sin movimientos facturados',
+-                        style: TextStyle(color: Colors.grey),
+-                      ),
++                  const SizedBox(width: 8),
++                  Text(
++                    'Movimientos Facturados (${movimientosFacturadosVisibles.length})',
++                    style: const TextStyle(
++                      fontSize: 16,
++                      fontWeight: FontWeight.bold,
+                     ),
+-                  ]
+-                : movimientosFacturados.map((m) {
+-                    final fecha = DateTime.parse(m['fecha']);
+-                    return ListTile(
+-                      dense: true,
+-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+-                      leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
+-                      title: Text(m['item'] ?? 'Sin nombre'),
+-                      subtitle: Text(
+-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
+-                      ),
+-                      trailing: Text(
+-                        _textoMonto((m['monto'] as num).toInt()),
+-                        style: TextStyle(
+-                          fontWeight: FontWeight.bold,
+-                          color: Colors.deepOrange.shade700,
++                  ),
++                ],
++              ),
++              children: movimientosFacturadosVisibles.isEmpty
++                  ? [
++                      const Padding(
++                        padding: EdgeInsets.symmetric(vertical: 8),
++                        child: Text(
++                          'Sin movimientos facturados',
++                          style: TextStyle(color: Colors.grey),
+                         ),
+                       ),
+-                    );
+-                  }).toList(),
+-          ),
+-
+-          ExpansionTile(
+-            tilePadding: EdgeInsets.zero,
+-            title: Row(
+-              children: [
+-                Icon(Icons.payments, color: Colors.green.shade700, size: 20),
+-                const SizedBox(width: 8),
+-                Text(
+-                  'Abonos registrados (${movimientosAbonos.length})',
+-                  style: const TextStyle(
+-                    fontSize: 16,
+-                    fontWeight: FontWeight.bold,
+-                  ),
+-                ),
+-              ],
++                    ]
++                  : movimientosFacturadosVisibles.map((m) {
++                      final fecha = DateTime.parse(m['fecha']);
++                      return ListTile(
++                        dense: true,
++                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
++                        leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
++                        title: Text(m['item'] ?? 'Sin nombre'),
++                        subtitle: Text(
++                          '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
++                        ),
++                        trailing: Text(
++                          _textoMonto((m['monto'] as num).toInt()),
++                          style: TextStyle(
++                            fontWeight: FontWeight.bold,
++                            color: Colors.deepOrange.shade700,
++                          ),
++                        ),
++                      );
++                    }).toList(),
+             ),
+-            children: movimientosAbonos.isEmpty
+-                ? [
+-                    const Padding(
+-                      padding: EdgeInsets.symmetric(vertical: 8),
+-                      child: Text(
+-                        'Sin abonos en el periodo actual',
+-                        style: TextStyle(color: Colors.grey),
+-                      ),
++          if (mostrarFacturadosYAbonos)
++            ExpansionTile(
++              tilePadding: EdgeInsets.zero,
++              title: Row(
++                children: [
++                  Icon(Icons.payments, color: Colors.green.shade700, size: 20),
++                  const SizedBox(width: 8),
++                  Text(
++                    'Abonos registrados (${movimientosAbonosVisibles.length})',
++                    style: const TextStyle(
++                      fontSize: 16,
++                      fontWeight: FontWeight.bold,
+                     ),
+-                  ]
+-                : movimientosAbonos.map((m) {
+-                    final fecha = DateTime.parse(m['fecha']);
+-                    return ListTile(
+-                      dense: true,
+-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+-                      leading: Icon(
+-                        Icons.arrow_circle_down_rounded,
+-                        color: Colors.green.shade700,
+-                        size: 20,
+-                      ),
+-                      title: Text(m['item'] ?? _itemAbonoTarjeta),
+-                      subtitle: Text(
+-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
++                  ),
++                ],
++              ),
++              children: movimientosAbonosVisibles.isEmpty
++                  ? [
++                      const Padding(
++                        padding: EdgeInsets.symmetric(vertical: 8),
++                        child: Text(
++                          'Sin abonos en el periodo actual',
++                          style: TextStyle(color: Colors.grey),
++                        ),
+                       ),
+-                      trailing: Text(
+-                        _textoMonto((m['monto'] as num).toInt()),
+-                        style: TextStyle(
+-                          fontWeight: FontWeight.bold,
++                    ]
++                  : movimientosAbonosVisibles.map((m) {
++                      final fecha = DateTime.parse(m['fecha']);
++                      return ListTile(
++                        dense: true,
++                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
++                        leading: Icon(
++                          Icons.arrow_circle_down_rounded,
+                           color: Colors.green.shade700,
++                          size: 20,
+                         ),
+-                      ),
+-                    );
+-                  }).toList(),
+-          ),
++                        title: Text(m['item'] ?? _itemAbonoTarjeta),
++                        subtitle: Text(
++                          '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
++                        ),
++                        trailing: Text(
++                          _textoMonto((m['monto'] as num).toInt()),
++                          style: TextStyle(
++                            fontWeight: FontWeight.bold,
++                            color: Colors.green.shade700,
++                          ),
++                        ),
++                      );
++                    }).toList(),
++            ),
+ 
+           const SizedBox(height: 24),
+           const Text(
