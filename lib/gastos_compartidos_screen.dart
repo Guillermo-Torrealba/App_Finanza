@@ -126,26 +126,24 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
 
     final pendientes = _deudas.where((d) => d['pagado'] == false).toList();
     final pagados = _deudas.where((d) => d['pagado'] == true).toList();
-
     return DefaultTabController(
       length: 2,
-      child: Column(
-        children: [
-          const TabBar(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Gastos Compartidos'),
+          bottom: const TabBar(
             tabs: [
               Tab(text: 'Pendientes'),
               Tab(text: 'Pagados'),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildListaDeudas(pendientes, false),
-                _buildListaDeudas(pagados, true),
-              ],
-            ),
-          ),
-        ],
+        ),
+        body: TabBarView(
+          children: [
+            _buildListaDeudas(pendientes, false),
+            _buildListaDeudas(pagados, true),
+          ],
+        ),
       ),
     );
   }
@@ -167,7 +165,7 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
         final d = deudas[index];
         final gasto = d['gastos'];
         final Color cardColor = Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey.shade900
+            ? const Color(0xFF1E2433)
             : Colors.white;
 
         return Card(

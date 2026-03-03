@@ -1829,7 +1829,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 margin: EdgeInsets.symmetric(horizontal: margin),
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  color: isDark ? const Color(0xFF1E2433) : Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -2509,7 +2509,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -2823,13 +2823,208 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 fontStyle: FontStyle.italic,
               ),
             ),
+    }
+    final gastoDiarioPromedio = gastoMes / diasTranscurridos;
+    final ingresoDiarioPromedio = ingresoMes / diasTranscurridos;
+    final proyeccionIngreso = (ingresoDiarioPromedio * diasDelMes).round();
+    final proyeccionGasto = (gastoDiarioPromedio * diasDelMes).round();
+    final proyeccionFlujo = proyeccionIngreso - proyeccionGasto;
+
+    final serieFlujo = _calcularSerieFlujoCaja(todosLosDatos, meses: 6);
+    var sumaFlujo = 0;
+    var maxAbsFlujo = 1.0;
+    for (final punto in serieFlujo) {
+      final flujo = punto['flujo'] as int;
+      sumaFlujo += flujo;
+      final absFlujo = flujo.abs().toDouble();
+      if (absFlujo > maxAbsFlujo) {
+        maxAbsFlujo = absFlujo;
+      }
+    }
+    final flujoPromedio6Meses = (sumaFlujo / serieFlujo.length).round();
+
+    final categoriaTop = _obtenerCategoriaTop(datosDelMes);
+    final nombreCategoriaTop = categoriaTop['categoria'] as String;
+    final montoCategoriaTop = categoriaTop['monto'] as int;
+    final porcentajeCategoriaTop = categoriaTop['porcentaje'] as double;
+
+    final presupuestoGlobal = settings.globalMonthlyBudget;
+    final consumoPresupuesto =
+        presupuestoGlobal != null && presupuestoGlobal > 0
+        ? gastoMes / presupuestoGlobal
+        : null;
+    final cumplimientoMetaAhorro =
+        settings.savingsTargetPercent <= 0 || ingresoMes <= 0
+        ? null
+        : (tasaAhorro * 100) / settings.savingsTargetPercent;
+    final alertas = _generarAlertas(todosLosDatos);
+
+    // Calcular Dinero Libre Hoy solo si es el mes actual
+    Widget? tarjetaSupervivencia;
+    if (esMesActual) {
+      final datosFiltradosSupervivencia = todosLosDatos.where((mov) {
+        final cuenta = (mov['cuenta'] ?? '').toString();
+        return _cuentasSeleccionadas.contains(cuenta);
+      }).toList();
+
+      var saldoDebito = 0;
+      var deudaCredito = 0;
+      for (final mov in datosFiltradosSupervivencia) {
+        final m = (mov['monto'] as num? ?? 0).toInt();
+        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
+          if (mov['tipo'] == 'Gasto') {
+            deudaCredito += m;
+          } else {
+            deudaCredito -= m;
+          }
+        } else {
+          if (mov['tipo'] == 'Ingreso') {
+            saldoDebito += m;
+          } else {
+            saldoDebito -= m;
+          }
+        }
+      }
+
+      final dineroLibreHoy = saldoDebito - deudaCredito;
+      final diasRestantes = diasDelMes - hoy.day + 1; // +1 to include today
+      final presupuestoDiarioSugerido = diasRestantes > 0
+          ? (dineroLibreHoy / diasRestantes).round()
+          : 0;
+
+      tarjetaSupervivencia = Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
+                : [Colors.blue.shade50, Colors.blue.shade100.withAlpha(150)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.blue.shade700.withAlpha(100)
+                : Colors.blue.shade300,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (isDark ? Colors.black : Colors.blue.shade200).withAlpha(
+                100,
+              ),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet,
+                  color: isDark ? Colors.blueAccent : Colors.blue.shade700,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Dinero Libre Hoy',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.blue.shade100 : Colors.blue.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _textoMonto(dineroLibreHoy),
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.blue.shade900,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.black : Colors.white).withAlpha(150),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Presupuesto Sugerido',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        '${_textoMonto(presupuestoDiarioSugerido)} / día',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.greenAccent.shade400
+                              : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Restante',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        '$diasRestantes días',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              // Explicacion sutil
+              '(Calculado como Cuentas Débito - Pagos pendientes Tarjeta)',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.blue.shade200 : Colors.blue.shade800,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           ],
         ),
       );
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2838,7 +3033,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              color: isDark ? const Color(0xFF1E2433) : Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -3411,7 +3606,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -3822,7 +4017,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }) {
     return Card(
       elevation: 0,
-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      color: isDark ? const Color(0xFF1E2433) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -4866,7 +5061,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isDark
-              ? [const Color(0xFF1A2E2A), const Color(0xFF1E1E1E)]
+              ? [const Color(0xFF1A2E2A), const Color(0xFF1E2433)]
               : [Colors.teal.shade50, Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -4993,7 +5188,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: completada
@@ -5671,7 +5866,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    color: isDark ? const Color(0xFF1E2433) : Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
@@ -5760,7 +5955,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   'Asignar por Categoría',
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: Colors.grey,
                   ),
                 ),
@@ -5968,200 +6163,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              const Text(
-                'Progreso por Categoría',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              // Lista Progreso Categorias
-              ...settings.activeCategories.map((categoria) {
-                final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
-                if (presupuestoCat == 0) {
-                  return const SizedBox.shrink();
-                }
-
-                final gastado = gastoPorCategoria[categoria] ?? 0;
-                final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
-                final saldoRestante = presupuestoCat - gastado;
-
-                Color colorStatus = Colors.green;
-                if (progress > 1.0 || saldoRestante < 0) {
-                  colorStatus = Colors.red;
-                } else if (progress > 0.8) {
-                  colorStatus = Colors.orange;
-                }
-
-                final isDark = Theme.of(context).brightness == Brightness.dark;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(isDark ? 50 : 8),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                    border: isDark
-                        ? Border.all(color: Colors.grey.shade800)
-                        : null,
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          _iconoCategoria(
-                            categoria,
-                            size: 20,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade700,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              categoria,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            _textoMonto(gastado, ocultable: false),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: saldoRestante < 0
-                                  ? Colors.red
-                                  : (isDark ? Colors.white : Colors.black87),
-                            ),
-                          ),
-                          Text(
-                            ' / ${_textoMonto(presupuestoCat, ocultable: false)}',
-                            style: TextStyle(
-                              color: isDark
-                                  ? Colors.grey.shade500
-                                  : Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 6,
-                          backgroundColor: isDark
-                              ? Colors.grey.shade800
-                              : Colors.grey.shade100,
-                          color: colorStatus,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          saldoRestante >= 0
-                              ? 'Quedan ${_textoMonto(saldoRestante, ocultable: false)}'
-                              : 'Excedido por ${_textoMonto(saldoRestante.abs(), ocultable: false)}',
-                          style: TextStyle(
-                            color: saldoRestante >= 0
-                                ? (isDark
-                                      ? Colors.grey.shade400
-                                      : Colors.grey.shade600)
-                                : Colors.red,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-
-              const SizedBox(height: 24),
-              if (settings.activeCategories.any(
-                (c) => (settings.categoryBudgets[c] ?? 0) == 0,
-              ))
-                Center(
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.info_outline, size: 16),
-                    label: const Text(
-                      'Hay categorías sin presupuesto asignado',
-                    ),
-                    onPressed: () =>
-                        setState(() => _editandoPresupuesto = true),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _seccionAjustes({
-    required String titulo,
-    required List<Widget> children,
-    IconData? icono,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // En modo oscuro usamos un gris oscuro (surface) y en claro blanco
-    final bgColor = isDark
-        ? Theme.of(context).colorScheme.surfaceContainerHighest
-        : Colors.white;
-    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
-
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
-      color: bgColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: borderColor),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          leading: icono != null
-              ? Icon(icono, color: Theme.of(context).colorScheme.primary)
-              : null,
-          title: Text(
-            titulo,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          backgroundColor: bgColor,
-          collapsedBackgroundColor: bgColor,
-          shape: const Border(),
-          collapsedShape: const Border(),
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  Future<String?> _pedirTexto({
-    required String titulo,
-    required String etiqueta,
     String? inicial,
   }) async {
     return showDialog<String>(
@@ -7045,7 +7046,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0xFF1E1E1E)
+                  ? const Color(0xFF1E2433)
                   : Colors.white,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(32),
@@ -9021,7 +9022,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDark ? const Color(0xFF1E2433) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -9259,7 +9260,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               Card(
                 margin: EdgeInsets.zero,
                 elevation: 0,
-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                color: isDark ? const Color(0xFF1E2433) : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
@@ -9333,7 +9334,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -10689,7 +10690,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isDark
@@ -10941,7 +10942,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
         hintText: hint,
         prefixIcon: Icon(icon, size: 20),
         filled: true,
-        fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        fillColor: isDark ? const Color(0xFF1E2433) : Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
@@ -10973,7 +10974,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -11104,7 +11105,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -11237,7 +11238,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -11566,7 +11567,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E2433) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
