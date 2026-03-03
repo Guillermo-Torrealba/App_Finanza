@@ -1,0 +1,2023 @@
+diff --git a/lib/pantalla_principal.dart b/lib/pantalla_principal.dart
+index 9382ee6..12da510 100644
+--- a/lib/pantalla_principal.dart
++++ b/lib/pantalla_principal.dart
+@@ -34,21 +34,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     with WidgetsBindingObserver {
+   static const String _itemAbonoTarjeta = 'Abono TC';
+   static const String _itemPagoFacturadoTarjeta = 'Pago Facturado TC';
+-  static const Set<String> _itemsAbonoTarjeta = {
+-    _itemAbonoTarjeta,
+-    _itemPagoFacturadoTarjeta,
+-  };
+ 
+   final _stream = supabase
+       .from('gastos')
+       .stream(primaryKey: ['id'])
+       .order('fecha', ascending: false);
+ 
+-  final _metasStream = supabase
+-      .from('metas_ahorro')
+-      .stream(primaryKey: ['id'])
+-      .order('created_at', ascending: false);
+-
+   final _porCobrarStream = supabase
+       .from('gastos_compartidos')
+       .stream(primaryKey: ['id'])
+@@ -71,6 +62,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+   List<String> _cuentasSeleccionadas = [];
+   bool _mostrarPorcentaje = false;
+   List<Map<String, dynamic>> _recurrentes = [];
++  int _metasRefreshNonce = 0;
+ 
+   // Search & sort state
+   final _busquedaController = TextEditingController();
+@@ -621,6 +613,52 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     return saldo;
+   }
+ 
++  DateTime _inicioDelDia(DateTime date) => DateTime(
++    date.year,
++    date.month,
++    date.day,
++  );
++
++  DateTime _finDelDia(DateTime date) => DateTime(
++    date.year,
++    date.month,
++    date.day,
++    23,
++    59,
++    59,
++  );
++
++  DateTime _fechaMesSegura(
++    int year,
++    int month,
++    int preferredDay, {
++    bool finDeDia = false,
++  }) {
++    final diasDelMes = DateUtils.getDaysInMonth(year, month);
++    final diaSeguro = preferredDay.clamp(1, diasDelMes);
++    return finDeDia
++        ? DateTime(year, month, diaSeguro, 23, 59, 59)
++        : DateTime(year, month, diaSeguro);
++  }
++
++  bool _esCuentaCreditoPorNombre(String cuenta) {
++    final lower = cuenta.toLowerCase();
++    return lower.contains('credito') ||
++        lower.contains('crédito') ||
++        lower.contains('tc') ||
++        lower.contains('visa') ||
++        lower.contains('master');
++  }
++
++  DateTime _proximoVencimientoTarjeta(DateTime referencia, int dueDay) {
++    final hoy = _inicioDelDia(referencia);
++    final venceEsteMes = _fechaMesSegura(hoy.year, hoy.month, dueDay);
++    if (!hoy.isAfter(venceEsteMes)) {
++      return venceEsteMes;
++    }
++    return _fechaMesSegura(hoy.year, hoy.month + 1, dueDay);
++  }
++
+   /// Devuelve la fecha de corte efectiva para el mes actual.
+   /// Si el usuario cerró el ciclo manualmente este mes, usa esa fecha.
+   /// De lo contrario, usa el billingDay configurado.
+@@ -631,21 +669,129 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       if (parsed != null &&
+           parsed.year == referenceDate.year &&
+           parsed.month == referenceDate.month) {
+-        return parsed;
++        return _inicioDelDia(parsed);
+       }
+     }
+-    return DateTime(
++    return _fechaMesSegura(
+       referenceDate.year,
+       referenceDate.month,
+       settings.creditCardBillingDay,
+     );
+   }
+ 
++  Map<String, DateTime> _obtenerRangosCicloCredito(
++    AppSettings settings, {
++    DateTime? referenceDate,
++  }) {
++    final now = referenceDate ?? DateTime.now();
++    final billingDay = settings.creditCardBillingDay;
++    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
++
++    late DateTime cycleStart;
++    late DateTime cycleEnd;
++    if (now.isAfter(cutoffThisMonth)) {
++      cycleStart = _inicioDelDia(cutoffThisMonth.add(const Duration(days: 1)));
++      cycleEnd = _fechaMesSegura(
++        now.year,
++        now.month + 1,
++        billingDay,
++        finDeDia: true,
++      );
++    } else {
++      cycleEnd = _finDelDia(cutoffThisMonth);
++      final previousCutoff = _fechaMesSegura(now.year, now.month - 1, billingDay);
++      cycleStart = _inicioDelDia(previousCutoff.add(const Duration(days: 1)));
++    }
++
++    return {
++      'curStart': cycleStart,
++      'curEnd': cycleEnd,
++      'nowEnd': _finDelDia(now),
++    };
++  }
++
++  Map<String, List<Map<String, dynamic>>> _agruparMovimientosCreditoPorCuenta(
++    List<Map<String, dynamic>> movimientos,
++  ) {
++    final agrupado = <String, List<Map<String, dynamic>>>{};
++    for (final mov in movimientos) {
++      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
++      final cuenta = (mov['cuenta'] ?? '').toString().trim();
++      if (cuenta.isEmpty) continue;
++      agrupado.putIfAbsent(cuenta, () => []).add(mov);
++    }
++    return agrupado;
++  }
++
++  Map<String, int> _calcularResumenDeudaCreditoCuenta({
++    required List<Map<String, dynamic>> movimientosCuenta,
++    required DateTime cycleStart,
++    required DateTime nowEnd,
++  }) {
++    var gastosFacturadosBruto = 0;
++    var gastosPorFacturarBruto = 0;
++    var pagosAcumulados = 0;
++
++    for (final mov in movimientosCuenta) {
++      final fecha = DateTime.tryParse((mov['fecha'] ?? '').toString());
++      if (fecha == null || fecha.isAfter(nowEnd)) continue;
++
++      final monto = (mov['monto'] as num? ?? 0).toInt();
++      final tipo = (mov['tipo'] ?? '').toString();
++      if (tipo == 'Gasto') {
++        if (fecha.isBefore(cycleStart)) {
++          gastosFacturadosBruto += monto;
++        } else {
++          gastosPorFacturarBruto += monto;
++        }
++      } else if (tipo == 'Ingreso') {
++        pagosAcumulados += monto;
++      }
++    }
++
++    final pagoAFacturado = pagosAcumulados > gastosFacturadosBruto
++        ? gastosFacturadosBruto
++        : pagosAcumulados;
++    final pagoRestante = pagosAcumulados - pagoAFacturado;
++    final facturadoPendiente = gastosFacturadosBruto - pagoAFacturado;
++    final porFacturarPendiente = (gastosPorFacturarBruto - pagoRestante).clamp(
++      0,
++      1 << 31,
++    );
++    final deudaTotal = (facturadoPendiente + porFacturarPendiente)
++        .clamp(0, 1 << 31)
++        .toInt();
++
++    return {
++      'facturadoPendiente': facturadoPendiente,
++      'porFacturarPendiente': porFacturarPendiente.toInt(),
++      'pagos': pagosAcumulados,
++      'deudaTotal': deudaTotal,
++    };
++  }
++
+   int _parseMonto(String value) {
+     final onlyNumbers = value.replaceAll(RegExp(r'[^0-9-]'), '');
+     return int.tryParse(onlyNumbers) ?? 0;
+   }
+ 
++  Stream<List<Map<String, dynamic>>> _streamMetasUsuario() {
++    final user = supabase.auth.currentUser;
++    if (user == null) {
++      return Stream.value(const <Map<String, dynamic>>[]);
++    }
++    return supabase
++        .from('metas_ahorro')
++        .stream(primaryKey: ['id'])
++        .eq('user_id', user.id)
++        .order('created_at', ascending: false);
++  }
++
++  void _forzarRefrescoMetas() {
++    if (!mounted) return;
++    setState(() => _metasRefreshNonce++);
++  }
++
+   void _cambiarMes(int salto) {
+     setState(() {
+       _mesVisualizado = DateTime(
+@@ -991,51 +1137,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     // Alerta de vencimiento de tarjeta de crédito
+     if (settings.enableCreditDueAlerts) {
+       final dueDay = settings.creditCardDueDay;
+-      final billingDay = settings.creditCardBillingDay;
+       final daysBefore = settings.creditDueAlertDaysBefore;
+ 
+       // Calcular la próxima fecha de vencimiento
+-      DateTime nextDue;
+-      if (ahora.day <= dueDay) {
+-        nextDue = DateTime(ahora.year, ahora.month, dueDay);
+-      } else {
+-        nextDue = DateTime(ahora.year, ahora.month + 1, dueDay);
+-      }
++      final nextDue = _proximoVencimientoTarjeta(ahora, dueDay);
+       final diasRestantes = nextDue
+           .difference(DateTime(ahora.year, ahora.month, ahora.day))
+           .inDays;
+ 
+       if (diasRestantes <= daysBefore && diasRestantes >= 0) {
+-        // Calcular monto facturado (ciclo anterior)
+-        final cutoffThisMonth = _getEffectiveCutoff(settings, ahora);
+-        DateTime lastCycleStart;
+-        DateTime lastCycleEnd;
+-        if (ahora.isAfter(cutoffThisMonth)) {
+-          lastCycleEnd = cutoffThisMonth;
+-          lastCycleStart = DateTime(
+-            ahora.year,
+-            ahora.month - 1,
+-            billingDay,
+-          ).add(const Duration(days: 1));
+-        } else {
+-          lastCycleEnd = DateTime(ahora.year, ahora.month - 1, billingDay);
+-          lastCycleStart = DateTime(
+-            ahora.year,
+-            ahora.month - 2,
+-            billingDay,
+-          ).add(const Duration(days: 1));
+-        }
+-        final creditExpenses = movimientos.where(
+-          (m) =>
+-              (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
+-              m['tipo'] == 'Gasto',
++        // Calcular monto facturado pendiente consolidado.
++        final rangosCredito = _obtenerRangosCicloCredito(
++          settings,
++          referenceDate: ahora,
++        );
++        final curStart = rangosCredito['curStart']!;
++        final nowEnd = rangosCredito['nowEnd']!;
++        final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
++          movimientos,
+         );
+         var facturado = 0;
+-        for (final m in creditExpenses) {
+-          final d = DateTime.parse(m['fecha']);
+-          if (!d.isBefore(lastCycleStart) && !d.isAfter(lastCycleEnd)) {
+-            facturado += (m['monto'] as num? ?? 0).toInt();
+-          }
++        for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
++          final resumen = _calcularResumenDeudaCreditoCuenta(
++            movimientosCuenta: movimientosCuenta,
++            cycleStart: curStart,
++            nowEnd: nowEnd,
++          );
++          facturado += resumen['facturadoPendiente'] ?? 0;
+         }
+ 
+         final diasTexto = diasRestantes == 0
+@@ -1382,120 +1510,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     final totalNetoMes = ingresoMes - gastoMes;
+     final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
+ 
+-    // 5. TC Utilizado:
+-    // (Facturado pendiente + Por facturar pendiente), aplicando pagos/abonos.
+-    final now = DateTime.now();
+-    final billingDay = settings.creditCardBillingDay;
+-    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
+-    DateTime cycleStart;
+-    DateTime cycleEnd;
+-    DateTime lastCycleStart;
+-    DateTime lastCycleEnd;
+-    if (now.isAfter(cutoffThisMonth)) {
+-      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
+-      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
+-      lastCycleEnd = cutoffThisMonth;
+-      lastCycleStart = DateTime(
+-        now.year,
+-        now.month - 1,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-    } else {
+-      cycleEnd = cutoffThisMonth;
+-      cycleStart = DateTime(
+-        now.year,
+-        now.month - 1,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
+-      lastCycleStart = DateTime(
+-        now.year,
+-        now.month - 2,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-    }
+-    final curStart = DateTime(
+-      cycleStart.year,
+-      cycleStart.month,
+-      cycleStart.day,
+-    );
+-    final curEnd = DateTime(
+-      cycleEnd.year,
+-      cycleEnd.month,
+-      cycleEnd.day,
+-      23,
+-      59,
+-      59,
++    // 5. TC Utilizado total pendiente (considera todo el histórico).
++    final rangosCredito = _obtenerRangosCicloCredito(settings);
++    final curStart = rangosCredito['curStart']!;
++    final nowEnd = rangosCredito['nowEnd']!;
++    final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
++      datosFiltrados,
+     );
+-    final lastStart = DateTime(
+-      lastCycleStart.year,
+-      lastCycleStart.month,
+-      lastCycleStart.day,
+-    );
+-    final lastEnd = DateTime(
+-      lastCycleEnd.year,
+-      lastCycleEnd.month,
+-      lastCycleEnd.day,
+-      23,
+-      59,
+-      59,
+-    );
+-    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+-
+-    int calcularTotalRango(
+-      List<Map<String, dynamic>> movimientos,
+-      DateTime start,
+-      DateTime end,
+-    ) {
+-      var total = 0;
+-      for (final m in movimientos) {
+-        final fecha = DateTime.parse((m['fecha'] ?? '').toString());
+-        if (!fecha.isBefore(start) && !fecha.isAfter(end)) {
+-          total += (m['monto'] as num? ?? 0).toInt();
+-        }
+-      }
+-      return total;
+-    }
+-
+-    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
+-    for (final mov in datosFiltrados) {
+-      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+-      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+-      if (cuenta.isEmpty) continue;
+-      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
+-    }
+ 
+     var saldoCreditoUtilizado = 0;
+     for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
+-      final creditExpenses = movimientosCuenta
+-          .where((m) => (m['tipo'] ?? '') == 'Gasto')
+-          .toList();
+-      final creditPagos = movimientosCuenta
+-          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
+-          .toList();
+-
+-      final porFacturarBruto = calcularTotalRango(
+-        creditExpenses,
+-        curStart,
+-        curEnd,
+-      );
+-      final facturadoBruto = calcularTotalRango(
+-        creditExpenses,
+-        lastStart,
+-        lastEnd,
++      final resumen = _calcularResumenDeudaCreditoCuenta(
++        movimientosCuenta: movimientosCuenta,
++        cycleStart: curStart,
++        nowEnd: nowEnd,
+       );
+-      final pagosPeriodo = calcularTotalRango(creditPagos, lastStart, nowEnd);
+-      final pagoAFacturado = pagosPeriodo > facturadoBruto
+-          ? facturadoBruto
+-          : pagosPeriodo;
+-      final pagoRestante = pagosPeriodo - pagoAFacturado;
+-      final facturadoPendiente = facturadoBruto - pagoAFacturado;
+-      final porFacturarPendiente = (porFacturarBruto - pagoRestante).clamp(
+-        0,
+-        1 << 31,
+-      );
+-      saldoCreditoUtilizado += (facturadoPendiente + porFacturarPendiente)
+-          .toInt();
++      saldoCreditoUtilizado += resumen['deudaTotal'] ?? 0;
+     }
+ 
+     // Apply search & sort
+@@ -1799,7 +1829,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 margin: EdgeInsets.symmetric(horizontal: margin),
+                 padding: const EdgeInsets.symmetric(vertical: 4),
+                 decoration: BoxDecoration(
+-                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                  color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                   borderRadius: BorderRadius.circular(12),
+                   border: Border.all(
+                     color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -2479,7 +2509,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     return Container(
+       margin: const EdgeInsets.only(bottom: 12),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -2799,7 +2829,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     }
+ 
+     return SingleChildScrollView(
+-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
++      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+       child: Column(
+         crossAxisAlignment: CrossAxisAlignment.start,
+         children: [
+@@ -2808,7 +2838,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+           Container(
+             padding: const EdgeInsets.symmetric(vertical: 4),
+             decoration: BoxDecoration(
+-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++              color: isDark ? const Color(0xFF1E2433) : Colors.white,
+               borderRadius: BorderRadius.circular(12),
+               border: Border.all(
+                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -3381,7 +3411,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -3476,17 +3506,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       final user = supabase.auth.currentUser;
+       if (user == null) return;
+ 
+-      // 1. Obtener movimientos para calcular saldo actual y filtrar ajustes previos
+       final List<dynamic> response = await supabase
+           .from('gastos')
+-          .select('monto, tipo, categoria, metodo_pago')
++          .select('monto, tipo, categoria, metodo_pago, fecha, item')
+           .eq('user_id', user.id)
+           .eq('cuenta', cuenta);
+ 
++      final movimientos = List<Map<String, dynamic>>.from(response);
++      final hasCredit = movimientos.any(
++        (mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito',
++      );
++      final hasDebit = movimientos.any(
++        (mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito',
++      );
++      final ajustarComoCredito =
++          _esCuentaCreditoPorNombre(cuenta) || (hasCredit && !hasDebit);
++      if (ajustarComoCredito) {
++        await _ajustarDeudaTarjetaCuenta(
++          cuenta,
++          movimientosCuenta: movimientos,
++        );
++        return;
++      }
++
+       var saldoVisual = 0;
+       var saldoRealSinAjustes = 0;
+ 
+-      for (final mov in response) {
++      for (final mov in movimientos) {
+         if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
+           continue;
+         }
+@@ -3567,6 +3613,76 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     }
+   }
+ 
++  Future<void> _ajustarDeudaTarjetaCuenta(
++    String cuenta, {
++    List<Map<String, dynamic>>? movimientosCuenta,
++  }) async {
++    try {
++      final user = supabase.auth.currentUser;
++      if (user == null) return;
++
++      final movimientos = movimientosCuenta ??
++          List<Map<String, dynamic>>.from(
++            await supabase
++                .from('gastos')
++                .select('monto, tipo, categoria, metodo_pago')
++                .eq('user_id', user.id)
++                .eq('cuenta', cuenta),
++          );
++
++      var deudaVisual = 0;
++      var deudaRealSinAjustes = 0;
++      for (final mov in movimientos) {
++        if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
++        final monto = (mov['monto'] as num? ?? 0).toInt();
++        final esGasto = (mov['tipo'] ?? '') == 'Gasto';
++        final signed = esGasto ? monto : -monto;
++        deudaVisual += signed;
++        if (mov['categoria'] != 'Ajuste') {
++          deudaRealSinAjustes += signed;
++        }
++      }
++
++      final deudaActual = deudaVisual < 0 ? 0 : deudaVisual;
++      if (!mounted) return;
++      final nuevoMontoStr = await _pedirTexto(
++        titulo: 'Ajustar deuda TC: $cuenta',
++        etiqueta:
++            'Nueva deuda utilizada (Actual: ${_textoMonto(deudaActual, ocultable: false)})',
++        inicial: deudaActual.toString(),
++      );
++      if (nuevoMontoStr == null) return;
++
++      final deudaObjetivo = _parseMonto(nuevoMontoStr);
++
++      await supabase.from('gastos').delete().match({
++        'user_id': user.id,
++        'cuenta': cuenta,
++        'categoria': 'Ajuste',
++        'metodo_pago': 'Credito',
++      });
++
++      final diferencia = deudaObjetivo - deudaRealSinAjustes;
++      if (diferencia != 0) {
++        final fechaStr = DateTime.now().toIso8601String().split('T').first;
++        await supabase.from('gastos').insert({
++          'user_id': user.id,
++          'fecha': fechaStr,
++          'item': 'Ajuste de Deuda TC',
++          'monto': diferencia.abs(),
++          'categoria': 'Ajuste',
++          'cuenta': cuenta,
++          'tipo': diferencia > 0 ? 'Gasto' : 'Ingreso',
++          'metodo_pago': 'Credito',
++        });
++      }
++
++      _mostrarSnack('Deuda de tarjeta ajustada (ajustes previos reemplazados)');
++    } catch (e) {
++      _mostrarSnack('Error al ajustar deuda de tarjeta: $e');
++    }
++  }
++
+   // Skeleton Loader Base
+   Widget _construirSkeletonPrincipal(bool isDark) {
+     return Shimmer.fromColors(
+@@ -3706,7 +3822,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+   }) {
+     return Card(
+       elevation: 0,
+-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+       shape: RoundedRectangleBorder(
+         borderRadius: BorderRadius.circular(16),
+         side: BorderSide(
+@@ -4535,7 +4651,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     final isDark = Theme.of(context).brightness == Brightness.dark;
+ 
+     return StreamBuilder<List<Map<String, dynamic>>>(
+-      stream: _metasStream,
++      key: ValueKey(_metasRefreshNonce),
++      stream: _streamMetasUsuario(),
+       builder: (context, snapshot) {
+         if (snapshot.hasError) {
+           return Center(child: Text('Error: ${snapshot.error}'));
+@@ -4749,7 +4866,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       decoration: BoxDecoration(
+         gradient: LinearGradient(
+           colors: isDark
+-              ? [const Color(0xFF1A2E2A), const Color(0xFF1E1E1E)]
++              ? [const Color(0xFF1A2E2A), const Color(0xFF1E2433)]
+               : [Colors.teal.shade50, Colors.white],
+           begin: Alignment.topLeft,
+           end: Alignment.bottomRight,
+@@ -4876,7 +4993,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+ 
+     return Container(
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(24),
+         border: Border.all(
+           color: completada
+@@ -5022,7 +5139,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                                 })
+                                 .eq('id', meta['id'])
+                                 .then(
+-                                  (_) => _mostrarSnack('¡Meta completada! 🎉'),
++                                  (_) {
++                                    _forzarRefrescoMetas();
++                                    _mostrarSnack('¡Meta completada! 🎉');
++                                  },
+                                 );
+                           case 'reactivate':
+                             supabase
+@@ -5032,7 +5152,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                                   'updated_at': DateTime.now()
+                                       .toIso8601String(),
+                                 })
+-                                .eq('id', meta['id']);
++                                .eq('id', meta['id'])
++                                .then((_) => _forzarRefrescoMetas());
+                           case 'delete':
+                             _confirmarEliminarMeta(meta);
+                         }
+@@ -5221,6 +5342,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                           'updated_at': DateTime.now().toIso8601String(),
+                         })
+                         .eq('id', meta['id']);
++                    _forzarRefrescoMetas();
+                     _mostrarSnack('¡Meta completada! 🎉');
+                   },
+                 ),
+@@ -5237,6 +5359,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                           'updated_at': DateTime.now().toIso8601String(),
+                         })
+                         .eq('id', meta['id']);
++                    _forzarRefrescoMetas();
+                   },
+                 ),
+               ListTile(
+@@ -5279,6 +5402,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     );
+     if (confirm == true) {
+       await supabase.from('metas_ahorro').delete().eq('id', meta['id']);
++      _forzarRefrescoMetas();
+       _mostrarSnack('Meta eliminada');
+     }
+   }
+@@ -5306,6 +5430,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+               'user_id': supabase.auth.currentUser!.id,
+             });
+           }
++          _forzarRefrescoMetas();
+         },
+       ),
+     );
+@@ -5400,29 +5525,55 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   onPressed: () async {
+                     final monto = int.tryParse(controller.text.trim()) ?? 0;
+                     if (monto <= 0) return;
+-                    final nuevoMonto = montoActual + monto;
++                    final user = supabase.auth.currentUser;
++                    if (user == null) {
++                      _mostrarSnack('No hay sesión activa');
++                      return;
++                    }
++                    final montoAplicado = monto > restante && restante > 0
++                        ? restante
++                        : monto;
++                    final nuevoMonto = montoActual + montoAplicado;
+                     final completada = nuevoMonto >= montoMeta;
+-                    await supabase
+-                        .from('metas_ahorro')
+-                        .update({
+-                          'monto_actual': nuevoMonto,
+-                          'completada': completada,
+-                          'updated_at': DateTime.now().toIso8601String(),
+-                        })
+-                        .eq('id', meta['id']);
+-                    if (ctx.mounted) {
+-                      Navigator.pop(ctx);
++                    try {
++                      await supabase
++                          .from('metas_ahorro')
++                          .update({
++                            'monto_actual': nuevoMonto,
++                            'completada': completada,
++                            'updated_at': DateTime.now().toIso8601String(),
++                          })
++                          .eq('id', meta['id']);
++
++                      // El abono impacta la liquidez como salida de débito.
++                      await supabase.from('gastos').insert({
++                        'user_id': user.id,
++                        'fecha': DateTime.now().toIso8601String(),
++                        'item': 'Abono meta: ${meta['nombre']}',
++                        'detalle': 'Aporte a meta de ahorro',
++                        'monto': montoAplicado,
++                        'categoria': 'Transferencia',
++                        'cuenta': widget.settingsController.settings.defaultAccount,
++                        'tipo': 'Gasto',
++                        'metodo_pago': 'Debito',
++                      });
++
++                      _forzarRefrescoMetas();
++                      if (ctx.mounted) {
++                        Navigator.pop(ctx);
++                      }
+                       if (completada) {
+-                        _mostrarSnack(
+-                          '🎉 ¡Meta "${meta['nombre']}" completada!',
+-                        );
++                        _mostrarSnack('🎉 ¡Meta "${meta['nombre']}" completada!');
+                       } else {
+                         _mostrarSnack(
+-                          'Abono de ${_textoMonto(monto)} registrado ✓',
++                          'Abono de ${_textoMonto(montoAplicado)} registrado ✓',
+                         );
+                       }
++                    } catch (e) {
++                      _mostrarSnack('No se pudo registrar el abono: $e');
++                    } finally {
++                      controller.dispose();
+                     }
+-                    controller.dispose();
+                   },
+                   style: FilledButton.styleFrom(
+                     shape: RoundedRectangleBorder(
+@@ -5454,6 +5605,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       builder: (context, _) {
+         final settings = widget.settingsController.settings;
+         final globalBudget = settings.globalMonthlyBudget ?? 0;
++        var totalPresupuestoCategorias = 0;
++        for (final cat in settings.activeCategories) {
++          totalPresupuestoCategorias += settings.categoryBudgets[cat] ?? 0;
++        }
++        final presupuestoBase = globalBudget > 0
++            ? globalBudget
++            : totalPresupuestoCategorias;
++        final usaPresupuestoCategorias =
++            globalBudget <= 0 && totalPresupuestoCategorias > 0;
++        final tienePresupuestoDefinido = presupuestoBase > 0;
+         final isDark = Theme.of(context).brightness == Brightness.dark;
+ 
+         // Modo Edicion: Logica de distribucion (Slider/Inputs)
+@@ -5510,7 +5671,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 Container(
+                   padding: const EdgeInsets.all(20),
+                   decoration: BoxDecoration(
+-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                    color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                     borderRadius: BorderRadius.circular(20),
+                     boxShadow: [
+                       BoxShadow(
+@@ -5599,7 +5760,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   'Asignar por Categoría',
+                   style: TextStyle(
+                     fontSize: 16,
+-                    fontWeight: FontWeight.bold,
++                    fontWeight: FontWeight.w600,
+                     color: Colors.grey,
+                   ),
+                 ),
+@@ -5671,16 +5832,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+         final gastoPorCategoria = <String, int>{};
+ 
+         for (final mov in datosDelMes) {
+-          if (mov['tipo'] == 'Gasto' && mov['categoria'] != 'Transferencia') {
+-            final monto = (mov['monto'] as num? ?? 0).toInt();
+-            gastoTotalMes += monto;
+-            final cat = (mov['categoria'] ?? 'Varios').toString();
+-            gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
++          if (mov['tipo'] != 'Gasto') continue;
++          final categoria = (mov['categoria'] ?? '').toString();
++          if (categoria == 'Transferencia' ||
++              categoria == 'Ajuste' ||
++              categoria == 'Cuentas por Cobrar') {
++            continue;
+           }
++          final monto = (mov['monto'] as num? ?? 0).toInt();
++          gastoTotalMes += monto;
++          final cat = categoria.isEmpty ? 'Varios' : categoria;
++          gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
+         }
+ 
+-        final porcentajeGlobalEjecutado = globalBudget > 0
+-            ? (gastoTotalMes / globalBudget).clamp(0.0, 1.0)
++        final porcentajeGlobalEjecutado = presupuestoBase > 0
++            ? (gastoTotalMes / presupuestoBase).clamp(0.0, 1.0)
+             : 0.0;
+ 
+         return SingleChildScrollView(
+@@ -5741,9 +5907,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 child: Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+-                    const Text(
+-                      'Gasto Total vs Presupuesto',
+-                      style: TextStyle(color: Colors.white70),
++                    Text(
++                      tienePresupuestoDefinido
++                          ? (usaPresupuestoCategorias
++                                ? 'Gasto Total vs Presupuesto por categorias'
++                                : 'Gasto Total vs Presupuesto')
++                          : 'Gasto Total del mes',
++                      style: const TextStyle(color: Colors.white70),
+                     ),
+                     const SizedBox(height: 8),
+                     Row(
+@@ -5757,18 +5927,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                             color: Colors.white,
+                           ),
+                         ),
+-                        Padding(
+-                          padding: const EdgeInsets.only(bottom: 4, left: 6),
+-                          child: Text(
+-                            '/ ${_textoMonto(globalBudget, ocultable: false)}',
+-                            style: const TextStyle(
+-                              color: Colors.white70,
+-                              fontSize: 14,
++                        if (tienePresupuestoDefinido)
++                          Padding(
++                            padding: const EdgeInsets.only(bottom: 4, left: 6),
++                            child: Text(
++                              '/ ${_textoMonto(presupuestoBase, ocultable: false)}',
++                              style: const TextStyle(
++                                color: Colors.white70,
++                                fontSize: 14,
++                              ),
+                             ),
+                           ),
+-                        ),
+                       ],
+                     ),
++                    if (!tienePresupuestoDefinido)
++                      const Padding(
++                        padding: EdgeInsets.only(top: 4),
++                        child: Text(
++                          'Sin presupuesto asignado (global ni por categoria)',
++                          style: TextStyle(color: Colors.white70, fontSize: 12),
++                        ),
++                      ),
+                     const SizedBox(height: 16),
+                     ClipRRect(
+                       borderRadius: BorderRadius.circular(10),
+@@ -5783,264 +5962,72 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                     Align(
+                       alignment: Alignment.centerRight,
+                       child: Text(
+-                        '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado',
++                        tienePresupuestoDefinido
++                            ? '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado'
++                            : 'Configura presupuestos para ver avance',
+                         style: const TextStyle(
+                           color: Colors.white,
+                           fontSize: 12,
+-                          fontWeight: FontWeight.bold,
+-                        ),
+-                      ),
+-                    ),
+-                  ],
+-                ),
+-              ),
++    String? inicial,
++  }) async {
++    return showDialog<String>(
++      context: context,
++      builder: (context) {
++        return _DialogoTexto(
++          titulo: titulo,
++          etiqueta: etiqueta,
++          inicial: inicial,
++        );
++      },
++    );
++  }
+ 
+-              const SizedBox(height: 24),
+-              const Text(
+-                'Progreso por Categoría',
+-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+-              ),
+-              const SizedBox(height: 12),
++  Future<int?> _pedirEntero({
++    required String titulo,
++    required String etiqueta,
++    int? inicial,
++  }) async {
++    return showDialog<int>(
++      context: context,
++      builder: (context) {
++        return _DialogoEntero(
++          titulo: titulo,
++          etiqueta: etiqueta,
++          inicial: inicial,
++        );
++      },
++    );
++  }
+ 
+-              // Lista Progreso Categorias
+-              ...settings.activeCategories.map((categoria) {
+-                final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+-                if (presupuestoCat == 0) {
+-                  return const SizedBox.shrink();
+-                }
++  Future<void> _agregarCuenta() async {
++    final value = await _pedirTexto(
++      titulo: 'Agregar cuenta',
++      etiqueta: 'Nombre de cuenta',
++    );
++    if (value == null) return;
+ 
+-                final gastado = gastoPorCategoria[categoria] ?? 0;
+-                final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
+-                final saldoRestante = presupuestoCat - gastado;
++    try {
++      widget.settingsController.addAccount(value);
++      if (mounted) {
++        _mostrarSnack('Cuenta agregada: $value');
++      }
++    } catch (e) {
++      if (mounted) {
++        _mostrarSnack('Error al agregar cuenta: $e');
++      }
++    }
++  }
+ 
+-                Color colorStatus = Colors.green;
+-                if (progress > 1.0 || saldoRestante < 0) {
+-                  colorStatus = Colors.red;
+-                } else if (progress > 0.8) {
+-                  colorStatus = Colors.orange;
+-                }
++  Future<void> _editarCuenta(String actual) async {
++    final value = await _pedirTexto(
++      titulo: 'Editar cuenta',
++      etiqueta: 'Nombre',
++      inicial: actual,
++    );
++    if (value == null || value.trim() == actual) return;
+ 
+-                final isDark = Theme.of(context).brightness == Brightness.dark;
+-
+-                return Container(
+-                  margin: const EdgeInsets.only(bottom: 12),
+-                  padding: const EdgeInsets.all(16),
+-                  decoration: BoxDecoration(
+-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+-                    borderRadius: BorderRadius.circular(16),
+-                    boxShadow: [
+-                      BoxShadow(
+-                        color: Colors.black.withAlpha(isDark ? 50 : 8),
+-                        blurRadius: 8,
+-                        offset: const Offset(0, 2),
+-                      ),
+-                    ],
+-                    border: isDark
+-                        ? Border.all(color: Colors.grey.shade800)
+-                        : null,
+-                  ),
+-                  child: Column(
+-                    children: [
+-                      Row(
+-                        children: [
+-                          _iconoCategoria(
+-                            categoria,
+-                            size: 20,
+-                            color: isDark
+-                                ? Colors.grey.shade400
+-                                : Colors.grey.shade700,
+-                          ),
+-                          const SizedBox(width: 12),
+-                          Expanded(
+-                            child: Text(
+-                              categoria,
+-                              style: const TextStyle(
+-                                fontWeight: FontWeight.w600,
+-                                fontSize: 15,
+-                              ),
+-                            ),
+-                          ),
+-                          Text(
+-                            _textoMonto(gastado, ocultable: false),
+-                            style: TextStyle(
+-                              fontWeight: FontWeight.bold,
+-                              color: saldoRestante < 0
+-                                  ? Colors.red
+-                                  : (isDark ? Colors.white : Colors.black87),
+-                            ),
+-                          ),
+-                          Text(
+-                            ' / ${_textoMonto(presupuestoCat, ocultable: false)}',
+-                            style: TextStyle(
+-                              color: isDark
+-                                  ? Colors.grey.shade500
+-                                  : Colors.grey.shade500,
+-                              fontSize: 12,
+-                            ),
+-                          ),
+-                        ],
+-                      ),
+-                      const SizedBox(height: 10),
+-                      ClipRRect(
+-                        borderRadius: BorderRadius.circular(6),
+-                        child: LinearProgressIndicator(
+-                          value: progress,
+-                          minHeight: 6,
+-                          backgroundColor: isDark
+-                              ? Colors.grey.shade800
+-                              : Colors.grey.shade100,
+-                          color: colorStatus,
+-                        ),
+-                      ),
+-                      const SizedBox(height: 6),
+-                      Align(
+-                        alignment: Alignment.centerRight,
+-                        child: Text(
+-                          saldoRestante >= 0
+-                              ? 'Quedan ${_textoMonto(saldoRestante, ocultable: false)}'
+-                              : 'Excedido por ${_textoMonto(saldoRestante.abs(), ocultable: false)}',
+-                          style: TextStyle(
+-                            color: saldoRestante >= 0
+-                                ? (isDark
+-                                      ? Colors.grey.shade400
+-                                      : Colors.grey.shade600)
+-                                : Colors.red,
+-                            fontSize: 11,
+-                            fontWeight: FontWeight.w500,
+-                          ),
+-                        ),
+-                      ),
+-                    ],
+-                  ),
+-                );
+-              }),
+-
+-              const SizedBox(height: 24),
+-              if (settings.activeCategories.any(
+-                (c) => (settings.categoryBudgets[c] ?? 0) == 0,
+-              ))
+-                Center(
+-                  child: TextButton.icon(
+-                    icon: const Icon(Icons.info_outline, size: 16),
+-                    label: const Text(
+-                      'Hay categorías sin presupuesto asignado',
+-                    ),
+-                    onPressed: () =>
+-                        setState(() => _editandoPresupuesto = true),
+-                  ),
+-                ),
+-            ],
+-          ),
+-        );
+-      },
+-    );
+-  }
+-
+-  Widget _seccionAjustes({
+-    required String titulo,
+-    required List<Widget> children,
+-    IconData? icono,
+-  }) {
+-    final isDark = Theme.of(context).brightness == Brightness.dark;
+-    // En modo oscuro usamos un gris oscuro (surface) y en claro blanco
+-    final bgColor = isDark
+-        ? Theme.of(context).colorScheme.surfaceContainerHighest
+-        : Colors.white;
+-    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+-
+-    return Card(
+-      elevation: 0,
+-      margin: const EdgeInsets.only(bottom: 12),
+-      color: bgColor,
+-      shape: RoundedRectangleBorder(
+-        borderRadius: BorderRadius.circular(16),
+-        side: BorderSide(color: borderColor),
+-      ),
+-      clipBehavior: Clip.antiAlias,
+-      child: Theme(
+-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+-        child: ExpansionTile(
+-          leading: icono != null
+-              ? Icon(icono, color: Theme.of(context).colorScheme.primary)
+-              : null,
+-          title: Text(
+-            titulo,
+-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+-          ),
+-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+-          backgroundColor: bgColor,
+-          collapsedBackgroundColor: bgColor,
+-          shape: const Border(),
+-          collapsedShape: const Border(),
+-          children: children,
+-        ),
+-      ),
+-    );
+-  }
+-
+-  Future<String?> _pedirTexto({
+-    required String titulo,
+-    required String etiqueta,
+-    String? inicial,
+-  }) async {
+-    return showDialog<String>(
+-      context: context,
+-      builder: (context) {
+-        return _DialogoTexto(
+-          titulo: titulo,
+-          etiqueta: etiqueta,
+-          inicial: inicial,
+-        );
+-      },
+-    );
+-  }
+-
+-  Future<int?> _pedirEntero({
+-    required String titulo,
+-    required String etiqueta,
+-    int? inicial,
+-  }) async {
+-    return showDialog<int>(
+-      context: context,
+-      builder: (context) {
+-        return _DialogoEntero(
+-          titulo: titulo,
+-          etiqueta: etiqueta,
+-          inicial: inicial,
+-        );
+-      },
+-    );
+-  }
+-
+-  Future<void> _agregarCuenta() async {
+-    final value = await _pedirTexto(
+-      titulo: 'Agregar cuenta',
+-      etiqueta: 'Nombre de cuenta',
+-    );
+-    if (value == null) return;
+-
+-    try {
+-      widget.settingsController.addAccount(value);
+-      if (mounted) {
+-        _mostrarSnack('Cuenta agregada: $value');
+-      }
+-    } catch (e) {
+-      if (mounted) {
+-        _mostrarSnack('Error al agregar cuenta: $e');
+-      }
+-    }
+-  }
+-
+-  Future<void> _editarCuenta(String actual) async {
+-    final value = await _pedirTexto(
+-      titulo: 'Editar cuenta',
+-      etiqueta: 'Nombre',
+-      inicial: actual,
+-    );
+-    if (value == null || value.trim() == actual) return;
+-
+-    // 1. Rename in settings (local + cloud sync)
+-    widget.settingsController.renameAccount(actual, value);
++    // 1. Rename in settings (local + cloud sync)
++    widget.settingsController.renameAccount(actual, value);
+ 
+     // 2. Update all existing transactions in Supabase
+     try {
+@@ -6405,7 +6392,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   const Text(
+-                    'Ingresa los montos pendientes. AL GUARDAR SE REEMPLAZARÁN los saldos iniciales previos de esta cuenta.',
++                    'Ingresa los montos pendientes. Se usará la suma para fijar la deuda total actual de la tarjeta y se reemplazarán ajustes previos.',
+                     style: TextStyle(fontSize: 13, color: Colors.orange),
+                   ),
+                   const SizedBox(height: 16),
+@@ -6488,67 +6475,53 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       final user = supabase.auth.currentUser;
+       if (user == null) return;
+ 
+-      // 1. ELIMINAR ANTERIORES para esta cuenta (Evitar duplicados)
+-      await supabase
+-          .from('gastos')
+-          .delete()
+-          .match({'user_id': user.id, 'cuenta': cuenta, 'categoria': 'Ajuste'})
+-          .or(
+-            'item.eq."Saldo Inicial Importado (Facturado)",item.eq."Saldo Inicial Importado (Actual)"',
+-          );
+-
+-      if (mFacturado == 0 && mNoFacturado == 0) {
+-        _mostrarSnack('Saldos iniciales eliminados/limpiados.');
+-        return;
+-      }
++      final deudaObjetivo = mFacturado + mNoFacturado;
+ 
+-      final ahora = DateTime.now();
+-      final billingDay =
+-          widget.settingsController.settings.creditCardBillingDay;
++      final movimientosCuenta = List<Map<String, dynamic>>.from(
++        await supabase
++            .from('gastos')
++            .select('monto, tipo, categoria, metodo_pago')
++            .eq('user_id', user.id)
++            .eq('cuenta', cuenta),
++      );
+ 
+-      // Calcular fecha para "Facturado" (debe ser anterior al inicio del ciclo actual de TC)
+-      DateTime fechaFacturado;
+-      if (ahora.day > billingDay) {
+-        // Estamos en ciclo que cierra este mes
+-        fechaFacturado = DateTime(ahora.year, ahora.month, billingDay);
+-      } else {
+-        // Estamos en ciclo que cerró el mes pasado
+-        final mesAnterior = ahora.month == 1 ? 12 : ahora.month - 1;
+-        final anioAnterior = ahora.month == 1 ? ahora.year - 1 : ahora.year;
+-        fechaFacturado = DateTime(anioAnterior, mesAnterior, billingDay);
++      var deudaBaseSinAjustes = 0;
++      for (final mov in movimientosCuenta) {
++        if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
++        if (mov['categoria'] == 'Ajuste') continue;
++        final monto = (mov['monto'] as num? ?? 0).toInt();
++        if ((mov['tipo'] ?? '') == 'Gasto') {
++          deudaBaseSinAjustes += monto;
++        } else if ((mov['tipo'] ?? '') == 'Ingreso') {
++          deudaBaseSinAjustes -= monto;
++        }
+       }
+ 
+-      // 2. Insertar Facturado (Ciclo anterior)
+-      if (mFacturado > 0) {
+-        await supabase.from('gastos').insert({
+-          'user_id': user.id,
+-          'fecha': fechaFacturado.toIso8601String().split('T').first,
+-          'item': 'Saldo Inicial Importado (Facturado)',
+-          'monto': mFacturado,
+-          'categoria': 'Ajuste',
+-          'cuenta': cuenta,
+-          'tipo': 'Gasto',
+-          'metodo_pago': 'Credito',
+-        });
+-      }
++      await supabase.from('gastos').delete().match({
++        'user_id': user.id,
++        'cuenta': cuenta,
++        'categoria': 'Ajuste',
++        'metodo_pago': 'Credito',
++      });
+ 
+-      // 3. Insertar No Facturado (Ciclo actual - fecha hoy)
+-      if (mNoFacturado > 0) {
++      final diferencia = deudaObjetivo - deudaBaseSinAjustes;
++      if (diferencia != 0) {
++        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+         await supabase.from('gastos').insert({
+           'user_id': user.id,
+-          'fecha': ahora.toIso8601String().split('T').first,
+-          'item': 'Saldo Inicial Importado (Actual)',
+-          'monto': mNoFacturado,
++          'fecha': fechaStr,
++          'item': 'Ajuste de Deuda TC',
++          'monto': diferencia.abs(),
+           'categoria': 'Ajuste',
+           'cuenta': cuenta,
+-          'tipo': 'Gasto',
++          'tipo': diferencia > 0 ? 'Gasto' : 'Ingreso',
+           'metodo_pago': 'Credito',
+         });
+       }
+ 
+-      _mostrarSnack('Saldos iniciales actualizados (anteriores reemplazados)');
++      _mostrarSnack('Deuda de tarjeta actualizada (ajustes previos reemplazados)');
+     } catch (e) {
+-      _mostrarSnack('Error al guardar saldo inicial: $e');
++      _mostrarSnack('Error al actualizar deuda de tarjeta: $e');
+     }
+   }
+ 
+@@ -6878,7 +6851,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+             padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+             decoration: BoxDecoration(
+               color: Theme.of(context).brightness == Brightness.dark
+-                  ? const Color(0xFF1E1E1E)
++                  ? const Color(0xFF1E2433)
+                   : Colors.white,
+               borderRadius: const BorderRadius.vertical(
+                 top: Radius.circular(32),
+@@ -7827,47 +7800,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     final now = DateTime.now();
+     final billingDay = settings.creditCardBillingDay;
+     final dueDay = settings.creditCardDueDay;
+-
+-    // --- Lógica de Ciclos de Tarjeta ---
+-    // Calculamos el cutoff del mes actual
+-    final cutoffThisMonth = _getEffectiveCutoff(settings, now);
+-
+-    // Si hoy es después del corte, el ciclo actual empezó el día siguiente al corte (BillingDay + 1)
+-    // y termina el próximo BillingDay.
+-    // Si hoy es antes del corte, el ciclo actual empezó el mes pasado.
+-
+-    DateTime cycleStart;
+-    DateTime cycleEnd;
+-    DateTime lastCycleStart;
+-    DateTime lastCycleEnd;
+-
+-    if (now.isAfter(cutoffThisMonth)) {
+-      // Estamos en el ciclo que cierra el mes que viene
+-      cycleStart = cutoffThisMonth.add(const Duration(days: 1));
+-      cycleEnd = DateTime(now.year, now.month + 1, billingDay);
+-
+-      lastCycleEnd = cutoffThisMonth;
+-      lastCycleStart = DateTime(
+-        now.year,
+-        now.month - 1,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-    } else {
+-      // Estamos en el ciclo que cierra este mes
+-      cycleEnd = cutoffThisMonth;
+-      cycleStart = DateTime(
+-        now.year,
+-        now.month - 1,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-
+-      lastCycleEnd = cycleStart.subtract(const Duration(days: 1));
+-      lastCycleStart = DateTime(
+-        now.year,
+-        now.month - 2,
+-        billingDay,
+-      ).add(const Duration(days: 1));
+-    }
++    final rangosCredito = _obtenerRangosCicloCredito(
++      settings,
++      referenceDate: now,
++    );
++    final curStart = rangosCredito['curStart']!;
++    final curEnd = rangosCredito['curEnd']!;
++    final nowEnd = rangosCredito['nowEnd']!;
+ 
+     final creditExpenses = todosLosDatos
+         .where(
+@@ -7880,106 +7819,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+         .where(
+           (m) =>
+               (m['metodo_pago'] ?? 'Debito') == 'Credito' &&
+-              (m['tipo'] == 'Ingreso') &&
+-              _itemsAbonoTarjeta.contains((m['item'] ?? '').toString()),
++              (m['tipo'] == 'Ingreso'),
+         )
+         .toList();
+-
+-    int calcularTotal(List<dynamic> movimientos, DateTime start, DateTime end) {
+-      var total = 0;
+-      for (final m in movimientos) {
+-        final d = DateTime.parse(m['fecha']);
+-        // start <= d <= end
+-        // Simplificación: check year/month/day comparisons or just logic
+-        // Usando compareTo para asegurar
+-        if (!d.isBefore(start) && !d.isAfter(end)) {
+-          total += (m['monto'] as num).toInt();
+-        }
+-      }
+-      return total;
+-    }
+-
+-    // Nota: cycleStart es inclusive, cycleEnd es inclusive (el día de corte entra)
+-    // Ajustar lógica de "isBefore" / "isAfter"
+-    // isBefore(start) falsificará si es == start? No. isBefore es estricto.
+-    // !isBefore(start) -> >= start
+-    // !isAfter(end) -> <= end
+-
+-    // Ajuste fino de fechas a inicio/fin de día
+-    final curStart = DateTime(
+-      cycleStart.year,
+-      cycleStart.month,
+-      cycleStart.day,
++    final movimientosCreditoPorCuenta = _agruparMovimientosCreditoPorCuenta(
++      todosLosDatos,
+     );
+-    final curEnd = DateTime(
+-      cycleEnd.year,
+-      cycleEnd.month,
+-      cycleEnd.day,
+-      23,
+-      59,
+-      59,
+-    );
+-
+-    final lastStart = DateTime(
+-      lastCycleStart.year,
+-      lastCycleStart.month,
+-      lastCycleStart.day,
+-    );
+-    final lastEnd = DateTime(
+-      lastCycleEnd.year,
+-      lastCycleEnd.month,
+-      lastCycleEnd.day,
+-      23,
+-      59,
+-      59,
+-    );
+-    final nowEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+-
+-    final movimientosCreditoPorCuenta = <String, List<Map<String, dynamic>>>{};
+-    for (final mov in todosLosDatos) {
+-      if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+-      final cuenta = (mov['cuenta'] ?? '').toString().trim();
+-      if (cuenta.isEmpty) continue;
+-      movimientosCreditoPorCuenta.putIfAbsent(cuenta, () => []).add(mov);
+-    }
+ 
+     var porFacturarPendiente = 0;
+     var facturadoPendiente = 0;
+     var pagosPeriodo = 0;
+     for (final movimientosCuenta in movimientosCreditoPorCuenta.values) {
+-      final gastosCuenta = movimientosCuenta
+-          .where((m) => (m['tipo'] ?? '') == 'Gasto')
+-          .toList();
+-      final ingresosCuenta = movimientosCuenta
+-          .where((m) => (m['tipo'] ?? '') == 'Ingreso')
+-          .toList();
+-
+-      final porFacturarBrutoCuenta = calcularTotal(
+-        gastosCuenta,
+-        curStart,
+-        curEnd,
+-      );
+-      final facturadoBrutoCuenta = calcularTotal(
+-        gastosCuenta,
+-        lastStart,
+-        lastEnd,
++      final resumen = _calcularResumenDeudaCreditoCuenta(
++        movimientosCuenta: movimientosCuenta,
++        cycleStart: curStart,
++        nowEnd: nowEnd,
+       );
+-      final pagosPeriodoCuenta = calcularTotal(
+-        ingresosCuenta,
+-        lastStart,
+-        nowEnd,
+-      );
+-
+-      final pagoAFacturado = pagosPeriodoCuenta > facturadoBrutoCuenta
+-          ? facturadoBrutoCuenta
+-          : pagosPeriodoCuenta;
+-      final pagoRestante = pagosPeriodoCuenta - pagoAFacturado;
+-
+-      facturadoPendiente += facturadoBrutoCuenta - pagoAFacturado;
+-      porFacturarPendiente += (porFacturarBrutoCuenta - pagoRestante)
+-          .clamp(0, 1 << 31)
+-          .toInt();
+-      pagosPeriodo += pagosPeriodoCuenta;
++      facturadoPendiente += resumen['facturadoPendiente'] ?? 0;
++      porFacturarPendiente += resumen['porFacturarPendiente'] ?? 0;
++      pagosPeriodo += resumen['pagos'] ?? 0;
+     }
+ 
+     final cuentasCredito = <String>[];
+@@ -7991,14 +7849,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     }
+     if (cuentasCredito.isEmpty) {
+       for (final acc in settings.activeAccounts) {
+-        final lower = acc.toLowerCase();
+-        final pareceCredito =
+-            lower.contains('credito') ||
+-            lower.contains('crédito') ||
+-            lower.contains('tc') ||
+-            lower.contains('visa') ||
+-            lower.contains('master');
+-        if (pareceCredito) {
++        if (_esCuentaCreditoPorNombre(acc)) {
+           cuentasCredito.add(acc);
+         }
+       }
+@@ -8010,34 +7861,54 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+     // --- Fin Lógica ---
+ 
+     // Countdown al día de vencimiento
+-    DateTime nextDue;
+-    if (now.day <= dueDay) {
+-      nextDue = DateTime(now.year, now.month, dueDay);
+-    } else {
+-      nextDue = DateTime(now.year, now.month + 1, dueDay);
+-    }
++    final nextDue = _proximoVencimientoTarjeta(now, dueDay);
+     final diasAlVencimiento = nextDue
+         .difference(DateTime(now.year, now.month, now.day))
+         .inDays;
++    final esMesActualVisualizado =
++        _mesVisualizado.year == now.year && _mesVisualizado.month == now.month;
++    final vencimientoMesActual = _fechaMesSegura(
++      now.year,
++      now.month,
++      dueDay,
++      finDeDia: true,
++    );
++    final mostrarFacturadosYAbonos =
++        esMesActualVisualizado && !now.isAfter(vencimientoMesActual);
+ 
+     // Filtrar movimientos de cada ciclo para las listas de detalle
+     final movimientosPorFacturar = creditExpenses.where((m) {
+       final d = DateTime.parse(m['fecha']);
+-      return !d.isBefore(curStart) && !d.isAfter(curEnd);
++      return !d.isBefore(curStart) && !d.isAfter(nowEnd);
+     }).toList();
+     final movimientosFacturados = creditExpenses.where((m) {
+       final d = DateTime.parse(m['fecha']);
+-      return !d.isBefore(lastStart) && !d.isAfter(lastEnd);
++      return d.isBefore(curStart);
+     }).toList();
+     final movimientosAbonos =
+         creditAbonos.where((m) {
+           final d = DateTime.parse(m['fecha']);
+-          return !d.isBefore(lastStart) && !d.isAfter(nowEnd);
++          return !d.isAfter(nowEnd);
+         }).toList()..sort((a, b) {
+           final fa = DateTime.parse((a['fecha'] ?? '').toString());
+           final fb = DateTime.parse((b['fecha'] ?? '').toString());
+           return fb.compareTo(fa);
+         });
++    movimientosFacturados.sort((a, b) {
++      final fa = DateTime.parse((a['fecha'] ?? '').toString());
++      final fb = DateTime.parse((b['fecha'] ?? '').toString());
++      return fb.compareTo(fa);
++    });
++    final movimientosFacturadosVisibles = mostrarFacturadosYAbonos
++        ? movimientosFacturados
++        : <Map<String, dynamic>>[];
++    final movimientosAbonosVisibles = mostrarFacturadosYAbonos
++        ? movimientosAbonos
++        : <Map<String, dynamic>>[];
++    final facturadoPendienteVisible = mostrarFacturadosYAbonos
++        ? facturadoPendiente
++        : 0;
++    final pagosPeriodoVisible = mostrarFacturadosYAbonos ? pagosPeriodo : 0;
+ 
+     // Calcular fechas para el mes visualizado
+     final firstDayOfMonth = DateTime(
+@@ -8188,7 +8059,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                       ),
+                       const SizedBox(height: 4),
+                       Text(
+-                        _textoMonto(facturadoPendiente),
++                        _textoMonto(facturadoPendienteVisible),
+                         style: TextStyle(
+                           fontSize: 20,
+                           fontWeight: FontWeight.bold,
+@@ -8199,7 +8070,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                       ),
+                       const SizedBox(height: 2),
+                       Text(
+-                        'Pagos/abonos: ${_textoMonto(pagosPeriodo)}',
++                        'Pagos/abonos: ${_textoMonto(pagosPeriodoVisible)}',
+                         style: TextStyle(
+                           fontSize: 10,
+                           color: Theme.of(context).brightness == Brightness.dark
+@@ -8208,7 +8079,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                         ),
+                       ),
+                       Text(
+-                        '${lastStart.day}/${lastStart.month} - ${lastEnd.day}/${lastEnd.month}',
++                        'Anterior a ${curStart.day}/${curStart.month}',
+                         style: TextStyle(
+                           fontSize: 10,
+                           color: Theme.of(context).brightness == Brightness.dark
+@@ -8318,77 +8189,97 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+             },
+           ),
+           const SizedBox(height: 12),
+-          Container(
+-            width: double.infinity,
+-            padding: const EdgeInsets.all(14),
+-            decoration: BoxDecoration(
+-              color: Theme.of(context).cardColor,
+-              borderRadius: BorderRadius.circular(14),
+-              border: Border.all(
+-                color: Theme.of(context).brightness == Brightness.dark
+-                    ? Colors.grey.shade800
+-                    : Colors.grey.shade200,
++          if (mostrarFacturadosYAbonos)
++            Container(
++              width: double.infinity,
++              padding: const EdgeInsets.all(14),
++              decoration: BoxDecoration(
++                color: Theme.of(context).cardColor,
++                borderRadius: BorderRadius.circular(14),
++                border: Border.all(
++                  color: Theme.of(context).brightness == Brightness.dark
++                      ? Colors.grey.shade800
++                      : Colors.grey.shade200,
++                ),
+               ),
+-            ),
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.start,
+-              children: [
+-                Row(
+-                  children: [
+-                    Icon(Icons.payments_outlined, color: Colors.teal.shade600),
+-                    const SizedBox(width: 8),
+-                    const Text(
+-                      'Pagos de tarjeta',
+-                      style: TextStyle(
+-                        fontSize: 15,
+-                        fontWeight: FontWeight.w700,
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                children: [
++                  Row(
++                    children: [
++                      Icon(Icons.payments_outlined, color: Colors.teal.shade600),
++                      const SizedBox(width: 8),
++                      const Text(
++                        'Pagos de tarjeta',
++                        style: TextStyle(
++                          fontSize: 15,
++                          fontWeight: FontWeight.w700,
++                        ),
+                       ),
+-                    ),
+-                  ],
+-                ),
+-                const SizedBox(height: 6),
+-                Text(
+-                  'Facturado pendiente: ${_textoMonto(facturadoPendiente)}',
+-                  style: TextStyle(
+-                    color: Theme.of(context).brightness == Brightness.dark
+-                        ? Colors.grey.shade300
+-                        : Colors.grey.shade700,
++                    ],
+                   ),
+-                ),
+-                const SizedBox(height: 10),
+-                Wrap(
+-                  spacing: 8,
+-                  runSpacing: 8,
+-                  children: [
+-                    FilledButton.icon(
+-                      onPressed:
+-                          cuentasCredito.isEmpty || facturadoPendiente <= 0
+-                          ? null
+-                          : () => _mostrarDialogoAbonoTarjeta(
+-                              cuentasCredito: cuentasCredito,
+-                              itemAbono: _itemPagoFacturadoTarjeta,
+-                              montoInicial: facturadoPendiente,
+-                              titulo: 'Pagar monto facturado',
+-                            ),
+-                      icon: const Icon(Icons.check_circle_outline),
+-                      label: const Text('Pagar facturado'),
+-                    ),
+-                    OutlinedButton.icon(
+-                      onPressed: cuentasCredito.isEmpty
+-                          ? null
+-                          : () => _mostrarDialogoAbonoTarjeta(
+-                              cuentasCredito: cuentasCredito,
+-                              itemAbono: _itemAbonoTarjeta,
+-                              titulo: 'Registrar abono',
+-                            ),
+-                      icon: const Icon(Icons.add_card),
+-                      label: const Text('Registrar abono'),
++                  const SizedBox(height: 6),
++                  Text(
++                    'Facturado pendiente: ${_textoMonto(facturadoPendienteVisible)}',
++                    style: TextStyle(
++                      color: Theme.of(context).brightness == Brightness.dark
++                          ? Colors.grey.shade300
++                          : Colors.grey.shade700,
+                     ),
+-                  ],
++                  ),
++                  const SizedBox(height: 10),
++                  Wrap(
++                    spacing: 8,
++                    runSpacing: 8,
++                    children: [
++                      FilledButton.icon(
++                        onPressed:
++                            cuentasCredito.isEmpty ||
++                                facturadoPendienteVisible <= 0
++                            ? null
++                            : () => _mostrarDialogoAbonoTarjeta(
++                                cuentasCredito: cuentasCredito,
++                                itemAbono: _itemPagoFacturadoTarjeta,
++                                montoInicial: facturadoPendienteVisible,
++                                titulo: 'Pagar monto facturado',
++                              ),
++                        icon: const Icon(Icons.check_circle_outline),
++                        label: const Text('Pagar facturado'),
++                      ),
++                      OutlinedButton.icon(
++                        onPressed: cuentasCredito.isEmpty
++                            ? null
++                            : () => _mostrarDialogoAbonoTarjeta(
++                                cuentasCredito: cuentasCredito,
++                                itemAbono: _itemAbonoTarjeta,
++                                titulo: 'Registrar abono',
++                              ),
++                        icon: const Icon(Icons.add_card),
++                        label: const Text('Registrar abono'),
++                      ),
++                    ],
++                  ),
++                ],
++              ),
++            )
++          else
++            Container(
++              width: double.infinity,
++              padding: const EdgeInsets.all(14),
++              decoration: BoxDecoration(
++                color: Theme.of(context).cardColor,
++                borderRadius: BorderRadius.circular(14),
++                border: Border.all(
++                  color: Theme.of(context).brightness == Brightness.dark
++                      ? Colors.grey.shade800
++                      : Colors.grey.shade200,
+                 ),
+-              ],
++              ),
++              child: const Text(
++                'Facturados y abonos solo se muestran en el periodo actual antes del vencimiento.',
++                style: TextStyle(fontSize: 12, color: Colors.grey),
++              ),
+             ),
+-          ),
+           const SizedBox(height: 14),
+           Container(
+             padding: const EdgeInsets.symmetric(vertical: 4),
+@@ -8795,106 +8686,107 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+                   }).toList(),
+           ),
+ 
+-          // --- Detalle de movimientos facturados ---
+-          ExpansionTile(
+-            tilePadding: EdgeInsets.zero,
+-            title: Row(
+-              children: [
+-                Icon(
+-                  Icons.receipt,
+-                  color: Colors.deepOrange.shade600,
+-                  size: 20,
+-                ),
+-                const SizedBox(width: 8),
+-                Text(
+-                  'Movimientos Facturados (${movimientosFacturados.length})',
+-                  style: const TextStyle(
+-                    fontSize: 16,
+-                    fontWeight: FontWeight.bold,
++          // --- Detalle de movimientos facturados y abonos ---
++          if (mostrarFacturadosYAbonos)
++            ExpansionTile(
++              tilePadding: EdgeInsets.zero,
++              title: Row(
++                children: [
++                  Icon(
++                    Icons.receipt,
++                    color: Colors.deepOrange.shade600,
++                    size: 20,
+                   ),
+-                ),
+-              ],
+-            ),
+-            children: movimientosFacturados.isEmpty
+-                ? [
+-                    const Padding(
+-                      padding: EdgeInsets.symmetric(vertical: 8),
+-                      child: Text(
+-                        'Sin movimientos facturados',
+-                        style: TextStyle(color: Colors.grey),
+-                      ),
++                  const SizedBox(width: 8),
++                  Text(
++                    'Movimientos Facturados (${movimientosFacturadosVisibles.length})',
++                    style: const TextStyle(
++                      fontSize: 16,
++                      fontWeight: FontWeight.bold,
+                     ),
+-                  ]
+-                : movimientosFacturados.map((m) {
+-                    final fecha = DateTime.parse(m['fecha']);
+-                    return ListTile(
+-                      dense: true,
+-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+-                      leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
+-                      title: Text(m['item'] ?? 'Sin nombre'),
+-                      subtitle: Text(
+-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
+-                      ),
+-                      trailing: Text(
+-                        _textoMonto((m['monto'] as num).toInt()),
+-                        style: TextStyle(
+-                          fontWeight: FontWeight.bold,
+-                          color: Colors.deepOrange.shade700,
++                  ),
++                ],
++              ),
++              children: movimientosFacturadosVisibles.isEmpty
++                  ? [
++                      const Padding(
++                        padding: EdgeInsets.symmetric(vertical: 8),
++                        child: Text(
++                          'Sin movimientos facturados',
++                          style: TextStyle(color: Colors.grey),
+                         ),
+                       ),
+-                    );
+-                  }).toList(),
+-          ),
+-
+-          ExpansionTile(
+-            tilePadding: EdgeInsets.zero,
+-            title: Row(
+-              children: [
+-                Icon(Icons.payments, color: Colors.green.shade700, size: 20),
+-                const SizedBox(width: 8),
+-                Text(
+-                  'Abonos registrados (${movimientosAbonos.length})',
+-                  style: const TextStyle(
+-                    fontSize: 16,
+-                    fontWeight: FontWeight.bold,
+-                  ),
+-                ),
+-              ],
++                    ]
++                  : movimientosFacturadosVisibles.map((m) {
++                      final fecha = DateTime.parse(m['fecha']);
++                      return ListTile(
++                        dense: true,
++                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
++                        leading: _iconoCategoria(m['categoria'] ?? '', size: 20),
++                        title: Text(m['item'] ?? 'Sin nombre'),
++                        subtitle: Text(
++                          '${fecha.day}/${fecha.month}/${fecha.year} · ${m['categoria'] ?? ''}',
++                        ),
++                        trailing: Text(
++                          _textoMonto((m['monto'] as num).toInt()),
++                          style: TextStyle(
++                            fontWeight: FontWeight.bold,
++                            color: Colors.deepOrange.shade700,
++                          ),
++                        ),
++                      );
++                    }).toList(),
+             ),
+-            children: movimientosAbonos.isEmpty
+-                ? [
+-                    const Padding(
+-                      padding: EdgeInsets.symmetric(vertical: 8),
+-                      child: Text(
+-                        'Sin abonos en el periodo actual',
+-                        style: TextStyle(color: Colors.grey),
+-                      ),
++          if (mostrarFacturadosYAbonos)
++            ExpansionTile(
++              tilePadding: EdgeInsets.zero,
++              title: Row(
++                children: [
++                  Icon(Icons.payments, color: Colors.green.shade700, size: 20),
++                  const SizedBox(width: 8),
++                  Text(
++                    'Abonos registrados (${movimientosAbonosVisibles.length})',
++                    style: const TextStyle(
++                      fontSize: 16,
++                      fontWeight: FontWeight.bold,
+                     ),
+-                  ]
+-                : movimientosAbonos.map((m) {
+-                    final fecha = DateTime.parse(m['fecha']);
+-                    return ListTile(
+-                      dense: true,
+-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+-                      leading: Icon(
+-                        Icons.arrow_circle_down_rounded,
+-                        color: Colors.green.shade700,
+-                        size: 20,
+-                      ),
+-                      title: Text(m['item'] ?? _itemAbonoTarjeta),
+-                      subtitle: Text(
+-                        '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
++                  ),
++                ],
++              ),
++              children: movimientosAbonosVisibles.isEmpty
++                  ? [
++                      const Padding(
++                        padding: EdgeInsets.symmetric(vertical: 8),
++                        child: Text(
++                          'Sin abonos en el periodo actual',
++                          style: TextStyle(color: Colors.grey),
++                        ),
+                       ),
+-                      trailing: Text(
+-                        _textoMonto((m['monto'] as num).toInt()),
+-                        style: TextStyle(
+-                          fontWeight: FontWeight.bold,
++                    ]
++                  : movimientosAbonosVisibles.map((m) {
++                      final fecha = DateTime.parse(m['fecha']);
++                      return ListTile(
++                        dense: true,
++                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
++                        leading: Icon(
++                          Icons.arrow_circle_down_rounded,
+                           color: Colors.green.shade700,
++                          size: 20,
+                         ),
+-                      ),
+-                    );
+-                  }).toList(),
+-          ),
++                        title: Text(m['item'] ?? _itemAbonoTarjeta),
++                        subtitle: Text(
++                          '${fecha.day}/${fecha.month}/${fecha.year} · ${(m['cuenta'] ?? '').toString()}',
++                        ),
++                        trailing: Text(
++                          _textoMonto((m['monto'] as num).toInt()),
++                          style: TextStyle(
++                            fontWeight: FontWeight.bold,
++                            color: Colors.green.shade700,
++                          ),
++                        ),
++                      );
++                    }).toList(),
++            ),
+ 
+           const SizedBox(height: 24),
+           const Text(
+@@ -8935,7 +8827,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+         return Container(
+           padding: const EdgeInsets.all(24),
+           decoration: BoxDecoration(
+-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++            color: isDark ? const Color(0xFF1E2433) : Colors.white,
+             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+           ),
+           child: Column(
+@@ -9173,7 +9065,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+               Card(
+                 margin: EdgeInsets.zero,
+                 elevation: 0,
+-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                 shape: RoundedRectangleBorder(
+                   borderRadius: BorderRadius.circular(12),
+                   side: BorderSide(
+@@ -9247,7 +9139,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
+       margin: const EdgeInsets.only(bottom: 12),
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         boxShadow: [
+           BoxShadow(
+@@ -10603,7 +10495,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+                   Container(
+                     width: double.infinity,
+                     decoration: BoxDecoration(
+-                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                       borderRadius: BorderRadius.circular(12),
+                       border: Border.all(
+                         color: isDark
+@@ -10855,7 +10747,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+         hintText: hint,
+         prefixIcon: Icon(icon, size: 20),
+         filled: true,
+-        fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        fillColor: isDark ? const Color(0xFF1E2433) : Colors.white,
+         border: OutlineInputBorder(
+           borderRadius: BorderRadius.circular(12),
+           borderSide: BorderSide(
+@@ -10887,7 +10779,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11018,7 +10910,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11151,7 +11043,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+@@ -11480,7 +11372,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
+       width: double.infinity,
+       padding: const EdgeInsets.all(16),
+       decoration: BoxDecoration(
+-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
++        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+         borderRadius: BorderRadius.circular(16),
+         border: Border.all(
+           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
