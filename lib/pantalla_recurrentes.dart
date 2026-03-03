@@ -340,7 +340,7 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _frecuencia,
+                initialValue: _frecuencia,
                 decoration: const InputDecoration(labelText: 'Frecuencia'),
                 items: _frecuencias
                     .map((f) => DropdownMenuItem(value: f, child: Text(f)))
@@ -380,7 +380,7 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
               const SizedBox(height: 12),
 
               DropdownButtonFormField<String>(
-                value: _categoria,
+                initialValue: _categoria,
                 decoration: const InputDecoration(labelText: 'Categoría'),
                 items: categorias
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
@@ -390,7 +390,7 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
               const SizedBox(height: 12),
 
               DropdownButtonFormField<String>(
-                value: _cuenta,
+                initialValue: _cuenta,
                 decoration: const InputDecoration(labelText: 'Cuenta'),
                 items: cuentas
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))

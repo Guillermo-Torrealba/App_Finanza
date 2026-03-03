@@ -1,0 +1,40 @@
+﻿Analyzing App_Finanzas...                                       
+
+   info - The imported package 'shimmer' isn't a dependency of the importing package - lib\flujo_caja_screen.dart:4:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:shimmer/shimmer.dart' - lib\flujo_caja_screen.dart:4:8 - uri_does_not_exist
+   info - The local variable '_isDuplicateOfFixedItem' starts with an underscore - lib\flujo_caja_screen.dart:117:12 - no_leading_underscores_for_local_identifiers
+   info - Statements in an if should be enclosed in a block - lib\flujo_caja_screen.dart:143:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\flujo_caja_screen.dart:212:11 - curly_braces_in_flow_control_structures
+  error - Undefined name 'Shimmer' - lib\flujo_caja_screen.dart:728:12 - undefined_identifier
+   info - The imported package 'shimmer' isn't a dependency of the importing package - lib\gastos_compartidos_screen.dart:3:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:shimmer/shimmer.dart' - lib\gastos_compartidos_screen.dart:3:8 - uri_does_not_exist
+  error - Undefined name 'Shimmer' - lib\gastos_compartidos_screen.dart:274:12 - undefined_identifier
+   info - Unnecessary use of multiple underscores - lib\gastos_compartidos_screen.dart:296:32 - unnecessary_underscores
+   info - The imported package 'lottie' isn't a dependency of the importing package - lib\login_screen.dart:3:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:lottie/lottie.dart' - lib\login_screen.dart:3:8 - uri_does_not_exist
+   info - Don't invoke 'print' in production code - lib\login_screen.dart:58:13 - avoid_print
+   info - Don't invoke 'print' in production code - lib\login_screen.dart:60:13 - avoid_print
+  error - Undefined name 'Lottie' - lib\login_screen.dart:197:26 - undefined_identifier
+   info - The imported package 'google_fonts' isn't a dependency of the importing package - lib\main.dart:9:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:google_fonts/google_fonts.dart' - lib\main.dart:9:8 - uri_does_not_exist
+  error - Undefined name 'GoogleFonts' - lib\main.dart:56:24 - undefined_identifier
+  error - Undefined name 'GoogleFonts' - lib\main.dart:102:24 - undefined_identifier
+   info - The imported package 'lottie' isn't a dependency of the importing package - lib\onboarding_screen.dart:4:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:lottie/lottie.dart' - lib\onboarding_screen.dart:4:8 - uri_does_not_exist
+  error - Undefined name 'Lottie' - lib\onboarding_screen.dart:269:28 - undefined_identifier
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\onboarding_screen.dart:442:29 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\onboarding_screen.dart:478:37 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block - lib\onboarding_screen.dart:495:41 - curly_braces_in_flow_control_structures
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\onboarding_screen.dart:502:37 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block - lib\onboarding_screen.dart:519:41 - curly_braces_in_flow_control_structures
+   info - The imported package 'shimmer' isn't a dependency of the importing package - lib\pantalla_principal.dart:13:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:shimmer/shimmer.dart' - lib\pantalla_principal.dart:13:8 - uri_does_not_exist
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\pantalla_principal.dart:288:31 - use_build_context_synchronously
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\pantalla_principal.dart:2810:11 - use_null_aware_elements
+  error - Undefined name 'Shimmer' - lib\pantalla_principal.dart:3483:12 - undefined_identifier
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\pantalla_principal.dart:5318:37 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\pantalla_principal.dart:6095:31 - use_build_context_synchronously
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pantalla_recurrentes.dart:343:17 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pantalla_recurrentes.dart:383:17 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pantalla_recurrentes.dart:393:17 - deprecated_member_use
+

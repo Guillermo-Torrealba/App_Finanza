@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:lottie/lottie.dart';
 
 import 'pantalla_principal.dart';
 import 'app_settings.dart';
@@ -192,7 +193,13 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
               if (_isLoading)
-                const Center(child: CircularProgressIndicator())
+                Center(
+                  child: Lottie.asset(
+                    'assets/lottie/loading.json',
+                    width: 100,
+                    height: 100,
+                  ),
+                )
               else
                 FilledButton(
                   onPressed: _submit,

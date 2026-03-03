@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:lottie/lottie.dart';
 import 'app_settings.dart';
 import 'pantalla_principal.dart';
 
@@ -262,12 +263,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+                ? SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Lottie.asset(
+                      'assets/lottie/loading.json',
+                      fit: BoxFit.cover,
                     ),
                   )
                 : Text(
@@ -438,7 +439,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           SwitchListTile(
                             title: const Text('Uso tarjeta de crédito'),
                             value: _usaTarjeta,
-                            activeColor: primary,
+                            activeTrackColor: primary,
                             onChanged: (val) {
                               setState(() => _usaTarjeta = val);
                             },
@@ -474,7 +475,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               children: [
                                 Expanded(
                                   child: DropdownButtonFormField<int>(
-                                    value: _diaFacturacion,
+                                    initialValue: _diaFacturacion,
                                     decoration: InputDecoration(
                                       labelText: 'Día Facturación',
                                       border: OutlineInputBorder(
@@ -490,15 +491,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                         )
                                         .toList(),
                                     onChanged: (val) {
-                                      if (val != null)
+                                      if (val != null) {
                                         setState(() => _diaFacturacion = val);
+                                      }
                                     },
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: DropdownButtonFormField<int>(
-                                    value: _diaVencimiento,
+                                    initialValue: _diaVencimiento,
                                     decoration: InputDecoration(
                                       labelText: 'Día Vencimiento',
                                       border: OutlineInputBorder(
@@ -514,8 +516,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                         )
                                         .toList(),
                                     onChanged: (val) {
-                                      if (val != null)
+                                      if (val != null) {
                                         setState(() => _diaVencimiento = val);
+                                      }
                                     },
                                   ),
                                 ),

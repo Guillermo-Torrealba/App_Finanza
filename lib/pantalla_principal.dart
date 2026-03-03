@@ -9,6 +9,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'dart:ui';
+import 'package:shimmer/shimmer.dart';
+
 import 'app_settings.dart';
 import 'finance_alert.dart';
 import 'flujo_caja_screen.dart';
@@ -279,7 +282,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 final ok = await widget.settingsController.verifyPin(
                   pinController.text.trim(),
                 );
-                if (!mounted) {
+                if (!context.mounted) {
                   return;
                 }
                 Navigator.pop(context, ok);
@@ -477,7 +480,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
         ),
-        onPressed: () => setState(() => _indicePestana = index),
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          setState(() => _indicePestana = index);
+        },
         tooltip: tooltip,
       ),
     );
@@ -1104,7 +1110,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final scaffold = Scaffold(
+      extendBody:
+          true, // Allows body to scroll under the floating bottom app bar
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: AnimatedSwitcher(
@@ -1125,7 +1134,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return _construirSkeletonPrincipal(isDark);
           }
           final todosLosDatos = snapshot.data!;
 
@@ -1177,78 +1187,91 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               curve: Curves.elasticOut,
               child: FloatingActionButton(
                 heroTag: 'fab_agregar',
-                onPressed: () => _mostrarDialogo(),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  _mostrarDialogo();
+                },
                 child: const Icon(Icons.add),
               ),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        child: Row(
-          children: <Widget>[
-            // Lado izquierdo: 3 iconos
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _navIcon(
-                    filled: Icons.home,
-                    outlined: Icons.home_outlined,
-                    index: 0,
-                    tooltip: 'Inicio',
+      bottomNavigationBar: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: BottomAppBar(
+            shape: const CircularNotchedRectangle(),
+            notchMargin: 8.0,
+            color: isDark
+                ? const Color(0xFF1E293B).withAlpha(150)
+                : Colors.white.withAlpha(200),
+            elevation: 0,
+            child: Row(
+              children: <Widget>[
+                // Lado izquierdo: 3 iconos
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _navIcon(
+                        filled: Icons.home,
+                        outlined: Icons.home_outlined,
+                        index: 0,
+                        tooltip: 'Inicio',
+                      ),
+                      _navIcon(
+                        filled: Icons.pie_chart,
+                        outlined: Icons.pie_chart_outline,
+                        index: 1,
+                        tooltip: 'Análisis',
+                      ),
+                      _navIcon(
+                        filled: Icons.flag,
+                        outlined: Icons.flag_outlined,
+                        index: 2,
+                        tooltip: 'Metas',
+                      ),
+                    ],
                   ),
-                  _navIcon(
-                    filled: Icons.pie_chart,
-                    outlined: Icons.pie_chart_outline,
-                    index: 1,
-                    tooltip: 'Análisis',
+                ),
+                // Espacio central para el FAB
+                const SizedBox(width: 72),
+                // Lado derecho: 3 iconos
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _navIcon(
+                        filled: Icons.calculate,
+                        outlined: Icons.calculate_outlined,
+                        index: 3,
+                        tooltip: 'Presupuestos',
+                      ),
+                      if (widget.settingsController.settings.hasCreditCard)
+                        _navIcon(
+                          filled: Icons.calendar_month,
+                          outlined: Icons.calendar_today_outlined,
+                          index: 4,
+                          tooltip: 'Planificación',
+                        ),
+                      _navIcon(
+                        filled: Icons.menu,
+                        outlined: Icons.menu_open,
+                        index: widget.settingsController.settings.hasCreditCard
+                            ? 5
+                            : 4,
+                        tooltip: 'Más',
+                      ),
+                    ],
                   ),
-                  _navIcon(
-                    filled: Icons.flag,
-                    outlined: Icons.flag_outlined,
-                    index: 2,
-                    tooltip: 'Metas',
-                  ),
-                ],
-              ),
-            ),
-            // Espacio central para el FAB
-            const SizedBox(width: 72),
-            // Lado derecho: 3 iconos
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _navIcon(
-                    filled: Icons.calculate,
-                    outlined: Icons.calculate_outlined,
-                    index: 3,
-                    tooltip: 'Presupuestos',
-                  ),
-                  if (widget.settingsController.settings.hasCreditCard)
-                    _navIcon(
-                      filled: Icons.calendar_month,
-                      outlined: Icons.calendar_today_outlined,
-                      index: 4,
-                      tooltip: 'Planificación',
-                    ),
-                  _navIcon(
-                    filled: Icons.menu,
-                    outlined: Icons.menu_open,
-                    index: widget.settingsController.settings.hasCreditCard
-                        ? 5
-                        : 4,
-                    tooltip: 'Más',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+                ),
+              ],
+            ), // BottomAppBar child Row
+          ), // BottomAppBar
+        ), // BackdropFilter
+      ), // ClipRRect
+    ); // Scaffold
 
     if (!_bloqueada) {
       return scaffold;
@@ -3455,6 +3478,75 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
   }
 
+  // Skeleton Loader Base
+  Widget _construirSkeletonPrincipal(bool isDark) {
+    return Shimmer.fromColors(
+      baseColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+      highlightColor: isDark ? Colors.grey.shade700 : Colors.grey.shade100,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Tarjeta principal skeleton
+          Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Píldoras horizontales
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(
+              4,
+              (index) => Container(
+                width: 70,
+                height: 35,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Items de lista
+          ...List.generate(
+            5,
+            (index) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(width: 150, height: 14, color: Colors.white),
+                        const SizedBox(height: 8),
+                        Container(width: 80, height: 12, color: Colors.white),
+                      ],
+                    ),
+                  ),
+                  Container(width: 60, height: 14, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _construirPaginaMas(List<Map<String, dynamic>> todosLosDatos) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -5222,7 +5314,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           'updated_at': DateTime.now().toIso8601String(),
                         })
                         .eq('id', meta['id']);
-                    if (mounted) {
+                    if (ctx.mounted) {
                       Navigator.pop(ctx);
                       if (completada) {
                         _mostrarSnack(
@@ -5997,7 +6089,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   return;
                 }
                 await widget.settingsController.setPin(pin1.text.trim());
-                if (!mounted) {
+                if (!context.mounted) {
                   return;
                 }
                 Navigator.pop(context, true);
@@ -7511,6 +7603,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                             left: 8,
                                           ),
                                           onPressed: () {
+                                            HapticFeedback.lightImpact();
                                             setStateSB(() {
                                               amigosCompartidos.removeAt(idx);
                                               nombreControllers[idx].dispose();

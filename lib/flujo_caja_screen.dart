@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'app_settings.dart';
 
@@ -113,7 +114,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
           .lte('fecha', '$_anoSeleccionado-12-31');
 
       // Helper to check if a manual entry matches a recurring item rule
-      bool _isDuplicateOfFixedItem(String tipo, String? itemName) {
+      bool isDuplicateOfFixedItem(String tipo, String? itemName) {
         final fixedList = tipo == 'Ingreso' ? _ingresosFijos : _gastosFijos;
         // The user issue shows "mesada" vs "Mesada"
         final searchNameItem = (itemName ?? '').toLowerCase().trim();
@@ -138,12 +139,13 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
           final cat = tx['categoria']?.toString() ?? 'Varios';
           if (cat == 'Transferencia' ||
               cat == 'Ajuste' ||
-              cat == 'Cuentas por Cobrar')
+              cat == 'Cuentas por Cobrar') {
             continue;
+          }
 
           final itemName = tx['item']?.toString();
 
-          final esFijo = _isDuplicateOfFixedItem(tipo, itemName);
+          final esFijo = isDuplicateOfFixedItem(tipo, itemName);
 
           final fecha = DateTime.parse(tx['fecha']);
           final mes = fecha.month;
@@ -207,8 +209,9 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         final cat = tx['categoria']?.toString() ?? 'Varios';
         if (cat == 'Transferencia' ||
             cat == 'Ajuste' ||
-            cat == 'Cuentas por Cobrar')
+            cat == 'Cuentas por Cobrar') {
           continue;
+        }
 
         final monto = (tx['monto'] as num? ?? 0).toDouble();
         if (tx['tipo'] == 'Ingreso') {
@@ -350,7 +353,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         ],
       ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? _construirSkeletonTabla(isDark)
           : SafeArea(
               child: Column(
                 children: [
@@ -720,5 +723,94 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       return InkWell(onTap: onTap, child: cell);
     }
     return cell;
+  }
+
+  // --- Skeleton Loader Flujo de Caja ---
+  Widget _construirSkeletonTabla(bool isDark) {
+    return Shimmer.fromColors(
+      baseColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+      highlightColor: isDark ? Colors.grey.shade700 : Colors.grey.shade100,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 140,
+                height: 45,
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: List.generate(
+                      12,
+                      (index) => Container(
+                        width: 100,
+                        height: 45,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: 15, // Simulate 15 rows
+              itemBuilder: (context, rowIndex) {
+                return Row(
+                  children: [
+                    Container(
+                      width: 140,
+                      height: 45,
+                      margin: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: List.generate(
+                            12,
+                            (colIndex) => Container(
+                              width: 100,
+                              height: 45,
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

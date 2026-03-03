@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shimmer/shimmer.dart';
 
 class GastosCompartidosScreen extends StatefulWidget {
   final List<Map<String, dynamic>> movimientos;
@@ -119,7 +120,8 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading && _deudas.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return _buildSkeleton(isDark);
     }
 
     final pendientes = _deudas.where((d) => d['pagado'] == false).toList();
@@ -266,4 +268,80 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
       },
     );
   }
-}
+
+  // --- Skeleton Loader ---
+  Widget _buildSkeleton(bool isDark) {
+    return Shimmer.fromColors(
+      baseColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+      highlightColor: isDark ? Colors.grey.shade700 : Colors.grey.shade100,
+      child: Column(
+        children: [
+          // TabBar Skeleton
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Container(width: 100, height: 20, color: Colors.white),
+                Container(width: 100, height: 20, color: Colors.white),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // List Items Skeleton
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: 5,
+              itemBuilder: (context, index) {
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 120,
+                                height: 16,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                width: 80,
+                                height: 12,
+                                color: Colors.white,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(width: 60, height: 20, color: Colors.white),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+} // End of State
