@@ -4394,8 +4394,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 metasCompletadas.length,
                 isDark,
               ),
-              const SizedBox(height: 16),
-              _construirBannerSimulador(),
               const SizedBox(height: 24),
 
               // ── Active Goals ──
@@ -4539,103 +4537,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
-            _construirBannerSimulador(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _construirBannerSimulador() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                FlujoCajaScreen(settingsController: widget.settingsController),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark
-                ? [Colors.deepPurple.shade900, Colors.indigo.shade900]
-                : [Colors.deepPurple.shade50, Colors.indigo.shade50],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark
-                ? Colors.deepPurple.shade700
-                : Colors.deepPurple.shade200,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.deepPurple.withValues(alpha: 0.3)
-                    : Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.auto_graph,
-                color: isDark ? Colors.deepPurpleAccent : Colors.deepPurple,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Premium',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade700,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.star, size: 10, color: Colors.amber.shade700),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Flujo de Caja',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Proyección y control mensual',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
             ),
           ],
         ),
