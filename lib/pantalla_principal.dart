@@ -2206,10 +2206,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = movimientosFiltrados[index];
-              final esIngreso = item['tipo'] == 'Ingreso';
-              final categoria = (item['categoria'] ?? 'Varios').toString();
-              final fechaItem = DateTime.parse(item['fecha']);
-
               return TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: Duration(
@@ -2225,76 +2221,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                   );
                 },
-                child: Container(
-                  margin: EdgeInsets.symmetric(horizontal: margin, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Dismissible(
-                    key: Key(item['id'].toString()),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade400,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      alignment: Alignment.centerRight,
-                      child: const Padding(
-                        padding: EdgeInsets.only(right: 20),
-                        child: Icon(Icons.delete, color: Colors.white),
-                      ),
-                    ),
-                    onDismissed: (_) async {
-                      await supabase
-                          .from('gastos')
-                          .delete()
-                          .eq('id', item['id']);
-                    },
-                    child: ListTile(
-                      onTap: () => _mostrarDialogo(itemParaEditar: item),
-                      leading: Hero(
-                        tag: 'mov_${item['id']}',
-                        child: CircleAvatar(
-                          backgroundColor: esIngreso
-                              ? Colors.green.withAlpha(0x1A)
-                              : Colors.red.withAlpha(0x1A),
-                          child: esIngreso
-                              ? const Icon(
-                                  Icons.arrow_upward,
-                                  color: Colors.green,
-                                  size: 20,
-                                )
-                              : _iconoCategoria(
-                                  categoria,
-                                  color: Colors.red,
-                                  size: 20,
-                                ),
-                        ),
-                      ),
-                      title: Text(
-                        (item['item'] ?? 'Sin nombre').toString(),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        '${fechaItem.day} de ${obtenerNombreMes(fechaItem.month)} · ${(item['cuenta'] ?? '-').toString()} · ${(item['metodo_pago'] ?? 'Débito').toString()}',
-                      ),
-                      trailing: Text(
-                        _textoMonto(item['monto'] as num),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: esIngreso
-                              ? (isDark
-                                    ? Colors.greenAccent
-                                    : Colors.green.shade700)
-                              : (isDark
-                                    ? Colors.redAccent
-                                    : Colors.red.shade700),
-                        ),
-                      ),
-                    ),
-                  ),
+                child: _tarjetaTransaccion(
+                  item: item,
+                  margin: margin,
+                  isDark: isDark,
                 ),
               );
             }, childCount: itemCount),
@@ -2327,6 +2257,163 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 90)),
       ],
+    );
+  }
+
+  Widget _tarjetaTransaccion({
+    required Map<String, dynamic> item,
+    required double margin,
+    required bool isDark,
+  }) {
+    final esIngreso = item['tipo'] == 'Ingreso';
+    final categoria = (item['categoria'] ?? 'Varios').toString();
+    final fechaItem = DateTime.parse(item['fecha']);
+    final colorBase = esIngreso ? Colors.teal : Colors.red;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: margin, vertical: 6),
+      child: Dismissible(
+        key: Key('dismiss_${item['id']}'),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          decoration: BoxDecoration(
+            color: Colors.red.shade400,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          child: const Icon(Icons.delete_outline, color: Colors.white),
+        ),
+        onDismissed: (_) async {
+          await supabase.from('gastos').delete().eq('id', item['id']);
+        },
+        child: InkWell(
+          onTap: () => _mostrarDialogo(itemParaEditar: item),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(isDark ? 30 : 8),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Icono con fondo suave
+                Hero(
+                  tag: 'mov_${item['id']}',
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: colorBase.withAlpha(isDark ? 40 : 25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: esIngreso
+                          ? Icon(
+                              Icons.add_chart_rounded,
+                              color: isDark
+                                  ? Colors.tealAccent.shade400
+                                  : Colors.teal.shade700,
+                              size: 24,
+                            )
+                          : _iconoCategoria(
+                              categoria,
+                              color: isDark
+                                  ? Colors.redAccent.shade100
+                                  : Colors.red.shade700,
+                              size: 24,
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Info Central
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (item['item'] ?? 'Sin nombre').toString(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} · ${(item['cuenta'] ?? '-').toString()}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Monto
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _textoMonto(item['monto'] as num),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        color: esIngreso
+                            ? (isDark
+                                  ? Colors.tealAccent.shade400
+                                  : Colors.teal.shade700)
+                            : (isDark
+                                  ? Colors.redAccent.shade100
+                                  : Colors.red.shade700),
+                      ),
+                    ),
+                    if ((item['metodo_pago'] ?? 'Debito') == 'Credito')
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.orangeAccent.withAlpha(40)
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'CRÉDITO',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? Colors.orangeAccent
+                                : Colors.orange.shade800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -4790,24 +4877,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: completada
-              ? (isDark ? Colors.green.shade800 : Colors.green.shade200)
-              : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+              ? (isDark ? Colors.green.shade900 : Colors.green.shade100)
+              : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 40 : 8),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withAlpha(isDark ? 40 : 6),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           onTap: () => _mostrarOpcionesMeta(meta),
           onLongPress: () => _mostrarOpcionesMeta(meta),
           child: Padding(
@@ -6787,32 +6875,37 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         backgroundColor: Colors.transparent,
         builder: (context) {
           return Container(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
                   ? const Color(0xFF1E1E1E)
                   : Colors.white,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+                top: Radius.circular(32),
               ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Handle más prominente
                 Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
+                  width: 50,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
+                    color: Colors.grey.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2.5),
                   ),
                 ),
-                const Text(
+                Text(
                   '¿Qué deseas registrar?',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 Row(
                   children: [
                     Expanded(
@@ -6888,36 +6981,48 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     return _ScaleTap(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 28),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
         decoration: BoxDecoration(
-          color: isDark ? color.shade900.withAlpha(80) : color.shade50,
-          borderRadius: BorderRadius.circular(20),
+          color: isDark
+              ? color.shade900.withAlpha(60)
+              : color.shade50.withAlpha(150),
+          borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isDark ? color.shade700 : color.shade200,
-            width: 1.5,
+            color: isDark
+                ? color.shade700.withAlpha(100)
+                : color.shade200.withAlpha(150),
+            width: 1.2,
           ),
         ),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isDark ? color.shade800.withAlpha(120) : color.shade100,
+                color: isDark ? color.shade800.withAlpha(100) : Colors.white,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withAlpha(isDark ? 0 : 20),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Icon(
                 icono,
-                size: 32,
+                size: 28,
                 color: isDark ? color.shade200 : color.shade700,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               titulo,
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDark ? color.shade200 : color.shade800,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: isDark ? color.shade100 : color.shade900,
+                letterSpacing: -0.3,
               ),
             ),
           ],
@@ -7009,6 +7114,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateSB) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             Future<void> guardar() async {
               final montoStr = _montoController.text.trim();
               if (montoStr.isEmpty) return;
@@ -7233,62 +7339,89 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       // Concepto
                       TextField(
                         controller: _itemController,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                         decoration: InputDecoration(
+                          hintText: '¿En qué se usó?',
                           labelText: 'Concepto',
-                          prefixIcon: const Icon(Icons.edit_note),
+                          prefixIcon: Icon(
+                            Icons.edit_note,
+                            color: colorTipo.shade400,
+                          ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.dark
-                              ? Colors.grey.shade900
-                              : Colors.grey.shade50,
+                          fillColor: isDark
+                              ? Colors.white.withAlpha(15)
+                              : Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
 
                       // Detalle
                       TextField(
                         controller: _detalleController,
                         decoration: InputDecoration(
+                          hintText: 'Notas adicionales...',
                           labelText: 'Detalle (opcional)',
-                          prefixIcon: const Icon(Icons.description),
+                          prefixIcon: Icon(
+                            Icons.description_outlined,
+                            color: colorTipo.shade400,
+                          ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.dark
-                              ? Colors.grey.shade900
-                              : Colors.grey.shade50,
+                          fillColor: isDark
+                              ? Colors.white.withAlpha(15)
+                              : Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
                         ),
-                        maxLines: 3,
+                        maxLines: 2,
                         minLines: 1,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
 
                       // Monto
                       TextField(
                         controller: _montoController,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: colorTipo.shade400,
+                        ),
                         decoration: InputDecoration(
                           labelText: 'Monto',
-                          prefixIcon: const Icon(Icons.attach_money),
+                          prefixIcon: Icon(
+                            Icons.numbers_rounded,
+                            color: colorTipo.shade400,
+                          ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.dark
-                              ? Colors.grey.shade900
-                              : Colors.grey.shade50,
+                          fillColor: colorTipo.withAlpha(isDark ? 20 : 10),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 20),
 
                       // Categoría label
                       if (!esTransferencia) ...[
@@ -7365,22 +7498,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 decoration: InputDecoration(
                                   labelText: 'Fecha',
                                   border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
                                   ),
                                   filled: true,
-                                  fillColor:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.grey.shade900
-                                      : Colors.grey.shade50,
-                                  suffixIcon: const Icon(
-                                    Icons.calendar_today,
+                                  fillColor: isDark
+                                      ? Colors.white.withAlpha(15)
+                                      : Colors.grey.shade100,
+                                  suffixIcon: Icon(
+                                    Icons.calendar_month_rounded,
                                     size: 18,
+                                    color: colorTipo.shade400,
                                   ),
                                   isDense: true,
                                 ),
                                 child: Text(
                                   '${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
@@ -7394,14 +7530,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     ? 'Cuenta Origen'
                                     : 'Cuenta',
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
                                 ),
                                 filled: true,
-                                fillColor:
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.grey.shade900
-                                    : Colors.grey.shade50,
+                                fillColor: isDark
+                                    ? Colors.white.withAlpha(15)
+                                    : Colors.grey.shade100,
                                 isDense: true,
                               ),
                               items: cuentasDisponibles
