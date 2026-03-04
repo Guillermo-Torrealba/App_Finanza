@@ -8020,7 +8020,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   'categoria': p.categoria,
                   'cuenta': p.cuenta ?? settings.defaultAccount,
                   'tipo': p.tipo,
-                  'metodo_pago': 'Debito',
+                  'metodo_pago': p.metodoPago,
                 });
                 if (context.mounted) {
                   Navigator.pop(context);
@@ -8338,16 +8338,30 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     parsed!.fecha,
                                     isDark,
                                   ),
-                                  if (parsed!.cuenta != null) ...[
-                                    const SizedBox(width: 8),
+                                  const SizedBox(width: 8),
+                                  _quickInfoChip(
+                                    parsed!.metodoPago == 'Credito'
+                                        ? Icons.credit_card
+                                        : Icons.account_balance_wallet_outlined,
+                                    parsed!.metodoPago == 'Credito'
+                                        ? 'Crédito'
+                                        : 'Débito',
+                                    isDark,
+                                  ),
+                                ],
+                              ),
+                              if (parsed!.cuenta != null) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
                                     _quickInfoChip(
-                                      Icons.account_balance_wallet_outlined,
+                                      Icons.account_balance,
                                       parsed!.cuenta!,
                                       isDark,
                                     ),
                                   ],
-                                ],
-                              ),
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               // Action buttons
                               Row(

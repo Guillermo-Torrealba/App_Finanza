@@ -243,8 +243,7 @@ Analiza mis finanzas y dame insights útiles.
             {
               'role': 'system',
               'content':
-                  '''
-Eres un parser de transacciones financieras. El usuario te describe un gasto o ingreso en lenguaje natural (texto o voz transcrita) y tú extraes los datos estructurados.
+                  '''Eres un parser de transacciones financieras. El usuario te describe un gasto o ingreso en lenguaje natural (texto o voz transcrita) y tú extraes los datos estructurados.
 
 Fecha de hoy: $fechaHoy
 
@@ -256,6 +255,7 @@ REGLAS:
 - El monto puede venir como "15 lucas" (15000), "5 luca" (5000), "100 pesos" (100), "mil" (1000), etc.
 - Elige la categoría más apropiada de las listas proporcionadas.
 - Si menciona una cuenta específica, úsala; si no, deja null.
+- Para metodo_pago: si dice "con tarjeta", "crédito", "a crédito", "con la tarjeta" → "Credito". Si dice "efectivo", "débito", "transferencia" o no menciona nada → "Debito".
 - Responde ÚNICAMENTE con JSON válido, sin markdown ni texto extra.
 
 Categorías de gasto: ${categoriasGasto.join(", ")}
@@ -269,7 +269,8 @@ JSON de respuesta:
   "monto": 15000,
   "categoria": "categoría elegida",
   "fecha": "2026-03-03",
-  "cuenta": "nombre cuenta o null"
+  "cuenta": "nombre cuenta o null",
+  "metodo_pago": "Debito" o "Credito"
 }''',
             },
             {'role': 'user', 'content': texto},
@@ -306,6 +307,7 @@ class ParsedTransaction {
   final String categoria;
   final String fecha; // yyyy-MM-dd
   final String? cuenta;
+  final String metodoPago; // 'Debito' o 'Credito'
 
   ParsedTransaction({
     required this.tipo,
@@ -314,6 +316,7 @@ class ParsedTransaction {
     required this.categoria,
     required this.fecha,
     this.cuenta,
+    this.metodoPago = 'Debito',
   });
 
   factory ParsedTransaction.fromJson(Map<String, dynamic> json) {
@@ -324,6 +327,7 @@ class ParsedTransaction {
       categoria: (json['categoria'] ?? 'Varios').toString(),
       fecha: (json['fecha'] ?? '').toString(),
       cuenta: json['cuenta']?.toString(),
+      metodoPago: (json['metodo_pago'] ?? 'Debito').toString(),
     );
   }
 }
