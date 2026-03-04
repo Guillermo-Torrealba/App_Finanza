@@ -7919,8 +7919,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     bool isProcessing = false;
     bool isListening = false;
     String? errorMsg;
-    ParsedTransaction? parsed;
+    bool hasParsed = false;
     final speech = stt.SpeechToText();
+
+    // Editable fields (populated after AI parse)
+    final editItemCtrl = TextEditingController();
+    final editMontoCtrl = TextEditingController();
+    String editTipo = 'Gasto';
+    String editCategoria = '';
+    DateTime editFecha = DateTime.now();
+    String editCuenta = settings.defaultAccount;
+    String editMetodo = 'Debito';
 
     showModalBottomSheet(
       context: context,
@@ -7930,13 +7939,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         return StatefulBuilder(
           builder: (context, setStateSB) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
+            final esGasto = editTipo == 'Gasto';
+            final categoriasDisponibles = esGasto
+                ? [...settings.activeCategories]
+                : [...settings.activeIncomeCategories];
+            if (categoriasDisponibles.isEmpty) {
+              categoriasDisponibles.add(esGasto ? 'Varios' : 'Otros Ingresos');
+            }
+            if (editCategoria.isNotEmpty &&
+                !categoriasDisponibles.contains(editCategoria)) {
+              categoriasDisponibles.add(editCategoria);
+            }
+            final cuentasDisponibles = [...settings.activeAccounts];
+            if (cuentasDisponibles.isEmpty) {
+              cuentasDisponibles.add(settings.defaultAccount);
+            }
 
             Future<void> procesarTexto(String texto) async {
               if (texto.trim().isEmpty) return;
               setStateSB(() {
                 isProcessing = true;
                 errorMsg = null;
-                parsed = null;
+                hasParsed = false;
               });
 
               final result = await _aiService.parseNaturalLanguage(
@@ -7948,14 +7972,29 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               );
 
               if (context.mounted) {
-                setStateSB(() {
-                  isProcessing = false;
-                  parsed = result;
-                  if (result == null) {
+                if (result != null) {
+                  editItemCtrl.text = result.item;
+                  editMontoCtrl.text = result.monto.toString();
+                  editTipo = result.tipo;
+                  editCategoria = result.categoria;
+                  editCuenta = result.cuenta ?? settings.defaultAccount;
+                  editMetodo = result.metodoPago;
+                  try {
+                    editFecha = DateTime.parse(result.fecha);
+                  } catch (_) {
+                    editFecha = DateTime.now();
+                  }
+                  setStateSB(() {
+                    isProcessing = false;
+                    hasParsed = true;
+                  });
+                } else {
+                  setStateSB(() {
+                    isProcessing = false;
                     errorMsg =
                         'No pude entender. Intenta ser más específico, ej: "gasté 10 lucas en uber ayer"';
-                  }
-                });
+                  });
+                }
               }
             }
 
@@ -8008,25 +8047,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               );
             }
 
-            Future<void> guardarParsed() async {
-              if (parsed == null) return;
-              final p = parsed!;
+            Future<void> guardar() async {
+              final monto =
+                  int.tryParse(editMontoCtrl.text.trim()) ?? 0;
+              if (monto <= 0) {
+                setStateSB(
+                    () => errorMsg = 'El monto debe ser mayor a 0');
+                return;
+              }
               try {
                 await supabase.from('gastos').insert({
                   'user_id': supabase.auth.currentUser!.id,
-                  'fecha': p.fecha,
-                  'item': p.item,
-                  'monto': p.monto,
-                  'categoria': p.categoria,
-                  'cuenta': p.cuenta ?? settings.defaultAccount,
-                  'tipo': p.tipo,
-                  'metodo_pago': p.metodoPago,
+                  'fecha': editFecha.toIso8601String(),
+                  'item': editItemCtrl.text.trim().isEmpty
+                      ? 'Sin nombre'
+                      : editItemCtrl.text.trim(),
+                  'monto': monto,
+                  'categoria': editCategoria,
+                  'cuenta': editCuenta,
+                  'tipo': editTipo,
+                  'metodo_pago': editMetodo,
                 });
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('✅ ${p.tipo} registrado: ${p.item}'),
+                      content: Text(
+                          '✅ $editTipo registrado: ${editItemCtrl.text.trim()}'),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -8037,6 +8084,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 }
               }
             }
+
+            final colorTipo = esGasto ? Colors.red : Colors.green;
 
             return Padding(
               padding: EdgeInsets.only(
@@ -8114,7 +8163,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           Expanded(
                             child: TextField(
                               controller: quickController,
-                              autofocus: true,
+                              autofocus: !hasParsed,
                               style: const TextStyle(fontSize: 16),
                               decoration: InputDecoration(
                                 hintText: isListening
@@ -8137,19 +8186,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Mic button
                           GestureDetector(
                             onTap: toggleListening,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
-                              width: 52,
-                              height: 52,
+                              width: 48,
+                              height: 48,
                               decoration: BoxDecoration(
                                 color: isListening
                                     ? Colors.red.shade400
                                     : (isDark
-                                          ? Colors.purple.shade700
-                                          : Colors.purple.shade500),
+                                        ? Colors.purple.shade700
+                                        : Colors.purple.shade500),
                                 shape: BoxShape.circle,
                                 boxShadow: isListening
                                     ? [
@@ -8164,19 +8212,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               child: Icon(
                                 isListening ? Icons.stop : Icons.mic,
                                 color: Colors.white,
-                                size: 24,
+                                size: 22,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Send button
                           GestureDetector(
                             onTap: isProcessing
                                 ? null
                                 : () => procesarTexto(quickController.text),
                             child: Container(
-                              width: 52,
-                              height: 52,
+                              width: 48,
+                              height: 48,
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? Colors.tealAccent.shade700
@@ -8194,7 +8241,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   : const Icon(
                                       Icons.send_rounded,
                                       color: Colors.white,
-                                      size: 22,
+                                      size: 20,
                                     ),
                             ),
                           ),
@@ -8246,8 +8293,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         ),
                       ],
 
-                      // Parsed result
-                      if (parsed != null) ...[
+                      // ── Editable parsed result ──
+                      if (hasParsed) ...[
                         const SizedBox(height: 16),
                         Container(
                           width: double.infinity,
@@ -8262,144 +8309,261 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   ? Colors.purple.shade700.withAlpha(80)
                                   : Colors.purple.shade200,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(isDark ? 30 : 8),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
                           ),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Tipo badge
+                              // Tipo toggle
                               Row(
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: parsed!.tipo == 'Ingreso'
-                                          ? Colors.green.withAlpha(30)
-                                          : Colors.red.withAlpha(30),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      parsed!.tipo,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: parsed!.tipo == 'Ingreso'
-                                            ? (isDark
-                                                  ? Colors.greenAccent
-                                                  : Colors.green.shade700)
-                                            : (isDark
-                                                  ? Colors.redAccent
-                                                  : Colors.red.shade700),
-                                      ),
-                                    ),
+                                  _toggleChip(
+                                    label: 'Gasto',
+                                    selected: editTipo == 'Gasto',
+                                    color: Colors.red,
+                                    isDark: isDark,
+                                    onTap: () => setStateSB(() {
+                                      editTipo = 'Gasto';
+                                      editCategoria =
+                                          settings.activeCategories.isNotEmpty
+                                              ? settings.activeCategories.first
+                                              : 'Varios';
+                                    }),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      parsed!.item,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
+                                  _toggleChip(
+                                    label: 'Ingreso',
+                                    selected: editTipo == 'Ingreso',
+                                    color: Colors.green,
+                                    isDark: isDark,
+                                    onTap: () => setStateSB(() {
+                                      editTipo = 'Ingreso';
+                                      editCategoria = settings
+                                              .activeIncomeCategories.isNotEmpty
+                                          ? settings
+                                              .activeIncomeCategories.first
+                                          : 'Otros Ingresos';
+                                    }),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              // Details grid
-                              Row(
-                                children: [
-                                  _quickInfoChip(
-                                    Icons.attach_money,
-                                    formatoMoneda(parsed!.monto),
-                                    isDark,
+
+                              // Item
+                              TextField(
+                                controller: editItemCtrl,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'Concepto',
+                                  prefixIcon: Icon(Icons.edit_note,
+                                      color: colorTipo.shade400, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
                                   ),
-                                  const SizedBox(width: 8),
-                                  _quickInfoChip(
-                                    Icons.label_outline,
-                                    parsed!.categoria,
-                                    isDark,
-                                  ),
-                                ],
+                                  filled: true,
+                                  fillColor: isDark
+                                      ? Colors.white.withAlpha(10)
+                                      : Colors.grey.shade50,
+                                ),
                               ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  _quickInfoChip(
-                                    Icons.calendar_today,
-                                    parsed!.fecha,
-                                    isDark,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _quickInfoChip(
-                                    parsed!.metodoPago == 'Credito'
-                                        ? Icons.credit_card
-                                        : Icons.account_balance_wallet_outlined,
-                                    parsed!.metodoPago == 'Credito'
-                                        ? 'Crédito'
-                                        : 'Débito',
-                                    isDark,
-                                  ),
+                              const SizedBox(height: 10),
+
+                              // Monto
+                              TextField(
+                                controller: editMontoCtrl,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 20,
+                                  color: colorTipo.shade400,
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
                                 ],
+                                decoration: InputDecoration(
+                                  labelText: 'Monto',
+                                  prefixIcon: Icon(Icons.attach_money,
+                                      color: colorTipo.shade400, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor:
+                                      colorTipo.withAlpha(isDark ? 15 : 8),
+                                ),
                               ),
-                              if (parsed!.cuenta != null) ...[
-                                const SizedBox(height: 8),
+                              const SizedBox(height: 10),
+
+                              // Categoría dropdown
+                              DropdownButtonFormField<String>(
+                                value: categoriasDisponibles
+                                        .contains(editCategoria)
+                                    ? editCategoria
+                                    : categoriasDisponibles.first,
+                                decoration: InputDecoration(
+                                  labelText: 'Categoría',
+                                  prefixIcon: Icon(Icons.label_outline,
+                                      color: colorTipo.shade400, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: isDark
+                                      ? Colors.white.withAlpha(10)
+                                      : Colors.grey.shade50,
+                                ),
+                                items: categoriasDisponibles
+                                    .map((c) => DropdownMenuItem(
+                                        value: c, child: Text(c)))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setStateSB(() => editCategoria = v);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Fecha
+                              InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: editFecha,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime.now()
+                                        .add(const Duration(days: 365)),
+                                  );
+                                  if (picked != null) {
+                                    setStateSB(() => editFecha = picked);
+                                  }
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withAlpha(10)
+                                        : Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.calendar_today,
+                                          size: 18,
+                                          color: Colors.grey.shade500),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        '${editFecha.day.toString().padLeft(2, '0')}/${editFecha.month.toString().padLeft(2, '0')}/${editFecha.year}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark
+                                              ? Colors.grey.shade200
+                                              : Colors.grey.shade800,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Icon(Icons.arrow_drop_down,
+                                          color: Colors.grey.shade500),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Cuenta dropdown
+                              DropdownButtonFormField<String>(
+                                value:
+                                    cuentasDisponibles.contains(editCuenta)
+                                        ? editCuenta
+                                        : cuentasDisponibles.first,
+                                decoration: InputDecoration(
+                                  labelText: 'Cuenta',
+                                  prefixIcon: Icon(Icons.account_balance,
+                                      color: Colors.grey.shade500, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: isDark
+                                      ? Colors.white.withAlpha(10)
+                                      : Colors.grey.shade50,
+                                ),
+                                items: cuentasDisponibles
+                                    .map((c) => DropdownMenuItem(
+                                        value: c, child: Text(c)))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setStateSB(() => editCuenta = v);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Método de pago toggle
+                              if (settings.hasCreditCard) ...[
                                 Row(
                                   children: [
-                                    _quickInfoChip(
-                                      Icons.account_balance,
-                                      parsed!.cuenta!,
-                                      isDark,
+                                    _toggleChip(
+                                      label: 'Débito',
+                                      selected: editMetodo == 'Debito',
+                                      color: Colors.blue,
+                                      isDark: isDark,
+                                      icon: Icons.account_balance_wallet,
+                                      onTap: () => setStateSB(
+                                          () => editMetodo = 'Debito'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _toggleChip(
+                                      label: 'Crédito',
+                                      selected: editMetodo == 'Credito',
+                                      color: Colors.orange,
+                                      isDark: isDark,
+                                      icon: Icons.credit_card,
+                                      onTap: () => setStateSB(
+                                          () => editMetodo = 'Credito'),
                                     ),
                                   ],
                                 ),
-                              ],
-                              const SizedBox(height: 16),
-                              // Action buttons
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        setStateSB(() {
-                                          parsed = null;
-                                          errorMsg = null;
-                                        });
-                                      },
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text('Corregir'),
+                                const SizedBox(height: 14),
+                              ] else
+                                const SizedBox(height: 4),
+
+                              // Guardar
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: guardar,
+                                  icon: const Icon(
+                                    Icons.check_circle_outline,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Guardar'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: esGasto
+                                        ? Colors.red.shade500
+                                        : Colors.green.shade600,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    flex: 2,
-                                    child: FilledButton.icon(
-                                      onPressed: guardarParsed,
-                                      icon: const Icon(
-                                        Icons.check_circle_outline,
-                                        size: 18,
-                                      ),
-                                      label: const Text('Guardar'),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor:
-                                            parsed!.tipo == 'Ingreso'
-                                            ? Colors.green.shade600
-                                            : Colors.red.shade500,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
@@ -8416,27 +8580,51 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
-  Widget _quickInfoChip(IconData icon, String text, bool isDark) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+  Widget _toggleChip({
+    required String label,
+    required bool selected,
+    required MaterialColor color,
+    required bool isDark,
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withAlpha(10) : Colors.grey.shade50,
+          color: selected
+              ? color.withAlpha(isDark ? 50 : 30)
+              : (isDark ? Colors.white.withAlpha(8) : Colors.grey.shade50),
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? color.withAlpha(isDark ? 120 : 80)
+                : Colors.transparent,
+          ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: Colors.grey.shade500),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
-                ),
-                overflow: TextOverflow.ellipsis,
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 16,
+                color: selected
+                    ? (isDark ? color.shade200 : color.shade700)
+                    : Colors.grey.shade500,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                color: selected
+                    ? (isDark ? color.shade200 : color.shade700)
+                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
               ),
             ),
           ],
@@ -8444,7 +8632,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       ),
     );
   }
-
   void _mostrarFormulario({
     required String tipo,
     Map<String, dynamic>? itemParaEditar,
