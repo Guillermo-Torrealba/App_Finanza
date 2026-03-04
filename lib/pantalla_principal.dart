@@ -18,6 +18,8 @@ import 'flujo_caja_screen.dart';
 import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
 import 'gastos_compartidos_screen.dart';
+import 'ai_insights_service.dart';
+import 'app_secrets.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -63,6 +65,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   bool _mostrarPorcentaje = false;
   List<Map<String, dynamic>> _recurrentes = [];
   int _metasRefreshNonce = 0;
+
+  // AI Insights state
+  final AiInsightsService _aiService = AiInsightsService(
+    apiKey: AppSecrets.openAiApiKey,
+  );
+  AiInsightsResult? _aiResult;
+  bool _aiLoading = false;
+  String? _aiError;
+  bool _aiExpanded = true;
 
   // Search & sort state
   final _busquedaController = TextEditingController();
@@ -2921,7 +2932,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               );
             },
           ),
-          if (tarjetaSupervivencia != null) tarjetaSupervivencia,
+          ?tarjetaSupervivencia,
+          // ── Sección Análisis IA ──
+          _construirSeccionIA(
+            todosLosDatos: todosLosDatos,
+            datosDelMes: datosDelMes,
+            resumenMes: resumenMes,
+            serieFlujo: serieFlujo,
+            settings: settings,
+            isDark: isDark,
+            diasTranscurridos: diasTranscurridos,
+            diasDelMes: diasDelMes,
+            tasaAhorro: tasaAhorro,
+            gastoDiarioPromedio: gastoDiarioPromedio,
+            categoriaTop: categoriaTop,
+          ),
+          const SizedBox(height: 16),
           Text(
             'Rendimiento del Mes',
             style: TextStyle(
@@ -3242,6 +3268,605 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  ANÁLISIS IA
+  // ═══════════════════════════════════════════════════════
+
+  Future<void> _requestAiAnalysis({
+    required List<Map<String, dynamic>> todosLosDatos,
+    required List<Map<String, dynamic>> datosDelMes,
+    required Map<String, int> resumenMes,
+    required List<Map<String, dynamic>> serieFlujo,
+    required AppSettings settings,
+    required int diasTranscurridos,
+    required int diasDelMes,
+    required double tasaAhorro,
+    required double gastoDiarioPromedio,
+    required Map<String, dynamic> categoriaTop,
+  }) async {
+    if (_aiLoading) return;
+    setState(() {
+      _aiLoading = true;
+      _aiError = null;
+    });
+
+    try {
+      // Construir categorías desglosadas
+      final categorias = calcularGastosPorCategoria(datosDelMes);
+      final categoriasResumen = categorias
+          .map(
+            (c) => {
+              'nombre': c['categoria'],
+              'monto': c['monto'],
+              'porcentaje': ((c['porcentaje'] as double) * 100).toStringAsFixed(
+                1,
+              ),
+            },
+          )
+          .toList();
+
+      // Construir tendencia de 6 meses
+      final tendencia = serieFlujo.map((p) {
+        final mes = p['mes'] as DateTime;
+        return {
+          'mes': '${obtenerNombreMes(mes.month)} ${mes.year}',
+          'ingresos': p['ingresos'],
+          'gastos': p['gastos'],
+          'flujo': p['flujo'],
+        };
+      }).toList();
+
+      final resumen = {
+        'mes':
+            '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
+        'ingresos': resumenMes['ingresos'] ?? 0,
+        'gastos': resumenMes['gastos'] ?? 0,
+        'flujo': resumenMes['flujo'] ?? 0,
+        'tasa_ahorro': double.parse((tasaAhorro * 100).toStringAsFixed(1)),
+        'gasto_diario_promedio': gastoDiarioPromedio.round(),
+        'dias_transcurridos': diasTranscurridos,
+        'dias_del_mes': diasDelMes,
+        'categoria_top': {
+          'nombre': categoriaTop['categoria'],
+          'monto': categoriaTop['monto'],
+          'porcentaje': ((categoriaTop['porcentaje'] as double) * 100)
+              .toStringAsFixed(1),
+        },
+        'categorias': categoriasResumen,
+        'tendencia_6_meses': tendencia,
+        'moneda': settings.currencyCode,
+        if (settings.globalMonthlyBudget != null)
+          'presupuesto_global': settings.globalMonthlyBudget,
+      };
+
+      final result = await _aiService.analyzeFinances(resumen);
+      if (mounted) {
+        setState(() {
+          _aiResult = result;
+          _aiLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _aiError = e.toString();
+          _aiLoading = false;
+        });
+      }
+    }
+  }
+
+  IconData _insightIcon(String tipo) {
+    switch (tipo) {
+      case 'positivo':
+        return Icons.trending_up_rounded;
+      case 'negativo':
+        return Icons.trending_down_rounded;
+      case 'alerta':
+        return Icons.warning_amber_rounded;
+      default:
+        return Icons.lightbulb_outline;
+    }
+  }
+
+  Color _insightColor(String tipo, bool isDark) {
+    switch (tipo) {
+      case 'positivo':
+        return isDark ? Colors.greenAccent.shade400 : Colors.green.shade700;
+      case 'negativo':
+        return isDark ? Colors.redAccent.shade100 : Colors.red.shade700;
+      case 'alerta':
+        return isDark ? Colors.orangeAccent : Colors.orange.shade800;
+      default:
+        return isDark ? Colors.blueAccent : Colors.blue.shade700;
+    }
+  }
+
+  Widget _construirSeccionIA({
+    required List<Map<String, dynamic>> todosLosDatos,
+    required List<Map<String, dynamic>> datosDelMes,
+    required Map<String, int> resumenMes,
+    required List<Map<String, dynamic>> serieFlujo,
+    required AppSettings settings,
+    required bool isDark,
+    required int diasTranscurridos,
+    required int diasDelMes,
+    required double tasaAhorro,
+    required double gastoDiarioPromedio,
+    required Map<String, dynamic> categoriaTop,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF312E81), const Color(0xFF1E1B4B)]
+              : [const Color(0xFFEDE9FE), const Color(0xFFE0E7FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.purple.shade700.withAlpha(80)
+              : Colors.purple.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? Colors.purple.shade900 : Colors.purple.shade100)
+                .withAlpha(isDark ? 120 : 180),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          InkWell(
+            onTap: () => setState(() => _aiExpanded = !_aiExpanded),
+            borderRadius: BorderRadius.vertical(
+              top: const Radius.circular(20),
+              bottom: Radius.circular(
+                _aiExpanded &&
+                        (_aiResult != null || _aiLoading || _aiError != null)
+                    ? 0
+                    : 20,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.purple.shade700.withAlpha(60)
+                          : Colors.purple.shade100.withAlpha(180),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.auto_awesome,
+                      color: isDark
+                          ? Colors.purpleAccent.shade100
+                          : Colors.purple.shade700,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Análisis IA',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? Colors.purple.shade100
+                                : Colors.purple.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _aiResult != null
+                              ? 'Toca para ver el análisis'
+                              : 'Analiza tus finanzas con inteligencia artificial',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? Colors.purple.shade200
+                                : Colors.purple.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_aiResult != null || _aiLoading || _aiError != null)
+                    Icon(
+                      _aiExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: isDark
+                          ? Colors.purple.shade200
+                          : Colors.purple.shade700,
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: _aiLoading
+                          ? null
+                          : () => _requestAiAnalysis(
+                              todosLosDatos: todosLosDatos,
+                              datosDelMes: datosDelMes,
+                              resumenMes: resumenMes,
+                              serieFlujo: serieFlujo,
+                              settings: settings,
+                              diasTranscurridos: diasTranscurridos,
+                              diasDelMes: diasDelMes,
+                              tasaAhorro: tasaAhorro,
+                              gastoDiarioPromedio: gastoDiarioPromedio,
+                              categoriaTop: categoriaTop,
+                            ),
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('Analizar'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: isDark
+                            ? Colors.purpleAccent.shade700
+                            : Colors.purple.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          // Body – Loading
+          if (_aiLoading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                children: [
+                  Shimmer.fromColors(
+                    baseColor: isDark
+                        ? Colors.purple.shade800
+                        : Colors.purple.shade100,
+                    highlightColor: isDark
+                        ? Colors.purple.shade600
+                        : Colors.purple.shade50,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 240,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 180,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Analizando tus datos financieros…',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: isDark
+                          ? Colors.purple.shade200
+                          : Colors.purple.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Body – Error
+          if (_aiError != null && _aiExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.red.shade900.withAlpha(60)
+                          : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade400,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'No se pudo completar el análisis. Verifica tu conexión o intenta más tarde.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? Colors.red.shade200
+                                  : Colors.red.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.tonalIcon(
+                    onPressed: () => _requestAiAnalysis(
+                      todosLosDatos: todosLosDatos,
+                      datosDelMes: datosDelMes,
+                      resumenMes: resumenMes,
+                      serieFlujo: serieFlujo,
+                      settings: settings,
+                      diasTranscurridos: diasTranscurridos,
+                      diasDelMes: diasDelMes,
+                      tasaAhorro: tasaAhorro,
+                      gastoDiarioPromedio: gastoDiarioPromedio,
+                      categoriaTop: categoriaTop,
+                    ),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Reintentar'),
+                  ),
+                ],
+              ),
+            ),
+
+          // Body – Result
+          if (_aiResult != null && _aiExpanded)
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Resumen
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: (isDark ? Colors.black : Colors.white).withAlpha(
+                          isDark ? 40 : 160,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        _aiResult!.resumen,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: isDark
+                              ? Colors.grey.shade200
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Insights
+                    if (_aiResult!.insights.isNotEmpty) ...[
+                      Text(
+                        'Hallazgos',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.purple.shade100
+                              : Colors.purple.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...(_aiResult!.insights.map((insight) {
+                        final color = _insightColor(insight.tipo, isDark);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: (isDark ? Colors.black : Colors.white)
+                                .withAlpha(isDark ? 30 : 120),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: color.withAlpha(isDark ? 60 : 40),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: color.withAlpha(isDark ? 40 : 25),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _insightIcon(insight.tipo),
+                                  size: 16,
+                                  color: color,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      insight.titulo,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? Colors.grey.shade100
+                                            : Colors.grey.shade900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      insight.descripcion,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        height: 1.4,
+                                        color: isDark
+                                            ? Colors.grey.shade300
+                                            : Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      })),
+                    ],
+
+                    // Recomendaciones
+                    if (_aiResult!.recomendaciones.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Recomendaciones',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.purple.shade100
+                              : Colors.purple.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...(_aiResult!.recomendaciones.asMap().entries.map((e) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.tealAccent.withAlpha(30)
+                                      : Colors.teal.shade50,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${e.key + 1}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark
+                                          ? Colors.tealAccent
+                                          : Colors.teal.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  e.value,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    height: 1.4,
+                                    color: isDark
+                                        ? Colors.grey.shade200
+                                        : Colors.grey.shade800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      })),
+                    ],
+
+                    // Boton analizar de nuevo
+                    const SizedBox(height: 12),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          _aiService.invalidateCache();
+                          _requestAiAnalysis(
+                            todosLosDatos: todosLosDatos,
+                            datosDelMes: datosDelMes,
+                            resumenMes: resumenMes,
+                            serieFlujo: serieFlujo,
+                            settings: settings,
+                            diasTranscurridos: diasTranscurridos,
+                            diasDelMes: diasDelMes,
+                            tasaAhorro: tasaAhorro,
+                            gastoDiarioPromedio: gastoDiarioPromedio,
+                            categoriaTop: categoriaTop,
+                          );
+                        },
+                        icon: Icon(
+                          Icons.refresh,
+                          size: 16,
+                          color: isDark
+                              ? Colors.purple.shade200
+                              : Colors.purple.shade700,
+                        ),
+                        label: Text(
+                          'Analizar de nuevo',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? Colors.purple.shade200
+                                : Colors.purple.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
