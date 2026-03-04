@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'dart:ui';
 import 'package:shimmer/shimmer.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import 'app_settings.dart';
 import 'finance_alert.dart';
@@ -7754,6 +7755,92 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ],
                   ],
                 ),
+                const SizedBox(height: 16),
+                // Entrada rápida IA – ocupa toda la fila
+                SizedBox(
+                  width: double.infinity,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _mostrarEntradaRapida();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 20,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? [
+                                  const Color(0xFF312E81),
+                                  const Color(0xFF1E1B4B),
+                                ]
+                              : [
+                                  const Color(0xFFEDE9FE),
+                                  const Color(0xFFE0E7FF),
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.purple.shade700.withAlpha(80)
+                              : Colors.purple.shade200,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.purpleAccent.shade100
+                                : Colors.purple.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Entrada Rápida IA',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.purple.shade100
+                                      : Colors.purple.shade900,
+                                ),
+                              ),
+                              Text(
+                                'Escribe o dicta tu gasto en lenguaje natural',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.purple.shade200
+                                      : Colors.purple.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.mic,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.purple.shade200
+                                : Colors.purple.shade600,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           );
@@ -7814,6 +7901,528 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 fontWeight: FontWeight.w800,
                 color: isDark ? color.shade100 : color.shade900,
                 letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  ENTRADA RÁPIDA IA (Texto + Voz)
+  // ═══════════════════════════════════════════════════════
+
+  void _mostrarEntradaRapida() {
+    final settings = widget.settingsController.settings;
+    final quickController = TextEditingController();
+    bool isProcessing = false;
+    bool isListening = false;
+    String? errorMsg;
+    ParsedTransaction? parsed;
+    final speech = stt.SpeechToText();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateSB) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            Future<void> procesarTexto(String texto) async {
+              if (texto.trim().isEmpty) return;
+              setStateSB(() {
+                isProcessing = true;
+                errorMsg = null;
+                parsed = null;
+              });
+
+              final result = await _aiService.parseNaturalLanguage(
+                texto,
+                categoriasGasto: settings.activeCategories,
+                categoriasIngreso: settings.activeIncomeCategories,
+                cuentas: settings.activeAccounts,
+                fechaHoy: DateTime.now().toIso8601String().split('T').first,
+              );
+
+              if (context.mounted) {
+                setStateSB(() {
+                  isProcessing = false;
+                  parsed = result;
+                  if (result == null) {
+                    errorMsg =
+                        'No pude entender. Intenta ser más específico, ej: "gasté 10 lucas en uber ayer"';
+                  }
+                });
+              }
+            }
+
+            Future<void> toggleListening() async {
+              if (isListening) {
+                await speech.stop();
+                setStateSB(() => isListening = false);
+                return;
+              }
+
+              final available = await speech.initialize(
+                onError: (error) {
+                  if (context.mounted) {
+                    setStateSB(() {
+                      isListening = false;
+                      errorMsg = 'Error de micrófono: ${error.errorMsg}';
+                    });
+                  }
+                },
+              );
+
+              if (!available) {
+                if (context.mounted) {
+                  setStateSB(
+                    () => errorMsg =
+                        'Micrófono no disponible en este dispositivo',
+                  );
+                }
+                return;
+              }
+
+              setStateSB(() {
+                isListening = true;
+                errorMsg = null;
+              });
+
+              await speech.listen(
+                localeId: 'es_CL',
+                onResult: (result) {
+                  if (context.mounted) {
+                    quickController.text = result.recognizedWords;
+                    if (result.finalResult) {
+                      setStateSB(() => isListening = false);
+                      procesarTexto(result.recognizedWords);
+                    }
+                  }
+                },
+                listenFor: const Duration(seconds: 15),
+                pauseFor: const Duration(seconds: 3),
+              );
+            }
+
+            Future<void> guardarParsed() async {
+              if (parsed == null) return;
+              final p = parsed!;
+              try {
+                await supabase.from('gastos').insert({
+                  'user_id': supabase.auth.currentUser!.id,
+                  'fecha': p.fecha,
+                  'item': p.item,
+                  'monto': p.monto,
+                  'categoria': p.categoria,
+                  'cuenta': p.cuenta ?? settings.defaultAccount,
+                  'tipo': p.tipo,
+                  'metodo_pago': 'Debito',
+                });
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ ${p.tipo} registrado: ${p.item}'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  setStateSB(() => errorMsg = 'Error al guardar: $e');
+                }
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Handle
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.purple.shade900.withAlpha(80)
+                                  : Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.auto_awesome,
+                              color: isDark
+                                  ? Colors.purpleAccent.shade100
+                                  : Colors.purple.shade700,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Entrada Rápida IA',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Escribe o dicta tu gasto. Ej: "15 lucas en uber ayer"',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Input row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: quickController,
+                              autofocus: true,
+                              style: const TextStyle(fontSize: 16),
+                              decoration: InputDecoration(
+                                hintText: isListening
+                                    ? 'Escuchando...'
+                                    : 'Escribe aquí o usa el mic →',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
+                                ),
+                                filled: true,
+                                fillColor: isDark
+                                    ? Colors.white.withAlpha(15)
+                                    : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                              ),
+                              onSubmitted: procesarTexto,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Mic button
+                          GestureDetector(
+                            onTap: toggleListening,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: isListening
+                                    ? Colors.red.shade400
+                                    : (isDark
+                                          ? Colors.purple.shade700
+                                          : Colors.purple.shade500),
+                                shape: BoxShape.circle,
+                                boxShadow: isListening
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.red.withAlpha(100),
+                                          blurRadius: 16,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Icon(
+                                isListening ? Icons.stop : Icons.mic,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Send button
+                          GestureDetector(
+                            onTap: isProcessing
+                                ? null
+                                : () => procesarTexto(quickController.text),
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.tealAccent.shade700
+                                    : Colors.teal,
+                                shape: BoxShape.circle,
+                              ),
+                              child: isProcessing
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(14),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.send_rounded,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Error
+                      if (errorMsg != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.red.shade900.withAlpha(50)
+                                : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            errorMsg!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? Colors.red.shade200
+                                  : Colors.red.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      // Shimmer loading
+                      if (isProcessing) ...[
+                        const SizedBox(height: 16),
+                        Shimmer.fromColors(
+                          baseColor: isDark
+                              ? Colors.purple.shade800
+                              : Colors.purple.shade100,
+                          highlightColor: isDark
+                              ? Colors.purple.shade600
+                              : Colors.purple.shade50,
+                          child: Container(
+                            width: double.infinity,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      // Parsed result
+                      if (parsed != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.purple.shade700.withAlpha(80)
+                                  : Colors.purple.shade200,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(isDark ? 30 : 8),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              // Tipo badge
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: parsed!.tipo == 'Ingreso'
+                                          ? Colors.green.withAlpha(30)
+                                          : Colors.red.withAlpha(30),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      parsed!.tipo,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: parsed!.tipo == 'Ingreso'
+                                            ? (isDark
+                                                  ? Colors.greenAccent
+                                                  : Colors.green.shade700)
+                                            : (isDark
+                                                  ? Colors.redAccent
+                                                  : Colors.red.shade700),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      parsed!.item,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              // Details grid
+                              Row(
+                                children: [
+                                  _quickInfoChip(
+                                    Icons.attach_money,
+                                    formatoMoneda(parsed!.monto),
+                                    isDark,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _quickInfoChip(
+                                    Icons.label_outline,
+                                    parsed!.categoria,
+                                    isDark,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  _quickInfoChip(
+                                    Icons.calendar_today,
+                                    parsed!.fecha,
+                                    isDark,
+                                  ),
+                                  if (parsed!.cuenta != null) ...[
+                                    const SizedBox(width: 8),
+                                    _quickInfoChip(
+                                      Icons.account_balance_wallet_outlined,
+                                      parsed!.cuenta!,
+                                      isDark,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              // Action buttons
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        setStateSB(() {
+                                          parsed = null;
+                                          errorMsg = null;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      label: const Text('Corregir'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 2,
+                                    child: FilledButton.icon(
+                                      onPressed: guardarParsed,
+                                      icon: const Icon(
+                                        Icons.check_circle_outline,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Guardar'),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            parsed!.tipo == 'Ingreso'
+                                            ? Colors.green.shade600
+                                            : Colors.red.shade500,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _quickInfoChip(IconData icon, String text, bool isDark) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withAlpha(10) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: Colors.grey.shade500),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

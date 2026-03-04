@@ -217,4 +217,113 @@ Analiza mis finanzas y dame insights útiles.
       return null;
     }
   }
+
+  // ── Entrada por Lenguaje Natural ──
+
+  /// Parsea texto libre (escrito o transcrito de voz) en una transacción.
+  Future<ParsedTransaction?> parseNaturalLanguage(
+    String texto, {
+    required List<String> categoriasGasto,
+    required List<String> categoriasIngreso,
+    required List<String> cuentas,
+    required String fechaHoy,
+  }) async {
+    if (texto.trim().length < 3) return null;
+
+    try {
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': _model,
+          'messages': [
+            {
+              'role': 'system',
+              'content':
+                  '''
+Eres un parser de transacciones financieras. El usuario te describe un gasto o ingreso en lenguaje natural (texto o voz transcrita) y tú extraes los datos estructurados.
+
+Fecha de hoy: $fechaHoy
+
+REGLAS:
+- Si dice "ayer", "anteayer", "el lunes", etc., calcula la fecha correcta relativa a hoy.
+- Si no menciona fecha, usa la fecha de hoy.
+- Si no menciona tipo, asume "Gasto".
+- Si dice "me pagaron", "recibí", "cobré", "ingresé", "sueldo", "bono" → es "Ingreso".
+- El monto puede venir como "15 lucas" (15000), "5 luca" (5000), "100 pesos" (100), "mil" (1000), etc.
+- Elige la categoría más apropiada de las listas proporcionadas.
+- Si menciona una cuenta específica, úsala; si no, deja null.
+- Responde ÚNICAMENTE con JSON válido, sin markdown ni texto extra.
+
+Categorías de gasto: ${categoriasGasto.join(", ")}
+Categorías de ingreso: ${categoriasIngreso.join(", ")}
+Cuentas disponibles: ${cuentas.join(", ")}
+
+JSON de respuesta:
+{
+  "tipo": "Gasto" o "Ingreso",
+  "item": "nombre descriptivo corto",
+  "monto": 15000,
+  "categoria": "categoría elegida",
+  "fecha": "2026-03-03",
+  "cuenta": "nombre cuenta o null"
+}''',
+            },
+            {'role': 'user', 'content': texto},
+          ],
+          'temperature': 0.1,
+          'max_tokens': 150,
+        }),
+      );
+
+      if (response.statusCode != 200) return null;
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final content = (body['choices'][0]['message']['content'] as String)
+          .trim();
+
+      final cleanContent = content
+          .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
+          .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+          .trim();
+
+      final parsed = jsonDecode(cleanContent) as Map<String, dynamic>;
+      return ParsedTransaction.fromJson(parsed);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// Transacción parseada desde lenguaje natural.
+class ParsedTransaction {
+  final String tipo;
+  final String item;
+  final int monto;
+  final String categoria;
+  final String fecha; // yyyy-MM-dd
+  final String? cuenta;
+
+  ParsedTransaction({
+    required this.tipo,
+    required this.item,
+    required this.monto,
+    required this.categoria,
+    required this.fecha,
+    this.cuenta,
+  });
+
+  factory ParsedTransaction.fromJson(Map<String, dynamic> json) {
+    return ParsedTransaction(
+      tipo: (json['tipo'] ?? 'Gasto').toString(),
+      item: (json['item'] ?? '').toString(),
+      monto: (json['monto'] as num? ?? 0).toInt(),
+      categoria: (json['categoria'] ?? 'Varios').toString(),
+      fecha: (json['fecha'] ?? '').toString(),
+      cuenta: json['cuenta']?.toString(),
+    );
+  }
 }
