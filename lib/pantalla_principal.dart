@@ -8048,11 +8048,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             }
 
             Future<void> guardar() async {
-              final monto =
-                  int.tryParse(editMontoCtrl.text.trim()) ?? 0;
+              final monto = int.tryParse(editMontoCtrl.text.trim()) ?? 0;
               if (monto <= 0) {
-                setStateSB(
-                    () => errorMsg = 'El monto debe ser mayor a 0');
+                setStateSB(() => errorMsg = 'El monto debe ser mayor a 0');
                 return;
               }
               try {
@@ -8073,7 +8071,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                          '✅ $editTipo registrado: ${editItemCtrl.text.trim()}'),
+                        '✅ $editTipo registrado: ${editItemCtrl.text.trim()}',
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -8196,8 +8195,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 color: isListening
                                     ? Colors.red.shade400
                                     : (isDark
-                                        ? Colors.purple.shade700
-                                        : Colors.purple.shade500),
+                                          ? Colors.purple.shade700
+                                          : Colors.purple.shade500),
                                 shape: BoxShape.circle,
                                 boxShadow: isListening
                                     ? [
@@ -8325,8 +8324,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       editTipo = 'Gasto';
                                       editCategoria =
                                           settings.activeCategories.isNotEmpty
-                                              ? settings.activeCategories.first
-                                              : 'Varios';
+                                          ? settings.activeCategories.first
+                                          : 'Varios';
                                     }),
                                   ),
                                   const SizedBox(width: 8),
@@ -8337,10 +8336,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     isDark: isDark,
                                     onTap: () => setStateSB(() {
                                       editTipo = 'Ingreso';
-                                      editCategoria = settings
-                                              .activeIncomeCategories.isNotEmpty
+                                      editCategoria =
+                                          settings
+                                              .activeIncomeCategories
+                                              .isNotEmpty
                                           ? settings
-                                              .activeIncomeCategories.first
+                                                .activeIncomeCategories
+                                                .first
                                           : 'Otros Ingresos';
                                     }),
                                   ),
@@ -8357,8 +8359,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 ),
                                 decoration: InputDecoration(
                                   labelText: 'Concepto',
-                                  prefixIcon: Icon(Icons.edit_note,
-                                      color: colorTipo.shade400, size: 20),
+                                  prefixIcon: Icon(
+                                    Icons.edit_note,
+                                    color: colorTipo.shade400,
+                                    size: 20,
+                                  ),
                                   isDense: true,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -8386,30 +8391,39 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 ],
                                 decoration: InputDecoration(
                                   labelText: 'Monto',
-                                  prefixIcon: Icon(Icons.attach_money,
-                                      color: colorTipo.shade400, size: 20),
+                                  prefixIcon: Icon(
+                                    Icons.attach_money,
+                                    color: colorTipo.shade400,
+                                    size: 20,
+                                  ),
                                   isDense: true,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     borderSide: BorderSide.none,
                                   ),
                                   filled: true,
-                                  fillColor:
-                                      colorTipo.withAlpha(isDark ? 15 : 8),
+                                  fillColor: colorTipo.withAlpha(
+                                    isDark ? 15 : 8,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 10),
 
                               // Categoría dropdown
                               DropdownButtonFormField<String>(
-                                value: categoriasDisponibles
-                                        .contains(editCategoria)
+                                initialValue:
+                                    categoriasDisponibles.contains(
+                                      editCategoria,
+                                    )
                                     ? editCategoria
                                     : categoriasDisponibles.first,
                                 decoration: InputDecoration(
                                   labelText: 'Categoría',
-                                  prefixIcon: Icon(Icons.label_outline,
-                                      color: colorTipo.shade400, size: 20),
+                                  prefixIcon: Icon(
+                                    Icons.label_outline,
+                                    color: colorTipo.shade400,
+                                    size: 20,
+                                  ),
                                   isDense: true,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -8421,8 +8435,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       : Colors.grey.shade50,
                                 ),
                                 items: categoriasDisponibles
-                                    .map((c) => DropdownMenuItem(
-                                        value: c, child: Text(c)))
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(c),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
@@ -8440,8 +8458,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     context: context,
                                     initialDate: editFecha,
                                     firstDate: DateTime(2020),
-                                    lastDate: DateTime.now()
-                                        .add(const Duration(days: 365)),
+                                    lastDate: DateTime.now().add(
+                                      const Duration(days: 365),
+                                    ),
                                   );
                                   if (picked != null) {
                                     setStateSB(() => editFecha = picked);
@@ -8450,7 +8469,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 child: Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 14, horizontal: 12),
+                                    vertical: 14,
+                                    horizontal: 12,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isDark
                                         ? Colors.white.withAlpha(10)
@@ -8459,9 +8480,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today,
-                                          size: 18,
-                                          color: Colors.grey.shade500),
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 18,
+                                        color: Colors.grey.shade500,
+                                      ),
                                       const SizedBox(width: 10),
                                       Text(
                                         '${editFecha.day.toString().padLeft(2, '0')}/${editFecha.month.toString().padLeft(2, '0')}/${editFecha.year}',
@@ -8474,8 +8497,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                         ),
                                       ),
                                       const Spacer(),
-                                      Icon(Icons.arrow_drop_down,
-                                          color: Colors.grey.shade500),
+                                      Icon(
+                                        Icons.arrow_drop_down,
+                                        color: Colors.grey.shade500,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -8484,14 +8509,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                               // Cuenta dropdown
                               DropdownButtonFormField<String>(
-                                value:
+                                initialValue:
                                     cuentasDisponibles.contains(editCuenta)
-                                        ? editCuenta
-                                        : cuentasDisponibles.first,
+                                    ? editCuenta
+                                    : cuentasDisponibles.first,
                                 decoration: InputDecoration(
                                   labelText: 'Cuenta',
-                                  prefixIcon: Icon(Icons.account_balance,
-                                      color: Colors.grey.shade500, size: 20),
+                                  prefixIcon: Icon(
+                                    Icons.account_balance,
+                                    color: Colors.grey.shade500,
+                                    size: 20,
+                                  ),
                                   isDense: true,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -8503,8 +8531,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       : Colors.grey.shade50,
                                 ),
                                 items: cuentasDisponibles
-                                    .map((c) => DropdownMenuItem(
-                                        value: c, child: Text(c)))
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(c),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
@@ -8525,7 +8557,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       isDark: isDark,
                                       icon: Icons.account_balance_wallet,
                                       onTap: () => setStateSB(
-                                          () => editMetodo = 'Debito'),
+                                        () => editMetodo = 'Debito',
+                                      ),
                                     ),
                                     const SizedBox(width: 8),
                                     _toggleChip(
@@ -8535,7 +8568,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       isDark: isDark,
                                       icon: Icons.credit_card,
                                       onTap: () => setStateSB(
-                                          () => editMetodo = 'Credito'),
+                                        () => editMetodo = 'Credito',
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -8558,7 +8592,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                         ? Colors.red.shade500
                                         : Colors.green.shade600,
                                     padding: const EdgeInsets.symmetric(
-                                        vertical: 14),
+                                      vertical: 14,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
@@ -8632,6 +8667,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       ),
     );
   }
+
   void _mostrarFormulario({
     required String tipo,
     Map<String, dynamic>? itemParaEditar,

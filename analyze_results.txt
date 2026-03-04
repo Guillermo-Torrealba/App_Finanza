@@ -1,0 +1,7 @@
+﻿Analyzing App_Finanzas...                                       
+
+   info - Don't invoke 'print' in production code - lib\login_screen.dart:58:13 - avoid_print
+   info - Don't invoke 'print' in production code - lib\login_screen.dart:60:13 - avoid_print
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pantalla_principal.dart:8405:33 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pantalla_principal.dart:8487:33 - deprecated_member_use
+

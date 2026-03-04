@@ -55,9 +55,11 @@ class _LoginScreenState extends State<LoginScreen> {
               'user_id': user.id, // El ID que acaba de crear Supabase
               'celular': cleanPhone, // El número limpio
             });
-            print("✅ ¡Bot vinculado con éxito para el usuario ${user.email}!");
+            debugPrint(
+              "✅ ¡Bot vinculado con éxito para el usuario ${user.email}!",
+            );
           } catch (botError) {
-            print(
+            debugPrint(
               "⚠️ Error vinculando bot (pero el usuario se creó): $botError",
             );
             // No detenemos el flujo si esto falla, pero queda en consola
