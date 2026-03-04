@@ -7898,6 +7898,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         ? Colors.blue
         : (esGasto ? Colors.red : Colors.green);
 
+    // ── AI Auto-Categorization ──
+    Timer? aiDebounce;
+    bool aiSuggesting = false;
+    bool aiSuggested = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -8138,6 +8143,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             Icons.edit_note,
                             color: colorTipo.shade400,
                           ),
+                          suffixIcon: aiSuggesting
+                              ? Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.purple.shade300,
+                                    ),
+                                  ),
+                                )
+                              : aiSuggested
+                              ? Icon(
+                                  Icons.auto_awesome,
+                                  size: 18,
+                                  color: Colors.purple.shade300,
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
@@ -8151,6 +8175,32 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             vertical: 14,
                           ),
                         ),
+                        onChanged: !esTransferencia && !esEdicion
+                            ? (value) {
+                                aiDebounce?.cancel();
+                                aiDebounce = Timer(
+                                  const Duration(milliseconds: 600),
+                                  () async {
+                                    if (value.trim().length < 3) return;
+                                    setStateSB(() => aiSuggesting = true);
+                                    final suggested = await _aiService
+                                        .suggestCategory(
+                                          value.trim(),
+                                          categoriasDisponibles,
+                                        );
+                                    if (suggested != null && context.mounted) {
+                                      setStateSB(() {
+                                        categoriaSeleccionada = suggested;
+                                        aiSuggesting = false;
+                                        aiSuggested = true;
+                                      });
+                                    } else if (context.mounted) {
+                                      setStateSB(() => aiSuggesting = false);
+                                    }
+                                  },
+                                );
+                              }
+                            : null,
                       ),
                       const SizedBox(height: 14),
 
