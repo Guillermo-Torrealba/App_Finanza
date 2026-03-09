@@ -7,6 +7,7 @@ class FinanceAlert {
     required this.message,
     required this.icon,
     required this.color,
+    this.isAi = false,
   });
 
   final String id;
@@ -14,4 +15,5 @@ class FinanceAlert {
   final String message;
   final IconData icon;
   final Color color;
+  final bool isAi;
 }

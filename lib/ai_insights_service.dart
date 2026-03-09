@@ -218,6 +218,164 @@ Analiza mis finanzas y dame insights útiles.
     }
   }
 
+  // ── Alertas Proactivas IA ──
+
+  /// Genera alertas inteligentes basadas en patrones de gasto recientes.
+  /// [datosRecientes] contiene gastos de los últimos 7 días desglosados.
+  Future<List<AiProactiveAlert>> generateProactiveAlerts(
+    Map<String, dynamic> datosRecientes,
+  ) async {
+    if (datosRecientes.isEmpty) return [];
+
+    try {
+      final systemPrompt = '''
+Eres un asesor financiero que detecta patrones preocupantes o notables en los gastos recientes.
+Analiza los datos de los últimos 7 días y genera entre 0 y 3 alertas cortas y accionables.
+
+REGLAS:
+- Solo genera alertas si hay algo RELEVANTE (patrón repetitivo, gasto inusual, ritmo peligroso, etc.).
+- Si todo está normal y bajo control, devuelve una lista vacía [].
+- Sé específico: usa números reales, nombres de categorías, días concretos.
+- Los montos están en la moneda indicada. Formatea con separador de miles usando punto (.).
+- Responde SIEMPRE en español.
+- Responde ÚNICAMENTE con un JSON válido (sin markdown, sin texto extra).
+- Cada alerta debe tener un tono diferente: "alerta" (preocupante), "negativo" (urgente), "tip" (consejo positivo).
+
+JSON de respuesta (array):
+[
+  {
+    "titulo": "Título corto y directo (máx 6 palabras)",
+    "mensaje": "Explicación concisa con números (máx 2 oraciones)",
+    "tipo": "alerta|negativo|tip"
+  }
+]
+
+Si no hay nada relevante, responde: []
+''';
+
+      final userMessage =
+          '''
+Datos financieros de los últimos 7 días:
+
+${const JsonEncoder.withIndent('  ').convert(datosRecientes)}
+
+Genera alertas solo si detectas algo relevante.
+''';
+
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': _model,
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': userMessage},
+          ],
+          'temperature': 0.5,
+          'max_tokens': 600,
+        }),
+      );
+
+      if (response.statusCode != 200) return [];
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final content = (body['choices'][0]['message']['content'] as String)
+          .trim();
+
+      final cleanContent = content
+          .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
+          .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+          .trim();
+
+      final parsed = jsonDecode(cleanContent);
+      if (parsed is List) {
+        return parsed
+            .map((e) => AiProactiveAlert.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Resumen Semanal IA ──
+
+  /// Genera un resumen narrativo de la semana financiera.
+  Future<AiWeeklySummary?> generateWeeklySummary(
+    Map<String, dynamic> datosSemana,
+  ) async {
+    if (datosSemana.isEmpty) return null;
+
+    try {
+      final systemPrompt = '''
+Eres un asesor financiero amigable y directo. Resume la semana financiera del usuario.
+
+REGLAS:
+- Sé conciso: el resumen debe ser 2-3 oraciones máximo.
+- Compara con la semana anterior si los datos están disponibles.
+- Menciona la categoría donde más gastó.
+- Da UNA recomendación accionable y específica.
+- Los montos están en la moneda indicada. Formatea con separador de miles usando punto (.).
+- Responde SIEMPRE en español.
+- Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto extra).
+
+JSON de respuesta:
+{
+  "resumen": "2-3 oraciones resumiendo la semana",
+  "variacion_porcentual": 15.5,
+  "categoria_top": {"nombre": "Comida", "monto": 45000},
+  "recomendacion": "Recomendación accionable y específica"
+}
+''';
+
+      final userMessage =
+          '''
+Datos de mi semana financiera:
+
+${const JsonEncoder.withIndent('  ').convert(datosSemana)}
+
+Dame un resumen de mi semana.
+''';
+
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': _model,
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': userMessage},
+          ],
+          'temperature': 0.6,
+          'max_tokens': 500,
+        }),
+      );
+
+      if (response.statusCode != 200) return null;
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final content = (body['choices'][0]['message']['content'] as String)
+          .trim();
+
+      final cleanContent = content
+          .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
+          .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
+          .trim();
+
+      final parsed = jsonDecode(cleanContent) as Map<String, dynamic>;
+      return AiWeeklySummary.fromJson(parsed);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Entrada por Lenguaje Natural ──
 
   /// Parsea texto libre (escrito o transcrito de voz) en una transacción.
@@ -328,6 +486,54 @@ class ParsedTransaction {
       fecha: (json['fecha'] ?? '').toString(),
       cuenta: json['cuenta']?.toString(),
       metodoPago: (json['metodo_pago'] ?? 'Debito').toString(),
+    );
+  }
+}
+
+/// Alerta proactiva generada por IA.
+class AiProactiveAlert {
+  final String titulo;
+  final String mensaje;
+  final String tipo; // 'alerta', 'negativo', 'tip'
+
+  AiProactiveAlert({
+    required this.titulo,
+    required this.mensaje,
+    required this.tipo,
+  });
+
+  factory AiProactiveAlert.fromJson(Map<String, dynamic> json) {
+    return AiProactiveAlert(
+      titulo: (json['titulo'] ?? '').toString(),
+      mensaje: (json['mensaje'] ?? '').toString(),
+      tipo: (json['tipo'] ?? 'alerta').toString(),
+    );
+  }
+}
+
+/// Resumen semanal generado por IA.
+class AiWeeklySummary {
+  final String resumen;
+  final double variacionPorcentual;
+  final Map<String, dynamic> categoriaTop;
+  final String recomendacion;
+
+  AiWeeklySummary({
+    required this.resumen,
+    required this.variacionPorcentual,
+    required this.categoriaTop,
+    required this.recomendacion,
+  });
+
+  factory AiWeeklySummary.fromJson(Map<String, dynamic> json) {
+    return AiWeeklySummary(
+      resumen: (json['resumen'] ?? '').toString(),
+      variacionPorcentual: (json['variacion_porcentual'] as num? ?? 0)
+          .toDouble(),
+      categoriaTop:
+          (json['categoria_top'] as Map<String, dynamic>?) ??
+          {'nombre': 'N/A', 'monto': 0},
+      recomendacion: (json['recomendacion'] ?? '').toString(),
     );
   }
 }

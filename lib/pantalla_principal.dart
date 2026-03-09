@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -76,6 +78,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   String? _aiError;
   bool _aiExpanded = true;
 
+  // AI Proactive Alerts state
+  List<AiProactiveAlert> _aiProactiveAlerts = [];
+  bool _aiAlertsChecked = false;
+
+  // AI Weekly Summary state
+  bool _weeklySummaryChecked = false;
+
   // Search & sort state
   final _busquedaController = TextEditingController();
   String _textoBusqueda = '';
@@ -120,6 +129,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _chequearRecurrentes();
       _cargarRecurrentes();
+      _checkAndGenerateAiAlerts();
+      _checkWeeklySummary();
     });
   }
 
@@ -1192,6 +1203,29 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         );
       }
     }
+    // Alertas proactivas IA
+    for (final aiAlert in _aiProactiveAlerts) {
+      final alertColor = aiAlert.tipo == 'negativo'
+          ? Colors.red.shade600
+          : aiAlert.tipo == 'tip'
+          ? Colors.teal.shade600
+          : Colors.purple.shade600;
+      final alertIcon = aiAlert.tipo == 'negativo'
+          ? Icons.error_outline
+          : aiAlert.tipo == 'tip'
+          ? Icons.lightbulb_outline
+          : Icons.auto_awesome;
+      alerts.add(
+        FinanceAlert(
+          id: 'ai_alert_${aiAlert.titulo.hashCode}',
+          title: aiAlert.titulo,
+          message: aiAlert.mensaje,
+          icon: alertIcon,
+          color: alertColor,
+          isAi: true,
+        ),
+      );
+    }
 
     return alerts;
   }
@@ -1221,13 +1255,57 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  alert.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDark ? alert.color.withAlpha(0xE6) : alert.color,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        alert.title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isDark
+                              ? alert.color.withAlpha(0xE6)
+                              : alert.color,
+                        ),
+                      ),
+                    ),
+                    if (alert.isAi)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.purple.shade900.withAlpha(80)
+                              : Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 10,
+                              color: isDark
+                                  ? Colors.purpleAccent.shade100
+                                  : Colors.purple.shade700,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'IA',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.purpleAccent.shade100
+                                    : Colors.purple.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -1239,6 +1317,546 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Alertas Proactivas IA ──
+
+  static const String _aiAlertsLastCheckKey = 'ai_proactive_alerts_last_check';
+  static const String _aiAlertsCacheKey = 'ai_proactive_alerts_cache';
+
+  Future<void> _checkAndGenerateAiAlerts() async {
+    if (_aiAlertsChecked) return;
+    _aiAlertsChecked = true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastCheckMs = prefs.getInt(_aiAlertsLastCheckKey) ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final twelveHours = 12 * 60 * 60 * 1000;
+
+      // Intentar cargar cache primero
+      final cachedJson = prefs.getString(_aiAlertsCacheKey);
+      if (cachedJson != null && cachedJson.isNotEmpty) {
+        try {
+          final cached = jsonDecode(cachedJson) as List;
+          if (mounted) {
+            setState(() {
+              _aiProactiveAlerts = cached
+                  .map(
+                    (e) => AiProactiveAlert.fromJson(e as Map<String, dynamic>),
+                  )
+                  .toList();
+            });
+          }
+        } catch (_) {}
+      }
+
+      // Si pasaron menos de 12 horas, usar solo cache
+      if (now - lastCheckMs < twelveHours) return;
+
+      // Esperar a que el stream tenga datos
+      final movimientos = await _stream.first;
+      if (movimientos.isEmpty) {
+        return;
+      }
+
+      // Preparar datos de últimos 7 días
+      final datos = _prepararDatosAlertasIA(movimientos);
+      if (datos.isEmpty) {
+        return;
+      }
+
+      final alerts = await _aiService.generateProactiveAlerts(datos);
+
+      // Guardar en cache y timestamp
+      await prefs.setInt(_aiAlertsLastCheckKey, now);
+      final alertsJson = jsonEncode(
+        alerts
+            .map(
+              (a) => {'titulo': a.titulo, 'mensaje': a.mensaje, 'tipo': a.tipo},
+            )
+            .toList(),
+      );
+      await prefs.setString(_aiAlertsCacheKey, alertsJson);
+
+      if (mounted) {
+        setState(() {
+          _aiProactiveAlerts = alerts;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error AI proactive alerts: $e');
+    }
+  }
+
+  Map<String, dynamic> _prepararDatosAlertasIA(
+    List<Map<String, dynamic>> movimientos,
+  ) {
+    final settings = widget.settingsController.settings;
+    final ahora = DateTime.now();
+    final hace7Dias = ahora.subtract(const Duration(days: 7));
+    final hace14Dias = ahora.subtract(const Duration(days: 14));
+
+    // Últimos 7 días
+    final recientes = movimientos.where((m) {
+      final fecha = DateTime.parse(m['fecha']);
+      final cat = (m['categoria'] ?? '').toString();
+      return fecha.isAfter(hace7Dias) &&
+          cat != 'Transferencia' &&
+          cat != 'Ajuste' &&
+          cat != 'Cuentas por Cobrar';
+    }).toList();
+
+    // Semana anterior (7-14 días atrás)
+    final semanaAnterior = movimientos.where((m) {
+      final fecha = DateTime.parse(m['fecha']);
+      final cat = (m['categoria'] ?? '').toString();
+      return fecha.isAfter(hace14Dias) &&
+          fecha.isBefore(hace7Dias) &&
+          cat != 'Transferencia' &&
+          cat != 'Ajuste' &&
+          cat != 'Cuentas por Cobrar';
+    }).toList();
+
+    if (recientes.isEmpty) return {};
+
+    // Desglosar por categoría
+    final gastosPorCategoria = <String, int>{};
+    var totalGastos7d = 0;
+    var totalIngresos7d = 0;
+    final gastosPorDia = <String, int>{};
+
+    for (final m in recientes) {
+      final monto = (m['monto'] as num? ?? 0).toInt();
+      final cat = (m['categoria'] ?? 'Varios').toString();
+      final fecha = m['fecha'].toString().substring(0, 10);
+      if (m['tipo'] == 'Gasto') {
+        totalGastos7d += monto;
+        gastosPorCategoria[cat] = (gastosPorCategoria[cat] ?? 0) + monto;
+        gastosPorDia[fecha] = (gastosPorDia[fecha] ?? 0) + monto;
+      } else {
+        totalIngresos7d += monto;
+      }
+    }
+
+    var totalGastosSemanaAnterior = 0;
+    for (final m in semanaAnterior) {
+      if (m['tipo'] == 'Gasto') {
+        totalGastosSemanaAnterior += (m['monto'] as num? ?? 0).toInt();
+      }
+    }
+
+    // Categorías ordenadas por monto
+    final categoriasOrdenadas = gastosPorCategoria.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topCategorias = categoriasOrdenadas
+        .take(5)
+        .map((e) => {'nombre': e.key, 'monto': e.value})
+        .toList();
+
+    return {
+      'periodo': 'últimos 7 días',
+      'total_gastos_7d': totalGastos7d,
+      'total_ingresos_7d': totalIngresos7d,
+      'total_gastos_semana_anterior': totalGastosSemanaAnterior,
+      'gasto_diario_promedio': (totalGastos7d / 7).round(),
+      'top_categorias': topCategorias,
+      'gastos_por_dia': gastosPorDia,
+      'moneda': settings.currencyCode,
+      if (settings.globalMonthlyBudget != null)
+        'presupuesto_mensual': settings.globalMonthlyBudget,
+    };
+  }
+
+  // ── Resumen Semanal IA ──
+
+  static const String _weeklySummaryLastDateKey = 'ai_weekly_summary_last_date';
+
+  Future<void> _checkWeeklySummary() async {
+    if (_weeklySummaryChecked) return;
+    _weeklySummaryChecked = true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastDateStr = prefs.getString(_weeklySummaryLastDateKey);
+      final now = DateTime.now();
+
+      if (lastDateStr != null) {
+        final lastDate = DateTime.tryParse(lastDateStr);
+        if (lastDate != null && now.difference(lastDate).inDays < 7) {
+          return; // Aún no han pasado 7 días
+        }
+      }
+
+      // Esperar a que el stream tenga datos
+      final movimientos = await _stream.first;
+      if (movimientos.isEmpty) return;
+
+      final datosSemana = _prepararDatosResumenSemanal(movimientos);
+      if (datosSemana.isEmpty) return;
+
+      final summary = await _aiService.generateWeeklySummary(datosSemana);
+      if (summary == null) return;
+
+      // Guardar fecha
+      await prefs.setString(_weeklySummaryLastDateKey, now.toIso8601String());
+
+      // Mostrar bottom sheet
+      if (mounted) {
+        _mostrarResumenSemanal(summary, datosSemana);
+      }
+    } catch (e) {
+      debugPrint('Error weekly summary: $e');
+    }
+  }
+
+  Map<String, dynamic> _prepararDatosResumenSemanal(
+    List<Map<String, dynamic>> movimientos,
+  ) {
+    final settings = widget.settingsController.settings;
+    final ahora = DateTime.now();
+
+    // Semana pasada: lunes a domingo
+    final diaSemana = ahora.weekday; // 1=lunes
+    final inicioSemanaActual = ahora.subtract(Duration(days: diaSemana - 1));
+    final finSemanaPasada = DateTime(
+      inicioSemanaActual.year,
+      inicioSemanaActual.month,
+      inicioSemanaActual.day,
+    );
+    final inicioSemanaPasada = finSemanaPasada.subtract(
+      const Duration(days: 7),
+    );
+    final inicioSemanaAnterior = inicioSemanaPasada.subtract(
+      const Duration(days: 7),
+    );
+
+    // Filtrar movimientos de la semana pasada
+    var gastosSemana = 0;
+    var ingresosSemana = 0;
+    final gastosPorCategoria = <String, int>{};
+
+    for (final m in movimientos) {
+      final fecha = DateTime.parse(m['fecha']);
+      final cat = (m['categoria'] ?? '').toString();
+      if (cat == 'Transferencia' ||
+          cat == 'Ajuste' ||
+          cat == 'Cuentas por Cobrar') {
+        continue;
+      }
+      if (fecha.isAfter(inicioSemanaPasada) &&
+          fecha.isBefore(finSemanaPasada)) {
+        final monto = (m['monto'] as num? ?? 0).toInt();
+        if (m['tipo'] == 'Gasto') {
+          gastosSemana += monto;
+          gastosPorCategoria[cat] = (gastosPorCategoria[cat] ?? 0) + monto;
+        } else {
+          ingresosSemana += monto;
+        }
+      }
+    }
+
+    if (gastosSemana == 0 && ingresosSemana == 0) return {};
+
+    // Semana anterior a la pasada
+    var gastosSemanAnterior = 0;
+    for (final m in movimientos) {
+      final fecha = DateTime.parse(m['fecha']);
+      final cat = (m['categoria'] ?? '').toString();
+      if (cat == 'Transferencia' ||
+          cat == 'Ajuste' ||
+          cat == 'Cuentas por Cobrar') {
+        continue;
+      }
+      if (fecha.isAfter(inicioSemanaAnterior) &&
+          fecha.isBefore(inicioSemanaPasada)) {
+        if (m['tipo'] == 'Gasto') {
+          gastosSemanAnterior += (m['monto'] as num? ?? 0).toInt();
+        }
+      }
+    }
+
+    final categoriasOrdenadas = gastosPorCategoria.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return {
+      'semana':
+          '${inicioSemanaPasada.day}/${inicioSemanaPasada.month} - ${finSemanaPasada.subtract(const Duration(days: 1)).day}/${finSemanaPasada.subtract(const Duration(days: 1)).month}',
+      'gastos_semana': gastosSemana,
+      'ingresos_semana': ingresosSemana,
+      'gastos_semana_anterior': gastosSemanAnterior,
+      'categorias': categoriasOrdenadas
+          .take(5)
+          .map((e) => {'nombre': e.key, 'monto': e.value})
+          .toList(),
+      'moneda': settings.currencyCode,
+    };
+  }
+
+  void _mostrarResumenSemanal(
+    AiWeeklySummary summary,
+    Map<String, dynamic> datos,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gastoSemana = (datos['gastos_semana'] as num? ?? 0).toInt();
+    final gastoAnterior = (datos['gastos_semana_anterior'] as num? ?? 0)
+        .toInt();
+    final variacion = summary.variacionPorcentual;
+    final subio = variacion > 0;
+    final catTopNombre = (summary.categoriaTop['nombre'] ?? 'N/A').toString();
+    final catTopMonto = (summary.categoriaTop['monto'] as num? ?? 0).toInt();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header con gradiente
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? [Colors.purple.shade900, Colors.indigo.shade900]
+                        : [Colors.purple.shade400, Colors.indigo.shade400],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(40),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Resumen Semanal IA',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      summary.resumen,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // KPIsRow
+              Row(
+                children: [
+                  Expanded(
+                    child: _weeklySummaryKpi(
+                      label: 'Gastos semana',
+                      value: formatoMoneda(gastoSemana),
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _weeklySummaryKpi(
+                      label: 'Semana anterior',
+                      value: formatoMoneda(gastoAnterior),
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _weeklySummaryKpi(
+                      label: 'Variación',
+                      value:
+                          '${subio ? '+' : ''}${variacion.toStringAsFixed(1)}%',
+                      isDark: isDark,
+                      valueColor: subio
+                          ? Colors.red.shade400
+                          : Colors.green.shade400,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Categoría top
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withAlpha(8)
+                      : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.local_fire_department,
+                      color: Colors.orange.shade400,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Top: $catTopNombre',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: isDark
+                            ? Colors.grey.shade200
+                            : Colors.grey.shade800,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      formatoMoneda(catTopMonto),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.orange.shade400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Recomendación
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.teal.shade900.withAlpha(50)
+                      : Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.teal.shade700.withAlpha(60)
+                        : Colors.teal.shade200,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: Colors.teal.shade400,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        summary.recomendacion,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: isDark
+                              ? Colors.teal.shade200
+                              : Colors.teal.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Botón cerrar
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text('Entendido'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _weeklySummaryKpi({
+    required String label,
+    required String value,
+    required bool isDark,
+    Color? valueColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withAlpha(8) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color:
+                  valueColor ??
+                  (isDark ? Colors.grey.shade200 : Colors.grey.shade800),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
