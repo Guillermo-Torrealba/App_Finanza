@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -625,6 +625,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     for (final mov in movimientos) {
       // Excluir transacciones de crédito del saldo líquido
       if (mov['metodo_pago'] == 'Credito') continue;
+      // Excluir movimientos fantasma del saldo real
+      if ((mov['estado'] ?? 'real') == 'fantasma') continue;
 
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
@@ -2096,19 +2098,47 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }).toList();
 
     // 4. Calcular Saldo de Cuenta Corriente (Liquidez total - Solo Débito/Efectivo)
-    // Se calcula explícitamente para asegurar que EXCLUYE Crédito
+    // Se calcula explícitamente para asegurar que EXCLUYE Crédito y EXCLUYE Fantasmas
     var saldoCuentaCorriente = 0;
+    var saldoProyectado = 0;
+    DateTime? ultimoFantasmaFecha;
     for (final mov in datosFiltrados) {
       // Ignorar transacciones de Crédito
       if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
-
+      final esFantasmaMov = (mov['estado'] ?? 'real') == 'fantasma';
       final m = (mov['monto'] as num? ?? 0).toInt();
-      if (mov['tipo'] == 'Ingreso') {
-        saldoCuentaCorriente += m;
+
+      if (!esFantasmaMov) {
+        // Solo movimientos reales afectan el saldo corriente
+        if (mov['tipo'] == 'Ingreso') {
+          saldoCuentaCorriente += m;
+        } else {
+          saldoCuentaCorriente -= m;
+        }
       } else {
-        saldoCuentaCorriente -= m;
+        // Rastrear fecha del último fantasma
+        final fechaFant = DateTime.tryParse(mov['fecha'] ?? '');
+        if (fechaFant != null) {
+          if (ultimoFantasmaFecha == null ||
+              fechaFant.isAfter(ultimoFantasmaFecha)) {
+            ultimoFantasmaFecha = fechaFant;
+          }
+        }
       }
     }
+    // Saldo proyectado = saldo real + todos los fantasmas
+    saldoProyectado = saldoCuentaCorriente;
+    for (final mov in datosFiltrados) {
+      if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+      if ((mov['estado'] ?? 'real') != 'fantasma') continue;
+      final m = (mov['monto'] as num? ?? 0).toInt();
+      if (mov['tipo'] == 'Ingreso') {
+        saldoProyectado += m;
+      } else {
+        saldoProyectado -= m;
+      }
+    }
+    final hayFantasmas = ultimoFantasmaFecha != null;
 
     final datosDelMes = datosFiltrados.where((mov) {
       final fechaMov = DateTime.parse(mov['fecha']);
@@ -2116,9 +2146,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           fechaMov.month == _mesVisualizado.month;
     }).toList();
 
+    // Para análisis y gráficos: excluye fantasmas
+    final datosDelMesSoloReales = datosDelMes
+        .where((mov) => (mov['estado'] ?? 'real') != 'fantasma')
+        .toList();
+
     var ingresoMes = 0;
     var gastoMes = 0;
-    for (final mov in datosDelMes) {
+    for (final mov in datosDelMesSoloReales) {
       final cat = (mov['categoria'] ?? '').toString();
       if (cat == 'Transferencia' ||
           cat == 'Ajuste' ||
@@ -2133,7 +2168,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }
     }
     final totalNetoMes = ingresoMes - gastoMes;
-    final desgloseCategorias = calcularGastosPorCategoria(datosDelMes);
+    final desgloseCategorias = calcularGastosPorCategoria(
+      datosDelMesSoloReales,
+    );
 
     // 5. TC Utilizado total pendiente (considera todo el histórico).
     final rangosCredito = _obtenerRangosCicloCredito(settings);
@@ -2264,6 +2301,51 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             height: 1.1,
                           ),
                         ),
+                        // ── Saldo Proyectado (visible solo si hay fantasmas) ──
+                        if (hayFantasmas) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.purple.shade900.withAlpha(80)
+                                  : Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.purple.shade700.withAlpha(100)
+                                    : Colors.purple.shade200,
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome,
+                                  size: 12,
+                                  color: isDark
+                                      ? Colors.purpleAccent.shade100
+                                      : Colors.purple.shade700,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Proyectado al ${ultimoFantasmaFecha!.day}/${ultimoFantasmaFecha.month}: ${formatoMoneda(saldoProyectado - saldoCreditoUtilizado)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? Colors.purpleAccent.shade100
+                                        : Colors.purple.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         // ── Barra de Composición ──
                         ClipRRect(
@@ -2924,149 +3006,267 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final categoria = (item['categoria'] ?? 'Varios').toString();
     final fechaItem = DateTime.parse(item['fecha']);
     final colorBase = esIngreso ? Colors.teal : Colors.red;
+    final esFantasma = (item['estado'] ?? 'real') == 'fantasma';
+
+    Widget card = InkWell(
+      onTap: () => _mostrarDialogo(itemParaEditar: item),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: esFantasma
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(isDark ? 30 : 8),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Row(
+          children: [
+            Hero(
+              tag: 'mov_${item['id']}',
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: esFantasma
+                      ? Colors.grey.withAlpha(isDark ? 40 : 25)
+                      : colorBase.withAlpha(isDark ? 40 : 25),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: esIngreso
+                      ? Icon(
+                          Icons.add_chart_rounded,
+                          color: esFantasma
+                              ? (isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade500)
+                              : (isDark
+                                    ? Colors.tealAccent.shade400
+                                    : Colors.teal.shade700),
+                          size: 24,
+                        )
+                      : _iconoCategoria(
+                          categoria,
+                          color: esFantasma
+                              ? (isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade500)
+                              : (isDark
+                                    ? Colors.redAccent.shade100
+                                    : Colors.red.shade700),
+                          size: 24,
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          (item['item'] ?? 'Sin nombre').toString(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            letterSpacing: -0.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (esFantasma) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.purple.shade900.withAlpha(100)
+                                : Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.purple.shade700.withAlpha(120)
+                                  : Colors.purple.shade200,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            'PROYECTADO',
+                            style: TextStyle(
+                              fontSize: 7,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: isDark
+                                  ? Colors.purpleAccent.shade100
+                                  : Colors.purple.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} Â· ${(item['cuenta'] ?? '-').toString()}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _textoMonto(item['monto'] as num),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: esFantasma
+                        ? (isDark ? Colors.grey.shade400 : Colors.grey.shade600)
+                        : (esIngreso
+                              ? (isDark
+                                    ? Colors.tealAccent.shade400
+                                    : Colors.teal.shade700)
+                              : (isDark
+                                    ? Colors.redAccent.shade100
+                                    : Colors.red.shade700)),
+                  ),
+                ),
+                if ((item['metodo_pago'] ?? 'Debito') == 'Credito')
+                  Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.orangeAccent.withAlpha(40)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'CREDITO',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? Colors.orangeAccent
+                            : Colors.orange.shade800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (esFantasma) {
+      card = CustomPaint(
+        painter: _DashedBorderPainter(
+          color: isDark
+              ? Colors.purple.shade700.withAlpha(160)
+              : Colors.purple.shade300,
+          borderRadius: 16,
+          dashWidth: 6,
+          dashSpace: 4,
+          strokeWidth: 1.2,
+        ),
+        child: card,
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: margin, vertical: 6),
-      child: Dismissible(
-        key: Key('dismiss_${item['id']}'),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          decoration: BoxDecoration(
-            color: Colors.red.shade400,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
-          child: const Icon(Icons.delete_outline, color: Colors.white),
-        ),
-        onDismissed: (_) async {
-          await supabase.from('gastos').delete().eq('id', item['id']);
-        },
-        child: InkWell(
-          onTap: () => _mostrarDialogo(itemParaEditar: item),
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(12),
+      child: Opacity(
+        opacity: esFantasma ? 0.72 : 1.0,
+        child: Dismissible(
+          key: Key('dismiss_${item['id']}'),
+          direction: esFantasma
+              ? DismissDirection.horizontal
+              : DismissDirection.endToStart,
+          secondaryBackground: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
+              color: Colors.red.shade400,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(isDark ? 30 : 8),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            child: Row(
-              children: [
-                // Icono con fondo suave
-                Hero(
-                  tag: 'mov_${item['id']}',
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: colorBase.withAlpha(isDark ? 40 : 25),
-                      shape: BoxShape.circle,
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete_outline, color: Colors.white),
+          ),
+          background: esFantasma
+              ? Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.green.shade400, Colors.teal.shade500],
                     ),
-                    child: Center(
-                      child: esIngreso
-                          ? Icon(
-                              Icons.add_chart_rounded,
-                              color: isDark
-                                  ? Colors.tealAccent.shade400
-                                  : Colors.teal.shade700,
-                              size: 24,
-                            )
-                          : _iconoCategoria(
-                              categoria,
-                              color: isDark
-                                  ? Colors.redAccent.shade100
-                                  : Colors.red.shade700,
-                              size: 24,
-                            ),
-                    ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                ),
-                const SizedBox(width: 14),
-                // Info Central
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.check_circle_outline, color: Colors.white),
+                      SizedBox(width: 8),
                       Text(
-                        (item['item'] ?? 'Sin nombre').toString(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} · ${(item['cuenta'] ?? '-').toString()}',
+                        'Confirmar',
                         style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? Colors.grey.shade400
-                              : Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
                         ),
                       ),
                     ],
                   ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade400,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
                 ),
-                // Monto
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _textoMonto(item['monto'] as num),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        color: esIngreso
-                            ? (isDark
-                                  ? Colors.tealAccent.shade400
-                                  : Colors.teal.shade700)
-                            : (isDark
-                                  ? Colors.redAccent.shade100
-                                  : Colors.red.shade700),
-                      ),
-                    ),
-                    if ((item['metodo_pago'] ?? 'Debito') == 'Credito')
-                      Container(
-                        margin: const EdgeInsets.only(top: 2),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.orangeAccent.withAlpha(40)
-                              : Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'CRÉDITO',
-                          style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
-                            color: isDark
-                                ? Colors.orangeAccent
-                                : Colors.orange.shade800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd && esFantasma) {
+              await supabase
+                  .from('gastos')
+                  .update({'estado': 'real'})
+                  .eq('id', item['id']);
+              if (mounted) _mostrarSnack('Movimiento confirmado âœ“');
+              return false;
+            }
+            return true;
+          },
+          onDismissed: (_) async {
+            await supabase.from('gastos').delete().eq('id', item['id']);
+          },
+          child: card,
         ),
       ),
     );
@@ -9313,6 +9513,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     String? cuentaDestinoSeleccionada;
     String? categoriaSeleccionada;
     bool esCredito = false;
+    bool esFantasmaForm = false;
     bool esCompartido = false;
     final amigosCompartidos = <Map<String, dynamic>>[];
     final nombreControllers = <TextEditingController>[];
@@ -9340,6 +9541,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       final metodo = (itemParaEditar['metodo_pago'] ?? 'Debito').toString();
       esCredito = metodo == 'Credito';
+      esFantasmaForm = (itemParaEditar['estado'] ?? 'real') == 'fantasma';
     } else {
       _itemController.clear();
       _detalleController.clear();
@@ -9451,6 +9653,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         'categoria': categoria,
                         'cuenta': cuentaSeleccionada,
                         'metodo_pago': metodo,
+                        'estado': esFantasmaForm ? 'fantasma' : 'real',
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else {
@@ -9491,6 +9694,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         'cuenta': cuentaSeleccionada,
                         'tipo': tipo,
                         'metodo_pago': metodo,
+                        'estado': esFantasmaForm ? 'fantasma' : 'real',
                       })
                       .select()
                       .single();
@@ -10093,6 +10297,69 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ],
                       const SizedBox(height: 20),
 
+                      // Toggle: Movimiento Proyectado
+                      if (!esTransferencia) ...[
+                        GestureDetector(
+                          onTap: () => setStateSB(
+                            () => esFantasmaForm = !esFantasmaForm,
+                          ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: esFantasmaForm
+                                  ? (isDark
+                                        ? Colors.purple.shade900.withAlpha(80)
+                                        : Colors.purple.shade50)
+                                  : (isDark
+                                        ? Colors.white.withAlpha(8)
+                                        : Colors.grey.shade50),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: esFantasmaForm
+                                    ? (isDark
+                                          ? Colors.purple.shade600
+                                          : Colors.purple.shade200)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Mov. proyectado',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: esFantasmaForm
+                                        ? (isDark
+                                              ? Colors.purpleAccent.shade100
+                                              : Colors.purple.shade800)
+                                        : (isDark
+                                              ? Colors.grey.shade400
+                                              : Colors.grey.shade600),
+                                  ),
+                                ),
+                                const Spacer(),
+                                Switch.adaptive(
+                                  value: esFantasmaForm,
+                                  onChanged: (v) =>
+                                      setStateSB(() => esFantasmaForm = v),
+                                  thumbColor: WidgetStateProperty.resolveWith(
+                                    (states) =>
+                                        states.contains(WidgetState.selected)
+                                        ? Colors.purple.shade400
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       // Botón guardar
                       SizedBox(
                         width: double.infinity,
@@ -13851,4 +14118,56 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       ],
     );
   }
+}
+
+// â”€â”€ Dashed border painter for ghost transactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double borderRadius;
+  final double dashWidth;
+  final double dashSpace;
+  final double strokeWidth;
+
+  const _DashedBorderPainter({
+    required this.color,
+    required this.borderRadius,
+    required this.dashWidth,
+    required this.dashSpace,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        strokeWidth / 2,
+        strokeWidth / 2,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+      Radius.circular(borderRadius),
+    );
+
+    final path = Path()..addRRect(rrect);
+    final PathMetrics pathMetrics = path.computeMetrics();
+
+    for (final PathMetric metric in pathMetrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + dashWidth),
+          paint,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
