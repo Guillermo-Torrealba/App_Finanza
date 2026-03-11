@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11276,7 +11276,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         _textoMonto((m['monto'] as num).toInt()),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.indigo.shade700,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.indigo.shade700,
                         ),
                       ),
                     );
@@ -11333,7 +11335,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           _textoMonto((m['monto'] as num).toInt()),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.deepOrange.shade700,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.deepOrange.shade700,
                           ),
                         ),
                       );
@@ -11385,7 +11389,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           _textoMonto((m['monto'] as num).toInt()),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.green.shade700,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.green.shade700,
                           ),
                         ),
                       );
