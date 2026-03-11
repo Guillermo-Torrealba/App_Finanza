@@ -56,6 +56,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   final _montoController = TextEditingController();
   final _cuentaController = TextEditingController();
 
+  List<Map<String, dynamic>>? _cachedGastos;
+  List<Map<String, dynamic>>? _cachedMetas;
+
   DateTime _mesVisualizado = DateTime.now();
   String? _categoriaSeleccionada;
   int _indicePestana = 0;
@@ -126,6 +129,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     _cuentasSeleccionadas = List<String>.from(
       widget.settingsController.settings.activeAccounts,
     );
+    _cargarCacheLocal();
     _programarBloqueoInicial();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _chequearRecurrentes();
@@ -133,6 +137,24 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       _checkAndGenerateAiAlerts();
       _checkWeeklySummary();
     });
+  }
+
+  void _cargarCacheLocal() {
+    final prefs = widget.settingsController.preferences;
+    try {
+      final strGastos = prefs.getString('gastos_cache');
+      if (strGastos != null) {
+        final List decoded = jsonDecode(strGastos);
+        _cachedGastos = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+      final strMetas = prefs.getString('metas_cache');
+      if (strMetas != null) {
+        final List decoded = jsonDecode(strMetas);
+        _cachedMetas = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error leyendo cache: $e');
+    }
   }
 
   @override
@@ -1886,7 +1908,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         elevation: 0,
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _stream,
+        initialData: _cachedGastos,
+        stream: _stream.map((datos) {
+          try {
+            widget.settingsController.preferences.setString('gastos_cache', jsonEncode(datos));
+          } catch (_) {}
+          return datos;
+        }),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             debugPrint('Realtime Stream Error: ${snapshot.error}');
@@ -3222,17 +3250,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
 
     if (esFantasma) {
-      card = CustomPaint(
-        painter: _DashedBorderPainter(
-          color: isDark
-              ? Colors.purple.shade700.withAlpha(160)
-              : Colors.purple.shade300,
-          borderRadius: 16,
-          dashWidth: 6,
-          dashSpace: 4,
-          strokeWidth: 1.2,
+      card = RepaintBoundary(
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: isDark
+                ? Colors.purple.shade700.withAlpha(160)
+                : Colors.purple.shade300,
+            borderRadius: 16,
+            dashWidth: 6,
+            dashSpace: 4,
+            strokeWidth: 1.2,
+          ),
+          child: card,
         ),
-        child: card,
       );
     }
 
@@ -6128,8 +6158,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
+      initialData: _cachedMetas,
       key: ValueKey(_metasRefreshNonce),
-      stream: _streamMetasUsuario(),
+      stream: _streamMetasUsuario().map((datos) {
+        try {
+          widget.settingsController.preferences.setString('metas_cache', jsonEncode(datos));
+        } catch (_) {}
+        return datos;
+      }),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           debugPrint('Metas Stream Error: ${snapshot.error}');
@@ -14004,17 +14040,18 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
       if (conAbs > maxAbs) maxAbs = conAbs;
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+    return RepaintBoundary(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E2433) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          ),
         ),
-      ),
-      child: Column(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -14122,7 +14159,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
             ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _leyenda(Color color, String label) {

@@ -98,6 +98,8 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
       },
     );
 
+    montoController.dispose();
+
     if (montoConfirmado == null) return;
 
     setState(() => _isLoading = true);

@@ -420,6 +420,7 @@ class SettingsController extends ChangeNotifier {
   bool get isReady => _ready;
   bool get hasPinConfigured => _hasPinConfigured;
   bool get biometricAvailable => _biometricAvailable;
+  SharedPreferences get preferences => _preferences;
 
   Future<void> init() async {
     final raw = _preferences.getString(_settingsKey);
