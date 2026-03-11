@@ -13,7 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'dart:ui';
 import 'package:shimmer/shimmer.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+// speech_to_text removed – Windows plugin (beta) breaks native build.
+// Voice input gracefully disabled on unsupported platforms.
 
 import 'app_settings.dart';
 import 'finance_alert.dart';
@@ -8735,10 +8736,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     final settings = widget.settingsController.settings;
     final quickController = TextEditingController();
     bool isProcessing = false;
-    bool isListening = false;
     String? errorMsg;
     bool hasParsed = false;
-    final speech = stt.SpeechToText();
 
     // Editable fields (populated after AI parse)
     final editItemCtrl = TextEditingController();
@@ -8817,51 +8816,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             }
 
             Future<void> toggleListening() async {
-              if (isListening) {
-                await speech.stop();
-                setStateSB(() => isListening = false);
+              // Voice input not available on desktop platforms
+              if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+                setStateSB(
+                  () => errorMsg =
+                      'Entrada por voz no disponible en escritorio. Usa el campo de texto.',
+                );
                 return;
               }
-
-              final available = await speech.initialize(
-                onError: (error) {
-                  if (context.mounted) {
-                    setStateSB(() {
-                      isListening = false;
-                      errorMsg = 'Error de micrófono: ${error.errorMsg}';
-                    });
-                  }
-                },
-              );
-
-              if (!available) {
-                if (context.mounted) {
-                  setStateSB(
-                    () => errorMsg =
-                        'Micrófono no disponible en este dispositivo',
-                  );
-                }
-                return;
-              }
-
-              setStateSB(() {
-                isListening = true;
-                errorMsg = null;
-              });
-
-              await speech.listen(
-                localeId: 'es_CL',
-                onResult: (result) {
-                  if (context.mounted) {
-                    quickController.text = result.recognizedWords;
-                    if (result.finalResult) {
-                      setStateSB(() => isListening = false);
-                      procesarTexto(result.recognizedWords);
-                    }
-                  }
-                },
-                listenFor: const Duration(seconds: 15),
-                pauseFor: const Duration(seconds: 3),
+              // On mobile, show not-available message (speech_to_text removed)
+              setStateSB(
+                () => errorMsg = 'Micrófono no disponible en este dispositivo',
               );
             }
 
@@ -8983,9 +8948,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               autofocus: !hasParsed,
                               style: const TextStyle(fontSize: 16),
                               decoration: InputDecoration(
-                                hintText: isListening
-                                    ? 'Escuchando...'
-                                    : 'Escribe aquí o usa el mic →',
+                                hintText: 'Escribe aquí…',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   borderSide: BorderSide.none,
@@ -9010,24 +8973,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               width: 48,
                               height: 48,
                               decoration: BoxDecoration(
-                                color: isListening
-                                    ? Colors.red.shade400
-                                    : (isDark
-                                          ? Colors.purple.shade700
-                                          : Colors.purple.shade500),
+                                color: isDark
+                                    ? Colors.purple.shade700
+                                    : Colors.purple.shade500,
                                 shape: BoxShape.circle,
-                                boxShadow: isListening
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.red.withAlpha(100),
-                                          blurRadius: 16,
-                                          spreadRadius: 2,
-                                        ),
-                                      ]
-                                    : null,
                               ),
-                              child: Icon(
-                                isListening ? Icons.stop : Icons.mic,
+                              child: const Icon(
+                                Icons.mic,
                                 color: Colors.white,
                                 size: 22,
                               ),
