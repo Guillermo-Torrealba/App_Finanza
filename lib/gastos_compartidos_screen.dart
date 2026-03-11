@@ -121,7 +121,10 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
   Widget build(BuildContext context) {
     if (_isLoading && _deudas.isEmpty) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
-      return _buildSkeleton(isDark);
+      return Scaffold(
+        appBar: AppBar(title: const Text('Gastos Compartidos')),
+        body: _buildSkeleton(isDark),
+      );
     }
 
     final pendientes = _deudas.where((d) => d['pagado'] == false).toList();

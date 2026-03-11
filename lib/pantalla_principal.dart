@@ -3122,7 +3122,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} Â· ${(item['cuenta'] ?? '-').toString()}',
+                    '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} · ${(item['cuenta'] ?? '-').toString()}',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark
