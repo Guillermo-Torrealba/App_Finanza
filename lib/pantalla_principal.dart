@@ -1895,12 +1895,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.cloud_sync_rounded,
-                    size: 48,
-                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.cloud_sync_rounded,
+                        size: 36,
+                        color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      ),
+                      SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: isDark ? Colors.indigo.shade300 : Colors.indigo.shade600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Text(
                     'Sincronizando nube...',
                     style: TextStyle(
@@ -6124,12 +6137,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.cloud_sync_rounded,
-                  size: 48,
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      Icons.cloud_sync_rounded,
+                      size: 36,
+                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                    ),
+                    SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: isDark ? Colors.indigo.shade300 : Colors.indigo.shade600,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Text(
                   'Sincronizando metas...',
                   style: TextStyle(
