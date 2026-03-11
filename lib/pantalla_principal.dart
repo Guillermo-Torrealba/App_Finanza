@@ -1889,7 +1889,30 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            debugPrint('Realtime Stream Error: ${snapshot.error}');
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cloud_sync_rounded,
+                    size: 48,
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sincronizando nube...',
+                    style: TextStyle(
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade500,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
           }
           if (!snapshot.hasData) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -6096,7 +6119,27 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       stream: _streamMetasUsuario(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          debugPrint('Metas Stream Error: ${snapshot.error}');
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.cloud_sync_rounded,
+                  size: 48,
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Sincronizando metas...',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());

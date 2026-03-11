@@ -670,12 +670,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     VoidCallback? onTap,
   }) {
     Color bgColor = isDark
-        ? (isHeader ? const Color(0xFF1E1E1E) : Colors.transparent)
+        ? (isHeader ? const Color(0xFF1E293B) : Colors.transparent)
         : (isHeader ? Colors.grey.shade100 : Colors.white);
 
     // Add alternating row colors or distinct backgrounds if needed here
     if (isFirstCol && !isHeader) {
-      bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
+      bgColor = isDark ? const Color(0xFF0F172A) : Colors.grey.shade50;
     }
 
     Widget content = Text(
@@ -707,11 +707,11 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         color: bgColor,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+            color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
             width: 0.5,
           ),
           right: BorderSide(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+            color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
             width: 0.5,
           ),
         ),
