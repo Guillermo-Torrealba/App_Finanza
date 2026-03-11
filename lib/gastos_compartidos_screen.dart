@@ -50,39 +50,65 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
   }
 
   Future<void> _marcarComoPagado(Map<String, dynamic> deuda) async {
-    final bool marcar =
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('¿Marcar como pagado?'),
-            content: Text(
-              'Al confirmar, se registrará un ingreso de \$${deuda['monto']} en la cuenta asociada a este gasto.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Confirmar'),
+    final TextEditingController montoController =
+        TextEditingController(text: deuda['monto'].toString());
+
+    final num? montoConfirmado = await showDialog<num>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar Pago'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Verifica o edita el monto recibido:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: montoController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Monto recibido',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
           ),
-        ) ??
-        false;
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final num? amount = num.tryParse(montoController.text);
+                if (amount != null && amount > 0) {
+                  Navigator.pop(context, amount);
+                } else {
+                  // Si es inválido, podrías mostrar un ScaffoldMessenger (ajustado para simplicidad)
+                  Navigator.pop(context, null);
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
 
-    if (!marcar) return;
+    if (montoConfirmado == null) return;
 
     setState(() => _isLoading = true);
     try {
-      // 1. Marcar como pagado en gastos_compartidos
+      // 1. Marcar como pagado en gastos_compartidos (se actualiza también el monto real recibido)
       await supabase
           .from('gastos_compartidos')
-          .update({'pagado': true})
+          .update({'pagado': true, 'monto': montoConfirmado})
           .eq('id', deuda['id']);
 
-      // 2. Insertar transacción de ingreso
+      // 2. Insertar transacción de ingreso con el monto modificado
       final gastoOrignal = deuda['gastos'];
       final cuenta = gastoOrignal != null ? gastoOrignal['cuenta'] : 'Otra';
 
@@ -92,7 +118,7 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
         'item': 'Pago de ${deuda['persona']} (Compartido)',
         'detalle':
             'Reembolso asociado al gasto: ${gastoOrignal?['item'] ?? 'Gasto'}',
-        'monto': deuda['monto'],
+        'monto': montoConfirmado,
         'categoria':
             'Cuentas por Cobrar', // Compensa el préstamo ficticio de la Opción C
         'cuenta': cuenta,
