@@ -900,6 +900,191 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }
   }
 
+  void _mostrarDetalleCategoria(
+    BuildContext context,
+    String categoria,
+    List<Map<String, dynamic>> movimientosMes,
+  ) {
+    final gastos = movimientosMes.where((mov) {
+      if (mov['tipo'] != 'Gasto') return false;
+      return (mov['categoria'] ?? 'Varios').toString() == categoria;
+    }).toList();
+
+    gastos.sort((a, b) =>
+        ((b['monto'] as num).abs()).compareTo((a['monto'] as num).abs()));
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: _iconoCategoria(
+                        categoria,
+                        size: 26,
+                        color: Colors.teal.shade400,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Detalle de categoría',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            categoria,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.close,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: gastos.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No hay gastos registrados en esta categoría.',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: gastos.length,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        separatorBuilder: (_, __) => Divider(
+                          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                          indent: 72,
+                          endIndent: 16,
+                          height: 1,
+                        ),
+                        itemBuilder: (ctx, i) {
+                          final mov = gastos[i];
+                          final item = (mov['item'] ?? '').toString();
+                          final cuenta = (mov['cuenta'] ?? '').toString();
+                          final detalle = (mov['detalle'] ?? '').toString();
+                          final monto = (mov['monto'] as num? ?? 0).toInt();
+                          final fechaStr = (mov['fecha'] ?? '').toString();
+                          final fecha = DateTime.tryParse(fechaStr) ?? DateTime.now();
+                          
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _mostrarDialogo(itemParaEditar: mov);
+                            },
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${fecha.day}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              item.isNotEmpty ? item : 'Gasto sin título',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  cuenta.isNotEmpty ? cuenta : 'Efectivo',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                  ),
+                                ),
+                                if (detalle.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    detalle,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            trailing: Text(
+                              _textoMonto(monto),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   List<Map<String, dynamic>> calcularGastosPorCategoria(
     List<Map<String, dynamic>> movimientosDelMes,
   ) {
@@ -2727,13 +2912,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   child: Column(
                     children: desgloseCategorias.map((catData) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
+                      return InkWell(
+                        onTap: () => _mostrarDetalleCategoria(
+                          context,
+                          catData['categoria'] as String,
+                          datosDelMesSoloReales,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 12, top: 4, left: 4, right: 4),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
                                 Row(
                                   children: [
                                     _iconoCategoria(
@@ -2776,8 +2968,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             ),
                           ],
                         ),
-                      );
-                    }).toList(),
+                      ),
+                    );
+                  }).toList(),
                   ),
                 ),
               ],
