@@ -10716,14 +10716,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         .inDays;
     final esMesActualVisualizado =
         _mesVisualizado.year == now.year && _mesVisualizado.month == now.month;
-    final vencimientoMesActual = _fechaMesSegura(
-      now.year,
-      now.month,
-      dueDay,
-      finDeDia: true,
-    );
+    
+    final fechaCorteFacturado = curStart.subtract(const Duration(days: 1));
+    final vencimientoFacturado = _proximoVencimientoTarjeta(fechaCorteFacturado, dueDay);
+    final vencimientoFacturadoFinDia = _finDelDia(vencimientoFacturado);
+    
     final mostrarFacturadosYAbonos =
-        esMesActualVisualizado && !now.isAfter(vencimientoMesActual);
+        esMesActualVisualizado && !now.isAfter(vencimientoFacturadoFinDia);
 
     // Filtrar movimientos de cada ciclo para las listas de detalle
     final movimientosPorFacturar = creditExpenses.where((m) {
