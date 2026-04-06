@@ -8463,84 +8463,136 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   void _confirmarCierreCiclo(int montoPorFacturar) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    int diaCierre = widget.settingsController.settings.creditCardBillingDay;
+    int diaVencimiento = widget.settingsController.settings.creditCardDueDay;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.event_available, color: Colors.amber.shade700, size: 24),
-            const SizedBox(width: 10),
-            const Text('Cerrar ciclo ahora'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Los gastos de "Por Facturar" pasarán a "Facturado".',
-              style: TextStyle(
-                color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.event_available, color: Colors.amber.shade700, size: 24),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Cerrar ciclo ahora')),
+              ],
             ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withAlpha(isDark ? 25 : 12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.withAlpha(40)),
-              ),
-              child: Row(
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 18,
-                    color: Colors.amber.shade700,
+                  Text(
+                    'Los gastos de "Por Facturar" pasarán a "Facturado".',
+                    style: TextStyle(
+                      color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Monto a facturar: ${_textoMonto(montoPorFacturar, ocultable: false)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? Colors.amber.shade200
-                            : Colors.amber.shade900,
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withAlpha(isDark ? 25 : 12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.withAlpha(40)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Colors.amber.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Monto a facturar: ${_textoMonto(montoPorFacturar, ocultable: false)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? Colors.amber.shade200
+                                  : Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Configurar Nuevo Ciclo:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          decoration: const InputDecoration(
+                            labelText: 'Día Cierre',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          value: diaCierre,
+                          items: List.generate(31, (i) => i + 1)
+                              .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setStateDialog(() => diaCierre = val);
+                          },
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          decoration: const InputDecoration(
+                            labelText: 'Día Pago',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          value: diaVencimiento,
+                          items: List.generate(31, (i) => i + 1)
+                              .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setStateDialog(() => diaVencimiento = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Usa esto cuando el banco te facturó e inició un nuevo periodo. Los días elegidos se guardarán para tu tarjeta.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Usa esto cuando el banco te facturó antes del día configurado.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade500,
-                fontStyle: FontStyle.italic,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              final hoy = DateTime.now().toIso8601String().split('T').first;
-              widget.settingsController.setLastManualBillingClose(hoy);
-              Navigator.pop(ctx);
-              _mostrarSnack('Ciclo cerrado. Los montos se recalcularán.');
-            },
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Confirmar cierre'),
-          ),
-        ],
+              FilledButton.icon(
+                onPressed: () {
+                  widget.settingsController.setCreditCardBillingDay(diaCierre);
+                  widget.settingsController.setCreditCardDueDay(diaVencimiento);
+                  
+                  final hoy = DateTime.now().toIso8601String().split('T').first;
+                  widget.settingsController.setLastManualBillingClose(hoy);
+                  Navigator.pop(ctx);
+                  _mostrarSnack('Ciclo cerrado y fechas actualizadas.');
+                },
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Confirmar'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
