@@ -5212,20 +5212,43 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           .eq('cuenta', cuenta);
 
       final movimientos = List<Map<String, dynamic>>.from(response);
-      final hasCredit = movimientos.any(
-        (mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito',
-      );
-      final hasDebit = movimientos.any(
-        (mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito',
-      );
-      final ajustarComoCredito =
-          _esCuentaCreditoPorNombre(cuenta) || (hasCredit && !hasDebit);
-      if (ajustarComoCredito) {
-        await _ajustarDeudaTarjetaCuenta(
-          cuenta,
-          movimientosCuenta: movimientos,
+      
+      final esNombreCredito = _esCuentaCreditoPorNombre(cuenta);
+      final hasCredit = movimientos.any((mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito');
+      final hasDebit = movimientos.any((mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito');
+
+      bool ajustarCredito = false;
+
+      if (esNombreCredito && !hasDebit) {
+        ajustarCredito = true;
+      } else if (!esNombreCredito && !hasCredit) {
+        ajustarCredito = false;
+      } else {
+        if (!mounted) return;
+        final bool? choice = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Ajustar Saldo: $cuenta'),
+            content: const Text('¿Qué saldo deseas ajustar?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cuenta Corriente (Débito)'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Tarjeta de Crédito'),
+              ),
+            ],
+          ),
         );
-        return;
+        if (choice == null) return;
+        ajustarCredito = choice;
+      }
+
+      if (ajustarCredito) {
+        await _ajustarDeudaTarjetaCuenta(cuenta, movimientosCuenta: movimientos);
+        return; // Solo ajusta credito aqui. Si quisiera ambas, tendria que repetir la operacion.
       }
 
       var saldoVisual = 0;
@@ -5320,40 +5343,67 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      final movimientos =
-          movimientosCuenta ??
+      final movimientos = movimientosCuenta ??
           List<Map<String, dynamic>>.from(
             await supabase
                 .from('gastos')
-                .select('monto, tipo, categoria, metodo_pago')
+                .select('monto, tipo, categoria, metodo_pago, fecha, item')
                 .eq('user_id', user.id)
                 .eq('cuenta', cuenta),
           );
 
-      var deudaVisual = 0;
-      var deudaRealSinAjustes = 0;
+      final settings = widget.settingsController.settings;
+      final now = DateTime.now();
+      final curStart = _getEffectiveCutoff(settings, now);
+      
+      var facturadoRealSinAjustes = 0;
+      var porFacturarRealSinAjustes = 0;
+      var facturadoVisual = 0;
+      var porFacturarVisual = 0;
+
       for (final mov in movimientos) {
         if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+        
         final monto = (mov['monto'] as num? ?? 0).toInt();
         final esGasto = (mov['tipo'] ?? '') == 'Gasto';
         final signed = esGasto ? monto : -monto;
-        deudaVisual += signed;
-        if (mov['categoria'] != 'Ajuste') {
-          deudaRealSinAjustes += signed;
+        
+        DateTime? movDate;
+        try {
+          movDate = DateTime.parse(mov['fecha']);
+        } catch (_) {}
+        if (movDate == null) continue;
+        
+        final esPorFacturar = !movDate.isBefore(curStart);
+        
+        if (esPorFacturar) {
+          porFacturarVisual += signed;
+          if (mov['categoria'] != 'Ajuste') {
+            porFacturarRealSinAjustes += signed;
+          }
+        } else {
+          facturadoVisual += signed;
+          if (mov['categoria'] != 'Ajuste') {
+            facturadoRealSinAjustes += signed;
+          }
         }
       }
 
-      final deudaActual = deudaVisual < 0 ? 0 : deudaVisual;
-      if (!mounted) return;
-      final nuevoMontoStr = await _pedirTexto(
-        titulo: 'Ajustar deuda TC: $cuenta',
-        etiqueta:
-            'Nueva deuda utilizada (Actual: ${_textoMonto(deudaActual, ocultable: false)})',
-        inicial: deudaActual.toString(),
-      );
-      if (nuevoMontoStr == null) return;
+      if (facturadoVisual < 0) facturadoVisual = 0;
+      if (porFacturarVisual < 0) porFacturarVisual = 0;
 
-      final deudaObjetivo = _parseMonto(nuevoMontoStr);
+      if (!mounted) return;
+
+      final result = await _mostrarDialogoAjusteCredito(
+        cuenta: cuenta,
+        facturadoActual: facturadoVisual,
+        porFacturarActual: porFacturarVisual,
+      );
+
+      if (result == null) return;
+
+      final nuevoFacturado = result['facturado'] as int;
+      final nuevoPorFacturar = result['porFacturar'] as int;
 
       await supabase.from('gastos').delete().match({
         'user_id': user.id,
@@ -5362,25 +5412,108 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         'metodo_pago': 'Credito',
       });
 
-      final diferencia = deudaObjetivo - deudaRealSinAjustes;
-      if (diferencia != 0) {
-        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+      final diferenciaFacturado = nuevoFacturado - facturadoRealSinAjustes;
+      final diferenciaPorFacturar = nuevoPorFacturar - porFacturarRealSinAjustes;
+
+      if (diferenciaFacturado != 0) {
+        final fechaAjusteFacturado = curStart.subtract(const Duration(days: 1));
+        final fechaStr = fechaAjusteFacturado.toIso8601String().split('T').first;
         await supabase.from('gastos').insert({
           'user_id': user.id,
           'fecha': fechaStr,
-          'item': 'Ajuste de Deuda TC',
-          'monto': diferencia.abs(),
+          'item': 'Ajuste Facturado TC',
+          'monto': diferenciaFacturado.abs(),
           'categoria': 'Ajuste',
           'cuenta': cuenta,
-          'tipo': diferencia > 0 ? 'Gasto' : 'Ingreso',
+          'tipo': diferenciaFacturado > 0 ? 'Gasto' : 'Ingreso',
           'metodo_pago': 'Credito',
         });
       }
 
-      _mostrarSnack('Deuda de tarjeta ajustada (ajustes previos reemplazados)');
+      if (diferenciaPorFacturar != 0) {
+        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': fechaStr,
+          'item': 'Ajuste Por Facturar TC',
+          'monto': diferenciaPorFacturar.abs(),
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': diferenciaPorFacturar > 0 ? 'Gasto' : 'Ingreso',
+          'metodo_pago': 'Credito',
+        });
+      }
+
+      if (mounted) _mostrarSnack('Deuda de tarjeta ajustada correctamente');
+      
+      // Invalidar cache
+      _aiService.invalidateCache();
     } catch (e) {
-      _mostrarSnack('Error al ajustar deuda de tarjeta: $e');
+      if (mounted) _mostrarSnack('Error al ajustar deuda de tarjeta: $e');
     }
+  }
+
+  Future<Map<String, int>?> _mostrarDialogoAjusteCredito({
+    required String cuenta,
+    required int facturadoActual,
+    required int porFacturarActual,
+  }) async {
+    final facturadoController = TextEditingController(text: facturadoActual.toString());
+    final porFacturarController = TextEditingController(text: porFacturarActual.toString());
+
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Ajustar Tarjeta: $cuenta'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Ajusta la deuda de tu ciclo cerrado (Facturado) y tu ciclo actual (Por Facturar).',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: facturadoController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Monto Facturado',
+                helperText: 'Actual: ${_textoMonto(facturadoActual, ocultable: false)}',
+                border: const OutlineInputBorder(),
+                prefixText: '\$ ',
+              ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: porFacturarController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Monto Por Facturar',
+                helperText: 'Actual: ${_textoMonto(porFacturarActual, ocultable: false)}',
+                border: const OutlineInputBorder(),
+                prefixText: '\$ ',
+              ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final facturado = int.tryParse(facturadoController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+              final porFacturar = int.tryParse(porFacturarController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+              Navigator.pop(ctx, {'facturado': facturado, 'porFacturar': porFacturar});
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
   }
 
   // Skeleton Loader Base
