@@ -945,7 +945,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withOpacity(0.15),
+                        color: Colors.teal.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
                       child: _iconoCategoria(
@@ -1000,7 +1000,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     : ListView.separated(
                         itemCount: gastos.length,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        separatorBuilder: (_, __) => Divider(
+                        separatorBuilder: (_, _) => Divider(
                           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                           indent: 72,
                           endIndent: 16,
@@ -8717,7 +8717,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         ),
-                        value: diaCierre,
+                        initialValue: diaCierre,
                         items: List.generate(31, (i) => i + 1)
                             .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
                             .toList(),
@@ -8734,7 +8734,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         ),
-                        value: diaVencimiento,
+                        initialValue: diaVencimiento,
                         items: List.generate(31, (i) => i + 1)
                             .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
                             .toList(),
