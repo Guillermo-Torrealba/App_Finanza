@@ -5207,7 +5207,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       final List<dynamic> response = await supabase
           .from('gastos')
-          .select('monto, tipo, categoria, metodo_pago, fecha, item')
+          .select('monto, tipo, categoria, metodo_pago, fecha, item, estado')
           .eq('user_id', user.id)
           .eq('cuenta', cuenta);
 
@@ -5256,6 +5256,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       for (final mov in movimientos) {
         if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
+          continue;
+        }
+        if ((mov['estado'] ?? 'real') == 'fantasma') {
           continue;
         }
 
@@ -5347,26 +5350,30 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           List<Map<String, dynamic>>.from(
             await supabase
                 .from('gastos')
-                .select('monto, tipo, categoria, metodo_pago, fecha, item')
+                .select('monto, tipo, categoria, metodo_pago, fecha, item, estado')
                 .eq('user_id', user.id)
                 .eq('cuenta', cuenta),
           );
 
       final settings = widget.settingsController.settings;
       final now = DateTime.now();
-      final curStart = _getEffectiveCutoff(settings, now);
+      final rangosCredito = _obtenerRangosCicloCredito(settings, referenceDate: now);
+      final curStart = rangosCredito['curStart']!;
       
-      var facturadoRealSinAjustes = 0;
-      var porFacturarRealSinAjustes = 0;
-      var facturadoVisual = 0;
-      var porFacturarVisual = 0;
+      var gastosFacturadosBruto = 0;
+      var gastosPorFacturarBruto = 0;
+      var pagosAcumulados = 0;
+
+      var gastosFacturadosReal = 0;
+      var gastosPorFacturarReal = 0;
+      var pagosAcumuladosReal = 0;
 
       for (final mov in movimientos) {
         if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
+        if ((mov['estado'] ?? 'real') == 'fantasma') continue;
         
         final monto = (mov['monto'] as num? ?? 0).toInt();
-        final esGasto = (mov['tipo'] ?? '') == 'Gasto';
-        final signed = esGasto ? monto : -monto;
+        final tipo = (mov['tipo'] ?? '').toString();
         
         DateTime? movDate;
         try {
@@ -5375,22 +5382,31 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         if (movDate == null) continue;
         
         final esPorFacturar = !movDate.isBefore(curStart);
+        final esAjuste = mov['categoria'] == 'Ajuste';
         
-        if (esPorFacturar) {
-          porFacturarVisual += signed;
-          if (mov['categoria'] != 'Ajuste') {
-            porFacturarRealSinAjustes += signed;
+        if (tipo == 'Gasto') {
+          if (esPorFacturar) {
+            gastosPorFacturarBruto += monto;
+            if (!esAjuste) gastosPorFacturarReal += monto;
+          } else {
+            gastosFacturadosBruto += monto;
+            if (!esAjuste) gastosFacturadosReal += monto;
           }
-        } else {
-          facturadoVisual += signed;
-          if (mov['categoria'] != 'Ajuste') {
-            facturadoRealSinAjustes += signed;
-          }
+        } else if (tipo == 'Ingreso') {
+          pagosAcumulados += monto;
+          if (!esAjuste) pagosAcumuladosReal += monto;
         }
       }
 
-      if (facturadoVisual < 0) facturadoVisual = 0;
-      if (porFacturarVisual < 0) porFacturarVisual = 0;
+      final pagoAFacturadoV = pagosAcumulados > gastosFacturadosBruto ? gastosFacturadosBruto : pagosAcumulados;
+      final pagoRestanteV = pagosAcumulados - pagoAFacturadoV;
+      final facturadoVisual = (gastosFacturadosBruto - pagoAFacturadoV).clamp(0, 1 << 31).toInt();
+      final porFacturarVisual = (gastosPorFacturarBruto - pagoRestanteV).clamp(0, 1 << 31).toInt();
+
+      final pagoAFacturadoR = pagosAcumuladosReal > gastosFacturadosReal ? gastosFacturadosReal : pagosAcumuladosReal;
+      final pagoRestanteR = pagosAcumuladosReal - pagoAFacturadoR;
+      final facturadoRealSinAjustes = (gastosFacturadosReal - pagoAFacturadoR).clamp(0, 1 << 31).toInt();
+      final porFacturarRealSinAjustes = (gastosPorFacturarReal - pagoRestanteR).clamp(0, 1 << 31).toInt();
 
       if (!mounted) return;
 
