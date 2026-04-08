@@ -17,6 +17,7 @@ import 'package:shimmer/shimmer.dart';
 // Voice input gracefully disabled on unsupported platforms.
 
 import 'app_settings.dart';
+import 'push_notification_service.dart';
 import 'finance_alert.dart';
 import 'flujo_caja_screen.dart';
 import 'login_screen.dart';
@@ -5837,6 +5838,35 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     HapticFeedback.lightImpact();
                     widget.settingsController.setHideAmounts(val);
                   },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _seccionAjustes(
+              titulo: 'Notificaciones',
+              icono: Icons.notifications_active_outlined,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    'Activa esta opción si deseas recibir avisos en tu dispositivo (iOS Safari / Web o Android).',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await PushNotificationService.solicitarPermiso(context);
+                    },
+                    icon: const Icon(Icons.mark_email_read),
+                    label: const Text('Activar Notificaciones Push'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                      elevation: 0,
+                    ),
+                  ),
                 ),
               ],
             ),

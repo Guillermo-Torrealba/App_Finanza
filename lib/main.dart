@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'app_settings.dart';
 import 'login_screen.dart';
@@ -10,6 +12,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializamos Firebase con la configuración generada
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   await Supabase.initialize(
     url: 'https://xycshsxqcfypgffnqmxb.supabase.co',
     anonKey: 'sb_publishable_RoIT8jS3qG_VYtX1t--h8A_vqlTyk3_',
