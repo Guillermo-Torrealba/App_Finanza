@@ -2370,7 +2370,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Tienes ${gastos.length} gasto(s) de Apple Pay sin categorizar.',
+                      'Tienes ${gastos.length} movimiento(s) sin categorizar.',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.orange.shade800,
@@ -2415,14 +2415,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     final gasto = gastos[index];
                     final date = DateTime.tryParse(gasto['fecha'] ?? '');
                     final dateStr = date != null ? DateFormat('dd MMM').format(date) : '';
+                    final esIngreso = (gasto['tipo'] ?? 'Gasto') == 'Ingreso';
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       leading: CircleAvatar(
-                        backgroundColor: Colors.orange.shade100,
-                        child: Icon(Icons.receipt_long, color: Colors.orange.shade800),
+                        backgroundColor: esIngreso ? Colors.green.shade100 : Colors.orange.shade100,
+                        child: Icon(
+                          esIngreso ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                          color: esIngreso ? Colors.green.shade800 : Colors.orange.shade800,
+                        ),
                       ),
                       title: Text(gasto['item']?.toString() ?? 'Sin Detalles', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(dateStr),
+                      subtitle: Text('$dateStr · ${esIngreso ? "Ingreso" : "Gasto"}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

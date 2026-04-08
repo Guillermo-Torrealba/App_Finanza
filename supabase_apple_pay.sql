@@ -29,7 +29,8 @@ CREATE POLICY "Users can delete own webhook token" ON public.webhook_tokens
 CREATE OR REPLACE FUNCTION public.registrar_gasto_webhook(
     p_token TEXT,
     p_monto BIGINT,
-    p_comercio TEXT
+    p_comercio TEXT,
+    p_tipo TEXT DEFAULT 'Gasto'
 ) RETURNS JSON AS $$
 DECLARE
     v_user_id UUID;
@@ -61,10 +62,10 @@ BEGIN
         p_monto,
         'A revisar', -- Categoría clave para filtrar luego
         'Cta Corriente', -- O una cuenta predeterminada
-        'Gasto'
+        p_tipo
     ) RETURNING id INTO v_gasto_id;
 
     -- Devolver un JSON indicando éxito
-    RETURN json_build_object('status', 'success', 'gasto_id', v_gasto_id, 'message', 'Gasto guardado correctamente');
+    RETURN json_build_object('status', 'success', 'gasto_id', v_gasto_id, 'message', p_tipo || ' guardado correctamente');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
