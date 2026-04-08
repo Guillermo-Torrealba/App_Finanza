@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'dart:ui';
+import 'dart:math';
 import 'package:shimmer/shimmer.dart';
 // speech_to_text removed – Windows plugin (beta) breaks native build.
 // Voice input gracefully disabled on unsupported platforms.
@@ -2335,6 +2336,112 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
+  Widget _bannerGastosARevisar(List<Map<String, dynamic>> gastos) {
+    return Card(
+      color: Colors.orange.shade50,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.orange.shade300, width: 1.5),
+      ),
+      margin: EdgeInsets.symmetric(horizontal: widget.settingsController.settings.compactMode ? 12.0 : 16.0),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          _mostrarModalGastosARevisar(gastos);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pagos por revisar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.orange.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tienes ${gastos.length} gasto(s) de Apple Pay sin categorizar.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.orange.shade800),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _mostrarModalGastosARevisar(List<Map<String, dynamic>> gastos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              const Text('Gastos a Revisar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: gastos.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final gasto = gastos[index];
+                    final date = DateTime.tryParse(gasto['fecha'] ?? '');
+                    final dateStr = date != null ? DateFormat('dd MMM').format(date) : '';
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.orange.shade100,
+                        child: Icon(Icons.receipt_long, color: Colors.orange.shade800),
+                      ),
+                      title: Text(gasto['item']?.toString() ?? 'Sin Detalles', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(dateStr),
+                      trailing: Text(
+                        formatoMoneda(gasto['monto'] ?? 0),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context); // Cerrar hoja modal
+                        _mostrarDialogo(itemParaEditar: gasto); // Abrir editor de gasto
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _construirPaginaInicio(List<Map<String, dynamic>> todosLosDatos) {
     final settings = widget.settingsController.settings;
     final compacto = settings.compactMode;
@@ -2485,6 +2592,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ? _limiteMovimientos!
               : totalFiltrados);
 
+    final gastosARevisar = datosFiltrados.where((mov) {
+      final cat = (mov['categoria'] ?? '').toString();
+      final noBorrado = (mov['estado'] ?? 'real') != 'eliminado';
+      return cat == 'A revisar' && noBorrado;
+    }).toList();
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -2492,6 +2605,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             children: [
               _selectorCuentas(),
               const SizedBox(height: 12),
+              if (gastosARevisar.isNotEmpty) ...[
+                _bannerGastosARevisar(gastosARevisar),
+                const SizedBox(height: 12),
+              ],
               // ── Tarjeta Liquidez Neta ──
               Builder(
                 builder: (context) {
@@ -6455,6 +6572,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
             const SizedBox(height: 12),
             _seccionAjustes(
+              titulo: 'Integraciones Automáticas',
+              icono: Icons.extension_outlined,
+              children: [
+                const Text(
+                  'Automatiza tus finanzas conectando servicios externos a Mis Finanzas.',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.apple, size: 36),
+                  title: const Text('Apple Pay (Atajos)'),
+                  subtitle: const Text('Registra gastos al pagar con tu iPhone'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _mostrarConfiguracionApplePay,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _seccionAjustes(
               titulo: 'Datos y mantenimiento',
               icono: Icons.storage_rounded,
 
@@ -8361,6 +8498,115 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }
     }
     widget.settingsController.setBiometricEnabled(activo);
+  }
+
+  String _generarTokenAleatorio() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    return String.fromCharCodes(Iterable.generate(
+        32, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+  }
+
+  Future<void> _mostrarConfiguracionApplePay() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    // Primero intentamos recuperar el token existente para no hacer múltiples
+    String token = '';
+    try {
+      final res = await supabase
+          .from('webhook_tokens')
+          .select('token')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (res != null) {
+        token = res['token'] as String;
+      } else {
+        token = _generarTokenAleatorio();
+        await supabase.from('webhook_tokens').insert({
+          'user_id': user.id,
+          'token': token,
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Error'),
+            content: const Text(
+                'Asegúrate de haber corrido el script SQL en Supabase para crear la tabla webhook_tokens antes de configurar esto.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    final endpointUrl =
+        'https://xycshsxqcfypgffnqmxb.supabase.co/rest/v1/rpc/registrar_gasto_webhook';
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Atajo de Apple Pay'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Sigue estas instrucciones en tu iPhone:\n'
+                '1. Abre la app "Atajos" (Shortcuts) y ve a la pestaña "Automatización".\n'
+                '2. Presiona "+" y elige "Transacción". Selecciona tu tarjeta y elige "Cuando el pago se realice".\n'
+                '3. Agrega la acción "Obtener contenido de URL".\n'
+                '4. Pega esta URL en el campo URL:',
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                endpointUrl,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '5. Expande las opciones de la acción y cambia el Método a "POST".\n'
+                '6. Define la Cabecera (Header):\n'
+                '   - Clave: apikey\n'
+                '   - Texto: (tu clave anon pública de Supabase)\n'
+                '7. En "Cuerpo de la solicitud" selecciona JSON y agrega 3 valores:\n'
+                '   - p_token (Texto) : Tu Token Secreto\n'
+                '   - p_monto (Número) : Selecciona la variable "Importe"\n'
+                '   - p_comercio (Texto) : Selecciona la variable "Comerciante"\n'
+                '\n8. Agrega una acción final "Mostrar Notificación" y escribe: "¡Gasto en Apple Pay guardado en A revisar!"\n\n'
+                'Tu Token Secreto es:',
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                token,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.redAccent,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _exportarMovimientosCsv() async {
