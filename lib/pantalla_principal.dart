@@ -2423,9 +2423,24 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                       title: Text(gasto['item']?.toString() ?? 'Sin Detalles', style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(dateStr),
-                      trailing: Text(
-                        formatoMoneda(gasto['monto'] ?? 0),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            formatoMoneda(gasto['monto'] ?? 0),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            onPressed: () async {
+                              final id = gasto['id'];
+                              if (id != null) {
+                                await supabase.from('gastos').delete().eq('id', id);
+                                if (context.mounted) Navigator.pop(context); // Cerrar hoja modal para refrescar
+                              }
+                            },
+                          ),
+                        ],
                       ),
                       onTap: () {
                         Navigator.pop(context); // Cerrar hoja modal
@@ -2592,7 +2607,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ? _limiteMovimientos!
               : totalFiltrados);
 
-    final gastosARevisar = datosFiltrados.where((mov) {
+    final gastosARevisar = todosLosDatos.where((mov) {
       final cat = (mov['categoria'] ?? '').toString();
       final noBorrado = (mov['estado'] ?? 'real') != 'eliminado';
       return cat == 'A revisar' && noBorrado;
