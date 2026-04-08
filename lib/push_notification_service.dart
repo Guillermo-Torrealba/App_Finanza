@@ -8,7 +8,19 @@ class PushNotificationService {
   // Tu clave VAPID extraída de Firebase
   static const String _vapidKey = 'BN1qeX_GWXTO7BuQiApQoj8X0yolzcU2dsgZGMbtLe31muEFMH7bz6Xh_aEoYvv9egFz0F4EIDgzQtIlR9F_uaI'; 
 
-  static Future<void> solicitarPermiso(BuildContext context) async {
+  static Future<bool> tienePermiso() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return false; // Evitar crashes en Windows
+    }
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      return settings.authorizationStatus == AuthorizationStatus.authorized;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> solicitarPermiso(BuildContext context) async {
     try {
       // 1. Pedir permiso al usuario (esto mostrará el popup en iOS)
       NotificationSettings settings = await _messaging.requestPermission(
@@ -32,7 +44,9 @@ class PushNotificationService {
               const SnackBar(content: Text('¡Notificaciones activadas exitosamente!'), backgroundColor: Colors.green),
             );
           }
+          return true;
         }
+        return false;
       } else {
         debugPrint('Permiso denegado por el usuario.');
         if (context.mounted) {
@@ -41,6 +55,7 @@ class PushNotificationService {
             );
           }
       }
+      return false;
     } catch (e) {
       debugPrint('Error configurando notificaciones: $e');
       if (context.mounted) {
@@ -56,6 +71,7 @@ class PushNotificationService {
           ),
         );
       }
+      return false;
     }
   }
 
@@ -64,12 +80,17 @@ class PushNotificationService {
     final user = supabase.auth.currentUser;
     
     if (user != null) {
-      /* TODO: Aquí es donde conectaremos el Token con tu usuario en Supabase.
-         Por ejemplo, si tienes una tabla "perfiles" haríamos algo como:
-         
-         await supabase.from('perfiles').update({'fcm_token': token}).eq('id', user.id);
-      */
-      debugPrint('Usuario a actualizar en Supabase: ${user.id} con el token: $token');
+      try {
+        // Guarda o actualiza el token para este usuario
+        await supabase.from('usuarios_tokens').upsert({
+          'user_id': user.id,
+          'fcm_token': token,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+        debugPrint('¡Token guardado exitosamente en Supabase!');
+      } catch (e) {
+        debugPrint('Error guardando token en Supabase: $e');
+      }
     }
   }
 }

@@ -5853,20 +5853,50 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                 ),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await PushNotificationService.solicitarPermiso(context);
-                    },
-                    icon: const Icon(Icons.mark_email_read),
-                    label: const Text('Activar Notificaciones Push'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                      foregroundColor: Theme.of(context).colorScheme.primary,
-                      elevation: 0,
-                    ),
-                  ),
+                StatefulBuilder(
+                  builder: (context, setSectionState) {
+                    return FutureBuilder<bool>(
+                      future: PushNotificationService.tienePermiso(),
+                      builder: (context, snapshot) {
+                        final tienePermiso = snapshot.data ?? false;
+                        return SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Notificaciones Push'),
+                          subtitle: Text(
+                            tienePermiso 
+                                ? 'Habilitadas en este dispositivo' 
+                                : 'Deshabilitadas',
+                            style: TextStyle(
+                              color: tienePermiso ? Colors.green.shade700 : Colors.grey,
+                            ),
+                          ),
+                          value: tienePermiso,
+                          activeColor: Colors.teal.shade400,
+                          onChanged: (val) async {
+                            HapticFeedback.lightImpact();
+                            if (val) {
+                              final exito = await PushNotificationService.solicitarPermiso(context);
+                              if (exito) {
+                                setSectionState(() {});
+                              } else {
+                                // Forzar reverso de switch si no dio permiso real
+                                setSectionState(() {});
+                              }
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Para desactivarlas, debes ir a Configuración de tu iPhone > Safari > Notificaciones.'),
+                                  backgroundColor: Colors.orange,
+                                  duration: Duration(seconds: 4),
+                                )
+                              );
+                              setSectionState(() {});
+                            }
+                          },
+                        );
+                      }
+                    );
+                  }
                 ),
               ],
             ),
