@@ -22,7 +22,7 @@ serve(async (req: any) => {
     const userId = transaccion.user_id
     const monto = transaccion.monto || transaccion.amount || 0
     // Adaptar esto al nombre exacto de tu columna (comercio, detalle, nombre, etc)
-    const comercio = transaccion.comercio || transaccion.detalle || 'un comercio' 
+    const comercio = transaccion.comercio || transaccion.detalle || transaccion.item || 'un comercio' 
 
     if (!userId) {
        return new Response("La transacción no tiene user_id", { status: 400 })
