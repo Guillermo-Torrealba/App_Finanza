@@ -8,6 +8,7 @@ import 'app_settings.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
+import 'push_notification_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 Future<void> main() async {
@@ -20,6 +21,9 @@ Future<void> main() async {
     url: 'https://xycshsxqcfypgffnqmxb.supabase.co',
     anonKey: 'sb_publishable_RoIT8jS3qG_VYtX1t--h8A_vqlTyk3_',
   );
+
+  // Inicializamos los listeners de notificaciones push
+  await PushNotificationService.init();
 
   final preferences = await SharedPreferences.getInstance();
   final settingsController = SettingsController(preferences: preferences);

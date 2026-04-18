@@ -1,12 +1,65 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint("Notificación recibida en background: ${message.notification?.title}");
+}
+
 class PushNotificationService {
   static final _messaging = FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  
   // Tu clave VAPID extraída de Firebase
   static const String _vapidKey = 'BN1qeX_GWXTO7BuQiApQoj8X0yolzcU2dsgZGMbtLe31muEFMH7bz6Xh_aEoYvv9egFz0F4EIDgzQtIlR9F_uaI'; 
+
+  static Future<void> init() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) return;
+
+    // 1. Configurar listener de background
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // 2. Configurar notificaciones locales para iOS (Foreground)
+    const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings();
+    const InitializationSettings initializationSettings = InitializationSettings(
+      iOS: initializationSettingsIOS,
+    );
+    await _localNotifications.initialize(initializationSettings);
+
+    // 3. Opciones de presentación en primer plano
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // 4. Escuchar mensajes cuando la App está abierta
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('Notificación recibida en primer plano: ${message.notification?.title}');
+      if (message.notification != null) {
+        _localNotifications.show(
+          message.hashCode,
+          message.notification!.title,
+          message.notification!.body,
+          const NotificationDetails(
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+        );
+      }
+    });
+
+    // 5. Escuchar si el token expira y se refresca
+    _messaging.onTokenRefresh.listen((token) {
+      _guardarTokenEnSupabase(token);
+    });
+  }
 
   static Future<bool> tienePermiso() async {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
