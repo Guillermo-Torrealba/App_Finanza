@@ -1,10 +1,13 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
+// @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4"
+// @ts-ignore
 import { JWT } from 'npm:google-auth-library@9.0.0'
 
 const FIREBASE_PROJECT_ID = 'appfinanzas-3a1ca'
 
-serve(async (req) => {
+serve(async (req: any) => {
   try {
     // 1. Obtener el payload que envía el Webhook al hacer un INSERT
     const payload = await req.json()
@@ -27,7 +30,9 @@ serve(async (req) => {
 
     // 2. Conectar a Supabase como Administrador (Service Role) para leer el token
     const supabaseClient = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
@@ -46,6 +51,7 @@ serve(async (req) => {
     const fcm_token = userData.fcm_token
 
     // 3. Autenticación con Google (Firebase)
+    // @ts-ignore
     const serviceAccountStr = Deno.env.get('FIREBASE_SERVICE_ACCOUNT')
     if (!serviceAccountStr) throw new Error('No se encontró FIREBASE_SERVICE_ACCOUNT en Secrets')
     
@@ -97,7 +103,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, response: fcmData }), {
       headers: { "Content-Type": "application/json" },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error general:", error)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { "Content-Type": "application/json" },

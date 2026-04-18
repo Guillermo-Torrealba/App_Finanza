@@ -2410,7 +2410,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 child: ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: gastos.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final gasto = gastos[index];
                     final date = DateTime.tryParse(gasto['fecha'] ?? '');
@@ -6007,7 +6007,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             ),
                           ),
                           value: tienePermiso,
-                          activeColor: Colors.teal.shade400,
+                          activeThumbColor: Colors.teal.shade400,
                           onChanged: (val) async {
                             HapticFeedback.lightImpact();
                             if (val) {
