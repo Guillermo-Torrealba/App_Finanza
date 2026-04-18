@@ -9340,9 +9340,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
+        isScrollControlled: true,
         builder: (context) {
           return Container(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              12,
+              24,
+              MediaQuery.of(context).padding.bottom > 0
+                  ? MediaQuery.of(context).padding.bottom
+                  : 32,
+            ),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
                   ? const Color(0xFF1E2433)
@@ -9351,11 +9359,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 top: Radius.circular(32),
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Handle más prominente
-                Container(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle más prominente
+                  Container(
                   width: 50,
                   height: 5,
                   margin: const EdgeInsets.only(bottom: 24),
@@ -9475,35 +9484,36 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                 : Colors.purple.shade700,
                           ),
                           const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Entrada Rápida IA',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.purple.shade100
-                                      : Colors.purple.shade900,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Entrada Rápida IA',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.purple.shade100
+                                        : Colors.purple.shade900,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Escribe o dicta tu gasto en lenguaje natural',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.purple.shade200
-                                      : Colors.purple.shade700,
+                                Text(
+                                  'Escribe o dicta tu gasto en lenguaje natural',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.purple.shade200
+                                        : Colors.purple.shade700,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          const Spacer(),
                           Icon(
                             Icons.mic,
                             color:
@@ -9517,6 +9527,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                 ),
               ],
+            ),
             ),
           );
         },
