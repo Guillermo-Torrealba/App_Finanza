@@ -65,6 +65,7 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
               const Text('Verifica o edita el monto recibido:'),
               const SizedBox(height: 16),
               TextField(
+textInputAction: TextInputAction.done,
                 controller: montoController,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),

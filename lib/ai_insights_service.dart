@@ -123,6 +123,11 @@ Analiza mis finanzas y dame insights útiles.
     );
 
     if (response.statusCode != 200) {
+      if (response.statusCode == 401) {
+        throw Exception(
+          'Clave de OpenAI inválida o no configurada. Por favor, verifica tu clave en app_secrets.dart.',
+        );
+      }
       throw Exception(
         'Error de API OpenAI (${response.statusCode}): ${response.body}',
       );
@@ -279,7 +284,14 @@ Genera alertas solo si detectas algo relevante.
         }),
       );
 
-      if (response.statusCode != 200) return [];
+      if (response.statusCode != 200) {
+        if (response.statusCode == 401) {
+          throw Exception(
+            'Clave de OpenAI inválida o no configurada. Por favor, verifica tu clave en app_secrets.dart.',
+          );
+        }
+        return [];
+      }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final content = (body['choices'][0]['message']['content'] as String)

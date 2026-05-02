@@ -218,6 +218,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextField(
+textInputAction: TextInputAction.done,
         controller: controller,
         keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
         inputFormatters: isNumeric

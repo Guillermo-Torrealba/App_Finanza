@@ -3115,6 +3115,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               Padding(
                 padding: EdgeInsets.fromLTRB(margin, 8, margin, 0),
                 child: TextField(
+textInputAction: TextInputAction.done,
                   controller: _busquedaController,
                   decoration: InputDecoration(
                     hintText: 'Buscar movimiento...',
@@ -5627,6 +5628,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
             const SizedBox(height: 16),
             TextField(
+textInputAction: TextInputAction.done,
               controller: facturadoController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
@@ -5639,6 +5641,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
             const SizedBox(height: 16),
             TextField(
+textInputAction: TextInputAction.done,
               controller: porFacturarController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
@@ -8821,6 +8824,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 16),
                   TextField(
+textInputAction: TextInputAction.done,
                     controller: facturadoController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -8833,6 +8837,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 16),
                   TextField(
+textInputAction: TextInputAction.done,
                     controller: noFacturadoController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -9184,6 +9189,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                   const SizedBox(height: 12),
                   TextField(
+textInputAction: TextInputAction.done,
                     controller: montoController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -9811,6 +9817,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         children: [
                           Expanded(
                             child: TextField(
+textInputAction: TextInputAction.done,
                               controller: quickController,
                               autofocus: !hasParsed,
                               style: const TextStyle(fontSize: 16),
@@ -9989,6 +9996,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                               // Item
                               TextField(
+textInputAction: TextInputAction.done,
                                 controller: editItemCtrl,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
@@ -10016,6 +10024,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                               // Monto
                               TextField(
+textInputAction: TextInputAction.done,
                                 controller: editMontoCtrl,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
@@ -10621,6 +10630,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                       // Concepto
                       TextField(
+textInputAction: TextInputAction.done,
                         controller: _itemController,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                         decoration: InputDecoration(
@@ -10693,6 +10703,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                       // Detalle
                       TextField(
+textInputAction: TextInputAction.done,
                         controller: _detalleController,
                         decoration: InputDecoration(
                           hintText: 'Notas adicionales...',
@@ -10721,6 +10732,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
                       // Monto
                       TextField(
+textInputAction: TextInputAction.done,
                         controller: _montoController,
                         style: TextStyle(
                           fontSize: 22,
@@ -11040,6 +11052,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                         Expanded(
                                           flex: 2,
                                           child: TextField(
+textInputAction: TextInputAction.done,
                                             controller: nombreControllers[idx],
                                             decoration: const InputDecoration(
                                               hintText: 'Nombre',
@@ -11051,6 +11064,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                         Expanded(
                                           flex: 1,
                                           child: TextField(
+textInputAction: TextInputAction.done,
                                             controller: montoControllers[idx],
                                             decoration: const InputDecoration(
                                               hintText: 'Monto',
@@ -12816,12 +12830,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
+textInputAction: TextInputAction.done,
                       controller: nameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Nombre (ej. Crédito Coche)',
                       ),
                     ),
                     TextField(
+textInputAction: TextInputAction.done,
                       controller: amountCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Monto Cuota',
@@ -12830,6 +12846,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     TextField(
+textInputAction: TextInputAction.done,
                       controller: installmentsCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Total Cuotas',
@@ -12838,6 +12855,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     TextField(
+textInputAction: TextInputAction.done,
                       controller: paymentDayCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Día de pago (1-31)',
@@ -13112,6 +13130,7 @@ class _DialogoTextoState extends State<_DialogoTexto> {
     return AlertDialog(
       title: Text(widget.titulo),
       content: TextField(
+textInputAction: TextInputAction.done,
         controller: _controller,
         decoration: InputDecoration(labelText: widget.etiqueta),
       ),
@@ -13173,6 +13192,7 @@ class _DialogoEnteroState extends State<_DialogoEntero> {
     return AlertDialog(
       title: Text(widget.titulo),
       content: TextField(
+textInputAction: TextInputAction.done,
         controller: _controller,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -14168,6 +14188,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
+textInputAction: TextInputAction.done,
       controller: controller,
       keyboardType: isNumber
           ? (isDecimal

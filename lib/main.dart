@@ -59,9 +59,25 @@ class AppFinanzas extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           themeMode: _themeMode(settings.themeMode),
+          builder: (context, child) {
+            return ScrollConfiguration(
+              behavior: const MaterialScrollBehavior().copyWith(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+              ),
+              child: child!,
+            );
+          },
           theme: ThemeData(
             useMaterial3: true,
             colorSchemeSeed: seedColor,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+              },
+            ),
             scaffoldBackgroundColor: const Color(0xFFF8F9FA), // Off-white clean
             textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
             visualDensity: settings.compactMode

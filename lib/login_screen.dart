@@ -152,6 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
               if (_isSignUp) ...[
                 TextField(
+textInputAction: TextInputAction.done,
                   controller: _nameController,
                   decoration: const InputDecoration(
                     labelText: 'Nombre Completo',
@@ -162,6 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextField(
+textInputAction: TextInputAction.done,
                   controller: _phoneController,
                   decoration: const InputDecoration(
                     labelText: 'Teléfono (Ej: 569...)', // Recordatorio visual
@@ -174,6 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
               ],
               TextField(
+textInputAction: TextInputAction.done,
                 controller: _emailController,
                 decoration: const InputDecoration(
                   labelText: 'Correo electrónico',
@@ -185,6 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
+textInputAction: TextInputAction.done,
                 controller: _passwordController,
                 decoration: const InputDecoration(
                   labelText: 'Contraseña',
