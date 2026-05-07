@@ -5523,6 +5523,30 @@ textInputAction: TextInputAction.done,
       final diferencia = nuevoSaldo - saldoActual;
 
       if (diferencia != 0) {
+        if (!mounted) return;
+        final confirmar = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Confirmar Ajuste en $cuenta'),
+            content: Text(
+                'Estás a punto de ingresar un ajuste en la cuenta "$cuenta".\n\n'
+                'La cuenta seleccionada es estrictamente "$cuenta".\n'
+                '¿Continuar?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Confirmar'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmar != true) return;
+
         final esIngreso = diferencia > 0;
         final montoAjuste = diferencia.abs();
         final fechaStr = DateTime.now().toIso8601String().split('T').first;
@@ -5530,7 +5554,7 @@ textInputAction: TextInputAction.done,
         await supabase.from('gastos').insert({
           'user_id': user.id,
           'fecha': fechaStr,
-          'item': 'Ajuste de Saldo',
+          'item': 'Ajuste de Saldo ($cuenta)',
           'detalle': 'Ajuste manual de saldo cuenta $cuenta',
           'monto': montoAjuste,
           'categoria': 'Ajuste',
