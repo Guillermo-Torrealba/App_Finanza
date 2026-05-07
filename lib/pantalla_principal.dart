@@ -5386,53 +5386,148 @@ textInputAction: TextInputAction.done,
 
       if (ajustarCredito) {
         await _ajustarDeudaTarjetaCuenta(cuenta, movimientosCuenta: movimientos);
-        return; // Solo ajusta credito aqui. Si quisiera ambas, tendria que repetir la operacion.
+        return;
       }
 
-      var saldoVisual = 0;
-      var saldoRealSinAjustes = 0;
+      // ── Calcular saldo actual de débito ──
+      var saldoActual = 0;
+      var saldoSinAjustes = 0;
 
       for (final mov in movimientos) {
-        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') {
-          continue;
-        }
-        if ((mov['estado'] ?? 'real') == 'fantasma') {
-          continue;
-        }
+        // Solo movimientos de débito
+        if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+        // Solo movimientos reales (no fantasma)
+        if ((mov['estado'] ?? 'real') == 'fantasma') continue;
 
         final monto = (mov['monto'] as num? ?? 0).toInt();
         final esIngreso = mov['tipo'] == 'Ingreso';
+        final esAjuste = mov['categoria'] == 'Ajuste';
 
+        // Saldo actual incluye TODO (ajustes incluidos)
         if (esIngreso) {
-          saldoVisual += monto;
+          saldoActual += monto;
         } else {
-          saldoVisual -= monto;
+          saldoActual -= monto;
         }
 
-        // Calculamos el saldo "puro" sin ajustes previos
-        if (mov['categoria'] != 'Ajuste') {
+        // Saldo "puro" sin ajustes (para calcular la diferencia después)
+        if (!esAjuste) {
           if (esIngreso) {
-            saldoRealSinAjustes += monto;
+            saldoSinAjustes += monto;
           } else {
-            saldoRealSinAjustes -= monto;
+            saldoSinAjustes -= monto;
           }
         }
       }
 
       if (!mounted) return;
 
-      final nuevoSaldoStr = await _pedirTexto(
-        titulo: 'Ajustar saldo: $cuenta',
-        etiqueta:
-            'Nuevo saldo (Actual: ${_textoMonto(saldoVisual, ocultable: false)})',
-        inicial: saldoVisual.toString(),
+      // ── Pedir nuevo saldo con diálogo numérico ──
+      final nuevoSaldoResult = await showDialog<int>(
+        context: context,
+        builder: (ctx) {
+          final controller = TextEditingController(
+            text: saldoActual.abs().toString(),
+          );
+          bool esPositivo = saldoActual >= 0;
+          
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text('Ajustar saldo: $cuenta'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Saldo actual: ${_textoMonto(saldoActual, ocultable: false)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        // Botón para alternar signo (+/-)
+                        GestureDetector(
+                          onTap: () {
+                            setDialogState(() => esPositivo = !esPositivo);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: esPositivo 
+                                ? Colors.green.withAlpha(30) 
+                                : Colors.red.withAlpha(30),
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                bottomLeft: Radius.circular(8),
+                              ),
+                              border: Border.all(
+                                color: esPositivo ? Colors.green : Colors.red,
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              esPositivo ? '+' : '-',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: esPositivo ? Colors.green : Colors.red,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            textInputAction: TextInputAction.done,
+                            controller: controller,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: 'Nuevo saldo',
+                              border: OutlineInputBorder(),
+                              prefixText: '\$ ',
+                            ),
+                            autofocus: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Toca +/- para cambiar el signo',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancelar'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final montoAbs = int.tryParse(
+                        controller.text.replaceAll(RegExp(r'[^0-9]'), ''),
+                      ) ?? 0;
+                      final resultado = esPositivo ? montoAbs : -montoAbs;
+                      Navigator.pop(ctx, resultado);
+                    },
+                    child: const Text('Guardar'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
       );
 
-      if (nuevoSaldoStr == null) return;
+      if (nuevoSaldoResult == null) return;
+      final nuevoSaldo = nuevoSaldoResult;
 
-      final nuevoSaldo = _parseMonto(nuevoSaldoStr);
-
-      // 2. ELIMINAR ajustes previos para evitar acumulación
+      // ── ELIMINAR ajustes de débito previos para evitar acumulación ──
       await supabase.from('gastos').delete().match({
         'user_id': user.id,
         'cuenta': cuenta,
@@ -5440,8 +5535,8 @@ textInputAction: TextInputAction.done,
         'metodo_pago': 'Debito',
       });
 
-      // 3. Calcular diferencia necesaria desde el saldo REAL
-      final diferencia = nuevoSaldo - saldoRealSinAjustes;
+      // ── Calcular diferencia necesaria desde el saldo REAL (sin ajustes) ──
+      final diferencia = nuevoSaldo - saldoSinAjustes;
 
       if (diferencia != 0) {
         final esIngreso = diferencia > 0;
@@ -5452,6 +5547,7 @@ textInputAction: TextInputAction.done,
           'user_id': user.id,
           'fecha': fechaStr,
           'item': 'Ajuste de Saldo',
+          'detalle': 'Ajuste manual de saldo cuenta $cuenta',
           'monto': montoAjuste,
           'categoria': 'Ajuste',
           'cuenta': cuenta,
@@ -5460,10 +5556,15 @@ textInputAction: TextInputAction.done,
         });
       }
 
+      // Invalidar cache de IA
+      _aiService.invalidateCache();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saldo ajustado (ajustes previos reemplazados)'),
+          SnackBar(
+            content: Text(
+              'Saldo de $cuenta ajustado a ${_textoMonto(nuevoSaldo, ocultable: false)}',
+            ),
           ),
         );
       }
