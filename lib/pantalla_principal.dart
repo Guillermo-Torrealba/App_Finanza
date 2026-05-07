@@ -2821,7 +2821,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'Cta. Corriente',
+                                          'Total Débito',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: isDark
@@ -5390,10 +5390,8 @@ textInputAction: TextInputAction.done,
         return;
       }
 
-      // ── Paso 1: Identificar ajustes débito viejos (por ID) y calcular saldo limpio ──
-      final idsAjustesABorrar = <dynamic>[];
+      // ── Paso 1: Calcular saldo actual (con todos los ajustes, como un ledger real) ──
       var saldoActual = 0;     // lo que el dashboard muestra (con ajustes)
-      var saldoLimpio = 0;     // solo movimientos reales (sin ningún ajuste)
 
       for (final mov in movimientos) {
         // Solo débito (metodo_pago null se trata como Debito)
@@ -5403,25 +5401,12 @@ textInputAction: TextInputAction.done,
 
         final monto = (mov['monto'] as num? ?? 0).toInt();
         final esIngreso = mov['tipo'] == 'Ingreso';
-        final esAjuste = mov['categoria'] == 'Ajuste';
 
         // Saldo actual (como el dashboard)
         if (esIngreso) {
           saldoActual += monto;
         } else {
           saldoActual -= monto;
-        }
-
-        if (esAjuste) {
-          // Marcar para borrar
-          idsAjustesABorrar.add(mov['id']);
-        } else {
-          // Saldo limpio (solo movimientos reales, sin ajustes)
-          if (esIngreso) {
-            saldoLimpio += monto;
-          } else {
-            saldoLimpio -= monto;
-          }
         }
       }
 
@@ -5531,20 +5516,11 @@ textInputAction: TextInputAction.done,
       if (nuevoSaldoResult == null) return;
       final nuevoSaldo = nuevoSaldoResult;
 
-      // ── Paso 3: BORRAR todos los ajustes débito viejos por ID ──
-      // Esto captura TODOS: con metodo_pago='Debito', NULL, o cualquier otro valor
-      if (idsAjustesABorrar.isNotEmpty) {
-        await supabase
-            .from('gastos')
-            .delete()
-            .inFilter('id', idsAjustesABorrar);
-      }
-
-      // ── Paso 4: Insertar UN solo ajuste correcto ──
-      // Después de borrar, el saldo en la BD = saldoLimpio
-      // Necesitamos: saldoLimpio + ajuste = nuevoSaldo
-      // Entonces: ajuste = nuevoSaldo - saldoLimpio
-      final diferencia = nuevoSaldo - saldoLimpio;
+      // ── Paso 3: Insertar UN solo ajuste correcto ──
+      // Sin borrar historia. Añadimos un asiento de ajuste (ledger approach).
+      // Necesitamos: saldoActual + ajuste = nuevoSaldo
+      // Entonces: ajuste = nuevoSaldo - saldoActual
+      final diferencia = nuevoSaldo - saldoActual;
 
       if (diferencia != 0) {
         final esIngreso = diferencia > 0;
