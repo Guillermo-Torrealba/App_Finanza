@@ -5343,9 +5343,10 @@ textInputAction: TextInputAction.done,
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
+      // Traer TODO incluyendo ID para poder borrar por ID
       final List<dynamic> response = await supabase
           .from('gastos')
-          .select('monto, tipo, categoria, metodo_pago, fecha, item, estado')
+          .select('id, monto, tipo, categoria, metodo_pago, fecha, item, estado')
           .eq('user_id', user.id)
           .eq('cuenta', cuenta);
 
@@ -5389,22 +5390,44 @@ textInputAction: TextInputAction.done,
         return;
       }
 
-      // ── Calcular saldo actual (IGUAL que el dashboard) ──
-      var saldoActual = 0;
+      // ── Paso 1: Identificar ajustes débito viejos (por ID) y calcular saldo limpio ──
+      final idsAjustesABorrar = <dynamic>[];
+      var saldoActual = 0;     // lo que el dashboard muestra (con ajustes)
+      var saldoLimpio = 0;     // solo movimientos reales (sin ningún ajuste)
+
       for (final mov in movimientos) {
+        // Solo débito (metodo_pago null se trata como Debito)
         if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
+        // Solo reales
         if ((mov['estado'] ?? 'real') == 'fantasma') continue;
+
         final monto = (mov['monto'] as num? ?? 0).toInt();
-        if (mov['tipo'] == 'Ingreso') {
+        final esIngreso = mov['tipo'] == 'Ingreso';
+        final esAjuste = mov['categoria'] == 'Ajuste';
+
+        // Saldo actual (como el dashboard)
+        if (esIngreso) {
           saldoActual += monto;
         } else {
           saldoActual -= monto;
+        }
+
+        if (esAjuste) {
+          // Marcar para borrar
+          idsAjustesABorrar.add(mov['id']);
+        } else {
+          // Saldo limpio (solo movimientos reales, sin ajustes)
+          if (esIngreso) {
+            saldoLimpio += monto;
+          } else {
+            saldoLimpio -= monto;
+          }
         }
       }
 
       if (!mounted) return;
 
-      // ── Pedir nuevo saldo ──
+      // ── Paso 2: Pedir nuevo saldo ──
       final nuevoSaldoResult = await showDialog<int>(
         context: context,
         builder: (ctx) {
@@ -5508,30 +5531,38 @@ textInputAction: TextInputAction.done,
       if (nuevoSaldoResult == null) return;
       final nuevoSaldo = nuevoSaldoResult;
 
-      // ── Insertar ajuste = deseado - actual ──
-      // Así de simple: si actual=311000 y quiero 750000, inserto Ingreso de 439000
-      final diferencia = nuevoSaldo - saldoActual;
-
-      if (diferencia == 0) {
-        if (mounted) _mostrarSnack('El saldo ya es el indicado');
-        return;
+      // ── Paso 3: BORRAR todos los ajustes débito viejos por ID ──
+      // Esto captura TODOS: con metodo_pago='Debito', NULL, o cualquier otro valor
+      if (idsAjustesABorrar.isNotEmpty) {
+        await supabase
+            .from('gastos')
+            .delete()
+            .inFilter('id', idsAjustesABorrar);
       }
 
-      final esIngreso = diferencia > 0;
-      final montoAjuste = diferencia.abs();
-      final fechaStr = DateTime.now().toIso8601String().split('T').first;
+      // ── Paso 4: Insertar UN solo ajuste correcto ──
+      // Después de borrar, el saldo en la BD = saldoLimpio
+      // Necesitamos: saldoLimpio + ajuste = nuevoSaldo
+      // Entonces: ajuste = nuevoSaldo - saldoLimpio
+      final diferencia = nuevoSaldo - saldoLimpio;
 
-      await supabase.from('gastos').insert({
-        'user_id': user.id,
-        'fecha': fechaStr,
-        'item': 'Ajuste de Saldo',
-        'detalle': 'Ajuste manual de saldo cuenta $cuenta',
-        'monto': montoAjuste,
-        'categoria': 'Ajuste',
-        'cuenta': cuenta,
-        'tipo': esIngreso ? 'Ingreso' : 'Gasto',
-        'metodo_pago': 'Debito',
-      });
+      if (diferencia != 0) {
+        final esIngreso = diferencia > 0;
+        final montoAjuste = diferencia.abs();
+        final fechaStr = DateTime.now().toIso8601String().split('T').first;
+
+        await supabase.from('gastos').insert({
+          'user_id': user.id,
+          'fecha': fechaStr,
+          'item': 'Ajuste de Saldo',
+          'detalle': 'Ajuste manual de saldo cuenta $cuenta',
+          'monto': montoAjuste,
+          'categoria': 'Ajuste',
+          'cuenta': cuenta,
+          'tipo': esIngreso ? 'Ingreso' : 'Gasto',
+          'metodo_pago': 'Debito',
+        });
+      }
 
       _aiService.invalidateCache();
 
