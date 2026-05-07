@@ -5389,40 +5389,22 @@ textInputAction: TextInputAction.done,
         return;
       }
 
-      // ── Calcular saldo actual de débito ──
+      // ── Calcular saldo actual (IGUAL que el dashboard) ──
       var saldoActual = 0;
-      var saldoSinAjustes = 0;
-
       for (final mov in movimientos) {
-        // Solo movimientos de débito
         if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
-        // Solo movimientos reales (no fantasma)
         if ((mov['estado'] ?? 'real') == 'fantasma') continue;
-
         final monto = (mov['monto'] as num? ?? 0).toInt();
-        final esIngreso = mov['tipo'] == 'Ingreso';
-        final esAjuste = mov['categoria'] == 'Ajuste';
-
-        // Saldo actual incluye TODO (ajustes incluidos)
-        if (esIngreso) {
+        if (mov['tipo'] == 'Ingreso') {
           saldoActual += monto;
         } else {
           saldoActual -= monto;
-        }
-
-        // Saldo "puro" sin ajustes (para calcular la diferencia después)
-        if (!esAjuste) {
-          if (esIngreso) {
-            saldoSinAjustes += monto;
-          } else {
-            saldoSinAjustes -= monto;
-          }
         }
       }
 
       if (!mounted) return;
 
-      // ── Pedir nuevo saldo con diálogo numérico ──
+      // ── Pedir nuevo saldo ──
       final nuevoSaldoResult = await showDialog<int>(
         context: context,
         builder: (ctx) {
@@ -5448,7 +5430,6 @@ textInputAction: TextInputAction.done,
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        // Botón para alternar signo (+/-)
                         GestureDetector(
                           onTap: () {
                             setDialogState(() => esPositivo = !esPositivo);
@@ -5527,52 +5508,39 @@ textInputAction: TextInputAction.done,
       if (nuevoSaldoResult == null) return;
       final nuevoSaldo = nuevoSaldoResult;
 
-      // ── ELIMINAR ajustes de débito previos para evitar acumulación ──
-      await supabase.from('gastos').delete().match({
+      // ── Insertar ajuste = deseado - actual ──
+      // Así de simple: si actual=311000 y quiero 750000, inserto Ingreso de 439000
+      final diferencia = nuevoSaldo - saldoActual;
+
+      if (diferencia == 0) {
+        if (mounted) _mostrarSnack('El saldo ya es el indicado');
+        return;
+      }
+
+      final esIngreso = diferencia > 0;
+      final montoAjuste = diferencia.abs();
+      final fechaStr = DateTime.now().toIso8601String().split('T').first;
+
+      await supabase.from('gastos').insert({
         'user_id': user.id,
-        'cuenta': cuenta,
+        'fecha': fechaStr,
+        'item': 'Ajuste de Saldo',
+        'detalle': 'Ajuste manual de saldo cuenta $cuenta',
+        'monto': montoAjuste,
         'categoria': 'Ajuste',
+        'cuenta': cuenta,
+        'tipo': esIngreso ? 'Ingreso' : 'Gasto',
         'metodo_pago': 'Debito',
       });
 
-      // ── Calcular diferencia necesaria desde el saldo REAL (sin ajustes) ──
-      final diferencia = nuevoSaldo - saldoSinAjustes;
-
-      if (diferencia != 0) {
-        final esIngreso = diferencia > 0;
-        final montoAjuste = diferencia.abs();
-        final fechaStr = DateTime.now().toIso8601String().split('T').first;
-
-        await supabase.from('gastos').insert({
-          'user_id': user.id,
-          'fecha': fechaStr,
-          'item': 'Ajuste de Saldo',
-          'detalle': 'Ajuste manual de saldo cuenta $cuenta',
-          'monto': montoAjuste,
-          'categoria': 'Ajuste',
-          'cuenta': cuenta,
-          'tipo': esIngreso ? 'Ingreso' : 'Gasto',
-          'metodo_pago': 'Debito',
-        });
-      }
-
-      // Invalidar cache de IA
       _aiService.invalidateCache();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Saldo de $cuenta ajustado a ${_textoMonto(nuevoSaldo, ocultable: false)}',
-            ),
-          ),
-        );
+        _mostrarSnack('Saldo de $cuenta ajustado a ${_textoMonto(nuevoSaldo, ocultable: false)}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error al ajustar saldo: $e')));
+        _mostrarSnack('Error al ajustar saldo: $e');
       }
     }
   }
