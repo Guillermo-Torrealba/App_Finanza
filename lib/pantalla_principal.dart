@@ -98,6 +98,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       'fecha_desc'; // fecha_desc, fecha_asc, monto_desc, monto_asc
   bool _ordenamientoVisible = false;
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
+  String? _filtroEtiqueta; // Tag seleccionado para filtrar
   int? _limiteMovimientos = 15;
 
   List<String> get _titulosPestanas {
@@ -2567,11 +2568,25 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       saldoCreditoUtilizado += resumen['deudaTotal'] ?? 0;
     }
 
+    final Set<String> etiquetasDelMes = {};
+    for (final mov in datosDelMes) {
+      if (mov['etiquetas'] is List) {
+        for (final tag in mov['etiquetas']) {
+          etiquetasDelMes.add(tag.toString());
+        }
+      }
+    }
+
     // Apply search & sort
     final query = _textoBusqueda.toLowerCase();
     final movimientosFiltrados = datosDelMes.where((mov) {
       // Type filter
       if (_filtroTipo != 'Todos' && mov['tipo'] != _filtroTipo) return false;
+      // Tag filter
+      if (_filtroEtiqueta != null) {
+        final List<dynamic> etiquetas = mov['etiquetas'] ?? [];
+        if (!etiquetas.contains(_filtroEtiqueta)) return false;
+      }
       // Text search
       if (query.isEmpty) return true;
       final item = (mov['item'] ?? '').toString().toLowerCase();
@@ -3224,6 +3239,45 @@ textInputAction: TextInputAction.done,
                   ),
                 ),
               ),
+              // ── Etiqueta Filter ──
+              if (etiquetasDelMes.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(margin, 10, margin, 0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Todas las etiquetas', style: TextStyle(fontSize: 12)),
+                          selected: _filtroEtiqueta == null,
+                          onSelected: (val) {
+                            if (val) setState(() => _filtroEtiqueta = null);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ...etiquetasDelMes.map((tag) {
+                          // Calcular total de esta etiqueta (solo gastos)
+                          double totalTag = 0;
+                          for (final m in datosDelMes) {
+                            if (m['tipo'] == 'Gasto' && m['etiquetas'] != null && (m['etiquetas'] as List).contains(tag)) {
+                              totalTag += (m['monto'] as num? ?? 0).toDouble();
+                            }
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text('$tag (${_textoMonto(totalTag.toInt(), ocultable: false)})', style: const TextStyle(fontSize: 12)),
+                              selected: _filtroEtiqueta == tag,
+                              onSelected: (val) {
+                                setState(() => _filtroEtiqueta = val ? tag : null);
+                              },
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
               // ── Sort Chips ──
               AnimatedCrossFade(
                 firstChild: const SizedBox.shrink(),
@@ -10446,12 +10500,18 @@ textInputAction: TextInputAction.done,
     final amigosCompartidos = <Map<String, dynamic>>[];
     final nombreControllers = <TextEditingController>[];
     final montoControllers = <TextEditingController>[];
+    List<String> etiquetasSeleccionadas = [];
+    final TextEditingController _etiquetaController = TextEditingController();
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
       _detalleController.text = (itemParaEditar['detalle'] ?? '').toString();
       _montoController.text = (itemParaEditar['monto'] ?? '').toString();
       fechaSeleccionada = DateTime.parse(itemParaEditar['fecha']);
+      
+      if (itemParaEditar['etiquetas'] != null && itemParaEditar['etiquetas'] is List) {
+        etiquetasSeleccionadas = List<String>.from(itemParaEditar['etiquetas']);
+      }
 
       final cat = (itemParaEditar['categoria'] ?? '').toString();
       if (cat.isNotEmpty && !categoriasDisponibles.contains(cat)) {
@@ -10582,6 +10642,7 @@ textInputAction: TextInputAction.done,
                         'cuenta': cuentaSeleccionada,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
+                        'etiquetas': etiquetasSeleccionadas,
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else {
@@ -10623,6 +10684,7 @@ textInputAction: TextInputAction.done,
                         'tipo': tipo,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
+                        'etiquetas': etiquetasSeleccionadas,
                       })
                       .select()
                       .single();
@@ -10913,6 +10975,59 @@ textInputAction: TextInputAction.done,
                               },
                             );
                           }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+
+                        const Text(
+                          'Etiquetas',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ...etiquetasSeleccionadas.map((tag) => Chip(
+                                  label: Text(tag, style: const TextStyle(fontSize: 12)),
+                                  deleteIcon: const Icon(Icons.close, size: 16),
+                                  onDeleted: () {
+                                    setStateSB(() => etiquetasSeleccionadas.remove(tag));
+                                  },
+                                  backgroundColor: colorTipo.withAlpha(isDark ? 30 : 15),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: colorTipo.withAlpha(50))),
+                                )),
+                            Container(
+                              width: 100,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.withAlpha(100)),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: TextField(
+                                controller: _etiquetaController,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  hintText: '+ Nueva tag',
+                                  hintStyle: TextStyle(fontSize: 12),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                ),
+                                style: const TextStyle(fontSize: 12),
+                                onSubmitted: (val) {
+                                  final tag = val.trim();
+                                  if (tag.isNotEmpty && !etiquetasSeleccionadas.contains(tag)) {
+                                    setStateSB(() {
+                                      etiquetasSeleccionadas.add(tag);
+                                      _etiquetaController.clear();
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 14),
                       ],

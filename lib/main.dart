@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'app_settings.dart';
+import 'app_secrets.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
@@ -18,8 +19,8 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await Supabase.initialize(
-    url: 'https://xycshsxqcfypgffnqmxb.supabase.co',
-    anonKey: 'sb_publishable_RoIT8jS3qG_VYtX1t--h8A_vqlTyk3_',
+    url: AppSecrets.supabaseUrl,
+    anonKey: AppSecrets.supabaseAnonKey,
   );
 
   // Inicializamos los listeners de notificaciones push
