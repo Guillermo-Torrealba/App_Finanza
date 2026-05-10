@@ -2600,9 +2600,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     // Apply sort
     switch (_ordenamiento) {
       case 'fecha_asc':
-        movimientosFiltrados.sort(
-          (a, b) => (a['fecha'] as String).compareTo(b['fecha'] as String),
-        );
+        movimientosFiltrados.sort((a, b) {
+          int res = (a['fecha'] as String).compareTo(b['fecha'] as String);
+          if (res == 0 && a['id'] != null && b['id'] != null) {
+            return (a['id'] as int).compareTo(b['id'] as int);
+          }
+          return res;
+        });
       case 'monto_desc':
         movimientosFiltrados.sort(
           (a, b) =>
@@ -2614,9 +2618,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ((a['monto'] as num).abs()).compareTo((b['monto'] as num).abs()),
         );
       default: // fecha_desc
-        movimientosFiltrados.sort(
-          (a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String),
-        );
+        movimientosFiltrados.sort((a, b) {
+          int res = (b['fecha'] as String).compareTo(a['fecha'] as String);
+          if (res == 0 && a['id'] != null && b['id'] != null) {
+            return (b['id'] as int).compareTo(a['id'] as int);
+          }
+          return res;
+        });
     }
 
     final totalFiltrados = movimientosFiltrados.length;
@@ -10491,6 +10499,17 @@ textInputAction: TextInputAction.done,
       cuentasDisponibles.add(settings.defaultAccount);
     }
 
+    final Set<String> etiquetasDisponibles = {};
+    if (_cachedGastos != null) {
+      for (final mov in _cachedGastos!) {
+        if (mov['etiquetas'] is List) {
+          for (final tag in mov['etiquetas']) {
+            etiquetasDisponibles.add(tag.toString());
+          }
+        }
+      }
+    }
+
     String cuentaSeleccionada;
     String? cuentaDestinoSeleccionada;
     String? categoriaSeleccionada;
@@ -10566,6 +10585,11 @@ textInputAction: TextInputAction.done,
           builder: (context, setStateSB) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             Future<void> guardar() async {
+              final pendingTag = _etiquetaController.text.trim();
+              if (pendingTag.isNotEmpty && !etiquetasSeleccionadas.contains(pendingTag)) {
+                etiquetasSeleccionadas.add(pendingTag);
+              }
+
               final montoStr = _montoController.text.trim();
               if (montoStr.isEmpty) return;
               final monto = int.tryParse(montoStr) ?? 0;
@@ -11029,6 +11053,35 @@ textInputAction: TextInputAction.done,
                             ),
                           ],
                         ),
+                        // Sugerencias de etiquetas
+                        if (etiquetasDisponibles.where((t) => !etiquetasSeleccionadas.contains(t)).isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: etiquetasDisponibles
+                                  .where((tag) => !etiquetasSeleccionadas.contains(tag))
+                                  .map((tag) => Padding(
+                                        padding: const EdgeInsets.only(right: 6.0),
+                                        child: ActionChip(
+                                          label: Text('+ $tag', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                          backgroundColor: Colors.transparent,
+                                          visualDensity: VisualDensity.compact,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                            side: BorderSide(color: Colors.grey.withAlpha(50)),
+                                          ),
+                                          onPressed: () {
+                                            setStateSB(() {
+                                              etiquetasSeleccionadas.add(tag);
+                                            });
+                                          },
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                       ],
 
