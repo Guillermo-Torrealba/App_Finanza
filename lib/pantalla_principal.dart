@@ -784,6 +784,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
       final monto = (mov['monto'] as num? ?? 0).toInt();
       final tipo = (mov['tipo'] ?? '').toString();
+      final esAjuste = mov['categoria'] == 'Ajuste';
+
       if (tipo == 'Gasto') {
         if (fecha.isBefore(cycleStart)) {
           gastosFacturadosBruto += monto;
@@ -791,7 +793,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           gastosPorFacturarBruto += monto;
         }
       } else if (tipo == 'Ingreso') {
-        pagosAcumulados += monto;
+        if (esAjuste) {
+          if (fecha.isBefore(cycleStart)) {
+            gastosFacturadosBruto -= monto;
+          } else {
+            gastosPorFacturarBruto -= monto;
+          }
+        } else {
+          pagosAcumulados += monto;
+        }
       }
     }
 
@@ -5693,8 +5703,16 @@ textInputAction: TextInputAction.done,
             if (!esAjuste) gastosFacturadosReal += monto;
           }
         } else if (tipo == 'Ingreso') {
-          pagosAcumulados += monto;
-          if (!esAjuste) pagosAcumuladosReal += monto;
+          if (esAjuste) {
+            if (esPorFacturar) {
+              gastosPorFacturarBruto -= monto;
+            } else {
+              gastosFacturadosBruto -= monto;
+            }
+          } else {
+            pagosAcumulados += monto;
+            if (!esAjuste) pagosAcumuladosReal += monto;
+          }
         }
       }
 
