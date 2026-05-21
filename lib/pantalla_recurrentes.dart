@@ -278,6 +278,8 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
       cuentas.add(_cuenta);
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.fromLTRB(
         24,
@@ -285,9 +287,9 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
         24,
         MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: isDark ? Theme.of(context).colorScheme.surface : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Form(
         key: _formKey,
@@ -342,8 +344,11 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
                     ),
                     selected: isSelected,
                     selectedColor: activeColor,
+                    backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
+                      color: isSelected 
+                        ? Colors.white 
+                        : (isDark ? Colors.grey.shade300 : Colors.black87),
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                     onSelected: (selected) {
