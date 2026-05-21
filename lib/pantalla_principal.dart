@@ -6384,41 +6384,69 @@ textInputAction: TextInputAction.done,
               children: [
                 ...settings.activeCategories.map((category) {
                   final budget = settings.categoryBudgets[category];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: GestureDetector(
-                      onTap: () => _mostrarEmojiCategoria(category),
-                      child: _iconoCategoria(category, size: 24),
-                    ),
-                    title: Text(category),
-                    subtitle: budget != null
-                        ? Text('Presupuesto: ${formatoMoneda(budget)}')
-                        : null,
-                    trailing: Wrap(
-                      spacing: 4,
+                  return Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      leading: GestureDetector(
+                        onTap: () => _mostrarEmojiCategoria(category),
+                        child: _iconoCategoria(category, size: 24),
+                      ),
+                      title: Text(category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: budget != null
+                          ? Text('Presupuesto: ${formatoMoneda(budget)}', style: TextStyle(color: Colors.grey.shade600))
+                          : null,
+                      trailing: Wrap(
+                        spacing: -4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Emoji',
+                            icon: const Icon(Icons.emoji_emotions_outlined, size: 20),
+                            onPressed: () => _mostrarEmojiCategoria(category),
+                          ),
+                          IconButton(
+                            tooltip: 'Editar',
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            onPressed: () => _editarCategoria(category),
+                          ),
+                          IconButton(
+                            tooltip: 'Archivar',
+                            icon: const Icon(Icons.archive_outlined, size: 20),
+                            onPressed: () {
+                              widget.settingsController.archiveCategory(category);
+                            },
+                          ),
+                        ],
+                      ),
                       children: [
-                        IconButton(
-                          tooltip: 'Emoji',
-                          icon: const Icon(Icons.emoji_emotions_outlined),
-                          onPressed: () => _mostrarEmojiCategoria(category),
-                        ),
-                        IconButton(
-                          tooltip: 'Editar',
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => _editarCategoria(category),
-                        ),
-                        IconButton(
-                          tooltip: 'Presupuesto',
-                          icon: const Icon(Icons.payments_outlined),
-                          onPressed: () =>
-                              _editarPresupuestoCategoria(category),
-                        ),
-                        IconButton(
-                          tooltip: 'Archivar',
-                          icon: const Icon(Icons.archive_outlined),
-                          onPressed: () {
-                            widget.settingsController.archiveCategory(category);
-                          },
+                        // Lista de subcategorías
+                        if (settings.activeSubcategories[category] != null)
+                          ...settings.activeSubcategories[category]!.map((sub) {
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 32.0),
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.subdirectory_arrow_right, size: 16),
+                                title: Text(sub),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () => widget.settingsController.removeSubcategory(category, sub),
+                                ),
+                              ),
+                            );
+                          }),
+                        // Botón para agregar subcategoría
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32.0),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => _agregarSubcategoria(category),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Agregar subcategoría'),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -7996,6 +8024,44 @@ textInputAction: TextInputAction.done,
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => FormularioRecurrente(
+                                settingsController: widget.settingsController,
+                                initialType: 'Gasto',
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Compromiso', style: TextStyle(fontSize: 13)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => FormularioRecurrente(
+                                settingsController: widget.settingsController,
+                                initialType: 'Ingreso',
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Ingreso Fijo', style: TextStyle(fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   
                   const Text(
@@ -8068,18 +8134,30 @@ textInputAction: TextInputAction.done,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
+                            InkWell(
+                              onTap: () => _editarPresupuestoCategoria(categoria),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(iconCat, style: const TextStyle(fontSize: 20)),
-                                    const SizedBox(width: 8),
-                                    Text(categoria, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Row(
+                                      children: [
+                                        Text(iconCat, style: const TextStyle(fontSize: 20)),
+                                        const SizedBox(width: 8),
+                                        Text(categoria, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      ],
+                                    ),
+                                    Row(
+                                      children: [
+                                        Text('${_textoMonto(gastadoCat)} / ${presupuestoCat > 0 ? _textoMonto(presupuestoCat) : '∞'}'),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.edit, size: 14, color: Colors.grey),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                                Text('${_textoMonto(gastadoCat)} / ${presupuestoCat > 0 ? _textoMonto(presupuestoCat) : '∞'}'),
-                              ],
+                              ),
                             ),
                             if (presupuestoCat > 0) ...[
                               const SizedBox(height: 8),
@@ -8107,12 +8185,24 @@ textInputAction: TextInputAction.done,
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('↳ $sub', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                                            Text('${_textoMonto(gastadoSub)} / ${presupuestoSub > 0 ? _textoMonto(presupuestoSub) : '∞'}', style: const TextStyle(fontSize: 12)),
-                                          ],
+                                        InkWell(
+                                          onTap: () => _editarPresupuestoSubcategoria(categoria, sub),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text('↳ $sub', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                                Row(
+                                                  children: [
+                                                    Text('${_textoMonto(gastadoSub)} / ${presupuestoSub > 0 ? _textoMonto(presupuestoSub) : '∞'}', style: const TextStyle(fontSize: 12)),
+                                                    const SizedBox(width: 4),
+                                                    const Icon(Icons.edit, size: 12, color: Colors.grey),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                         if (presupuestoSub > 0) ...[
                                           const SizedBox(height: 4),
@@ -8319,6 +8409,26 @@ textInputAction: TextInputAction.done,
       inicial: inicial,
     );
     widget.settingsController.setCategoryBudget(categoria, value);
+  }
+
+  Future<void> _agregarSubcategoria(String categoria) async {
+    final value = await _pedirTexto(
+      titulo: 'Subcategoría para $categoria',
+      etiqueta: 'Nombre de la subcategoría',
+    );
+    if (value == null || value.trim().isEmpty) return;
+    widget.settingsController.addSubcategory(categoria, value.trim());
+  }
+
+  Future<void> _editarPresupuestoSubcategoria(String categoria, String subcategoria) async {
+    final key = '${categoria}_$subcategoria';
+    final inicial = widget.settingsController.settings.subcategoryBudgets[key];
+    final value = await _pedirEntero(
+      titulo: 'Presupuesto de $subcategoria',
+      etiqueta: 'Monto (vacío para quitar)',
+      inicial: inicial,
+    );
+    widget.settingsController.setSubcategoryBudget(categoria, subcategoria, value);
   }
 
   Future<void> _cambiarBloqueo(bool activo) async {

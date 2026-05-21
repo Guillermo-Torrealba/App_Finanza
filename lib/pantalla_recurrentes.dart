@@ -188,7 +188,7 @@ class _GestionarRecurrentesScreenState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _FormularioRecurrente(
+      builder: (ctx) => FormularioRecurrente(
         settingsController: widget.settingsController,
         itemParaEditar: item,
       ),
@@ -196,20 +196,22 @@ class _GestionarRecurrentesScreenState
   }
 }
 
-class _FormularioRecurrente extends StatefulWidget {
+class FormularioRecurrente extends StatefulWidget {
   final SettingsController settingsController;
   final Map<String, dynamic>? itemParaEditar;
+  final String? initialType;
 
-  const _FormularioRecurrente({
+  const FormularioRecurrente({
     required this.settingsController,
     this.itemParaEditar,
+    this.initialType,
   });
 
   @override
-  State<_FormularioRecurrente> createState() => _FormularioRecurrenteState();
+  State<FormularioRecurrente> createState() => FormularioRecurrenteState();
 }
 
-class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
+class FormularioRecurrenteState extends State<FormularioRecurrente> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _itemController;
   late TextEditingController _montoController;
@@ -218,6 +220,7 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
   late DateTime _fechaProximo;
   late String _categoria;
   late String _cuenta;
+  String? _subcategoria;
 
   final List<String> _frecuencias = ['Mensual', 'Semanal', 'Anual', 'Unico'];
 
@@ -231,11 +234,15 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
     _montoController = TextEditingController(
       text: item?['monto']?.toString() ?? '',
     );
-    _tipo = item?['tipo'] ?? 'Gasto';
+    _tipo = item?['tipo'] ?? widget.initialType ?? 'Gasto';
     _frecuencia = item?['frecuencia'] ?? 'Mensual';
     _fechaProximo = item != null
         ? DateTime.parse(item['fecha_proximo_pago'])
         : DateTime.now();
+
+    if (item != null && item['etiquetas'] != null && item['etiquetas'] is List && (item['etiquetas'] as List).isNotEmpty) {
+      _subcategoria = (item['etiquetas'] as List).first.toString();
+    }
 
     // Categorias y Cuentas defaults
     final settings = widget.settingsController.settings;
@@ -432,8 +439,46 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
                 items: categorias
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
-                onChanged: (val) => setState(() => _categoria = val!),
+                onChanged: (val) {
+                  setState(() {
+                    _categoria = val!;
+                    // Reset subcategory on category change
+                    _subcategoria = null;
+                  });
+                },
               ),
+              if ((settings.activeSubcategories[_categoria] ?? []).isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Subcategoría',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: settings.activeSubcategories[_categoria]!.map((sub) {
+                    final isSelected = _subcategoria == sub;
+                    return ChoiceChip(
+                      label: Text(sub),
+                      selected: isSelected,
+                      selectedColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                      labelStyle: TextStyle(
+                        color: isSelected 
+                            ? Colors.white 
+                            : (isDark ? Colors.grey.shade300 : Colors.black87),
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          _subcategoria = selected ? sub : null;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: 12),
 
               DropdownButtonFormField<String>(
@@ -480,6 +525,10 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
       'fecha_proximo_pago': _fechaProximo.toIso8601String(),
       'activo': true,
     };
+    
+    if (_subcategoria != null) {
+      data['etiquetas'] = [_subcategoria!];
+    }
 
     try {
       if (widget.itemParaEditar != null) {
