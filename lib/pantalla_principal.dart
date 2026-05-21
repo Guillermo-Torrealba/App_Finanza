@@ -7944,7 +7944,7 @@ textInputAction: TextInputAction.done,
             final excedidoLibre = gastoTotalVariable > libreParaVariable && libreParaVariable > 0;
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -11308,7 +11308,9 @@ textInputAction: TextInputAction.done,
                             ),
                           ),
                         ),
+                        ),
                       ),
+                      const SizedBox(height: 30), // Espacio extra para barra inferior o scroll
                     ],
                   ),
                 ),
