@@ -7953,7 +7953,14 @@ textInputAction: TextInputAction.done,
             // ZBB Logic
             int totalPresupuestosVariablesAsignados = 0;
             for (final cat in settings.activeCategories) {
-              totalPresupuestosVariablesAsignados += settings.categoryBudgets[cat] ?? 0;
+              int catBudget = settings.categoryBudgets[cat] ?? 0;
+              if (catBudget == 0) {
+                 final subcats = settings.activeSubcategories[cat] ?? [];
+                 for (final sub in subcats) {
+                    catBudget += (settings.subcategoryBudgets['${cat}_$sub'] as num?)?.toInt() ?? 0;
+                 }
+              }
+              totalPresupuestosVariablesAsignados += catBudget;
             }
 
             final totalComprometidoFijo = gastoFijo + ahorro + cuota;
@@ -8100,7 +8107,15 @@ textInputAction: TextInputAction.done,
                   
                   // Listado de Categorias Variables y Subcategorias
                   ...settings.activeCategories.map((categoria) {
-                    final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+                    int presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+                    final subs = settings.activeSubcategories[categoria] ?? [];
+                    
+                    // Si la categoría principal no tiene presupuesto, sumamos el de sus subcategorías
+                    if (presupuestoCat == 0) {
+                        for (final sub in subs) {
+                            presupuestoCat += (settings.subcategoryBudgets['${categoria}_$sub'] as num?)?.toInt() ?? 0;
+                        }
+                    }
                     
                     final gastosCat = datosDelMes.where((m) => m['tipo'] == 'Gasto' && m['categoria'] == categoria).toList();
                     final gastadoCat = gastosCat.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
@@ -8196,7 +8211,7 @@ textInputAction: TextInputAction.done,
                                   final gastosSub = gastosCat.where((m) => m['etiquetas'] != null && (m['etiquetas'] as List).contains(sub)).toList();
                                   final gastadoSub = gastosSub.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
                                   
-                                  if (presupuestoSub == 0 && gastadoSub == 0) return const SizedBox();
+                                  // Siempre mostramos la subcategoría para que se pueda tocar y agregarle presupuesto
                                   
                                   final disponibleSub = presupuestoSub - gastadoSub;
                                   final pctSub = presupuestoSub > 0 ? (gastadoSub / presupuestoSub).clamp(0.0, 1.0) : 0.0;
