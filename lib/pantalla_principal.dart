@@ -11308,7 +11308,6 @@ textInputAction: TextInputAction.done,
                             ),
                           ),
                         ),
-                        ),
                       ),
                       const SizedBox(height: 30), // Espacio extra para barra inferior o scroll
                     ],
