@@ -5746,34 +5746,34 @@ textInputAction: TextInputAction.done,
         'metodo_pago': 'Credito',
       });
 
-      final diferenciaFacturado = nuevoFacturado - facturadoRealSinAjustes;
-      final diferenciaPorFacturar = nuevoPorFacturar - porFacturarRealSinAjustes;
+      final ajusteFacturado = (pagosAcumuladosReal + nuevoFacturado) - gastosFacturadosReal;
+      final ajustePorFacturar = nuevoPorFacturar - gastosPorFacturarReal;
 
-      if (diferenciaFacturado != 0) {
+      if (ajusteFacturado != 0) {
         final fechaAjusteFacturado = curStart.subtract(const Duration(days: 1));
         final fechaStr = fechaAjusteFacturado.toIso8601String().split('T').first;
         await supabase.from('gastos').insert({
           'user_id': user.id,
           'fecha': fechaStr,
           'item': 'Ajuste Facturado TC',
-          'monto': diferenciaFacturado.abs(),
+          'monto': ajusteFacturado.abs(),
           'categoria': 'Ajuste',
           'cuenta': cuenta,
-          'tipo': diferenciaFacturado > 0 ? 'Gasto' : 'Ingreso',
+          'tipo': ajusteFacturado > 0 ? 'Gasto' : 'Ingreso',
           'metodo_pago': 'Credito',
         });
       }
 
-      if (diferenciaPorFacturar != 0) {
+      if (ajustePorFacturar != 0) {
         final fechaStr = DateTime.now().toIso8601String().split('T').first;
         await supabase.from('gastos').insert({
           'user_id': user.id,
           'fecha': fechaStr,
           'item': 'Ajuste Por Facturar TC',
-          'monto': diferenciaPorFacturar.abs(),
+          'monto': ajustePorFacturar.abs(),
           'categoria': 'Ajuste',
           'cuenta': cuenta,
-          'tipo': diferenciaPorFacturar > 0 ? 'Gasto' : 'Ingreso',
+          'tipo': ajustePorFacturar > 0 ? 'Gasto' : 'Ingreso',
           'metodo_pago': 'Credito',
         });
       }
@@ -10768,16 +10768,22 @@ textInputAction: TextInputAction.done,
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            return GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
                 ),
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.9,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -11110,6 +11116,7 @@ textInputAction: TextInputAction.done,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(12),
                               onTap: () async {
+                                FocusScope.of(context).unfocus();
                                 final picked = await showDatePicker(
                                   context: context,
                                   initialDate: fechaSeleccionada,
