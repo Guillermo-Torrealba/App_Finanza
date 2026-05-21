@@ -7950,10 +7950,15 @@ textInputAction: TextInputAction.done,
               }
             }
             
-            final totalComprometido = gastoFijo + ahorro + cuota;
-            final libreParaVariable = ingresoFijo > 0 
-                ? (ingresoFijo - totalComprometido) 
-                : (settings.globalMonthlyBudget ?? 0);
+            // ZBB Logic
+            int totalPresupuestosVariablesAsignados = 0;
+            for (final cat in settings.activeCategories) {
+              totalPresupuestosVariablesAsignados += settings.categoryBudgets[cat] ?? 0;
+            }
+
+            final totalComprometidoFijo = gastoFijo + ahorro + cuota;
+            final totalAsignado = totalComprometidoFijo + totalPresupuestosVariablesAsignados;
+            final porAsignar = ingresoFijo - totalAsignado;
 
             final datosDelMes = todosLosDatos.where((mov) {
               final fechaMov = DateTime.parse((mov['fecha'] ?? '').toString());
@@ -7961,29 +7966,18 @@ textInputAction: TextInputAction.done,
                   fechaMov.month == _mesVisualizado.month;
             }).toList();
 
-            int gastoTotalVariable = 0;
-            for (final m in datosDelMes) {
-               if (m['tipo'] == 'Gasto' && m['categoria'] != 'Ajuste' && m['categoria'] != 'Transferencia') {
-                   // Exclude if it's already counted as Fixed Expense (we assume recurrents are handled, but here we just show what was actually spent)
-                   gastoTotalVariable += (m['monto'] as num).toInt();
-               }
-            }
-
-            final progresoLibre = libreParaVariable > 0 ? (gastoTotalVariable / libreParaVariable).clamp(0.0, 1.0) : 0.0;
-            final excedidoLibre = gastoTotalVariable > libreParaVariable && libreParaVariable > 0;
-
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Planificador Mensual',
+                    'Presupuesto Base Cero',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
                   
-                  // Resumen Embudo
+                  // Dashboard ZBB
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -7999,29 +7993,62 @@ textInputAction: TextInputAction.done,
                     ),
                     child: Column(
                       children: [
-                        _filaResumenEmbudo('Ingresos Fijos', ingresoFijo, Colors.green, isDark),
+                        _filaZbb(
+                          'Ingresos Mensuales', 
+                          ingresoFijo, 
+                          Colors.green, 
+                          isDark, 
+                          icono: Icons.arrow_downward,
+                        ),
                         const Divider(height: 24),
-                        _filaResumenEmbudo('Gastos Fijos', -gastoFijo, Colors.red, isDark),
-                        _filaResumenEmbudo('Metas de Ahorro', -ahorro, Colors.blue, isDark),
-                        _filaResumenEmbudo('Cuotas Programadas', -cuota, Colors.orange, isDark),
+                        _filaZbb('Gastos Fijos', -gastoFijo, Colors.red, isDark),
+                        _filaZbb('Metas de Ahorro', -ahorro, Colors.blue, isDark),
+                        _filaZbb('Cuotas', -cuota, Colors.orange, isDark),
+                        _filaZbb('Presupuestos Variables', -totalPresupuestosVariablesAsignados, Colors.purple, isDark),
                         const Divider(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text(
-                              'Libre para gastar:',
+                              'Por Asignar:',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
-                            Text(
-                              _textoMonto(libreParaVariable, ocultable: false),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: libreParaVariable >= 0 ? Colors.teal : Colors.red,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: porAsignar == 0 
+                                    ? Colors.green.withOpacity(0.2) 
+                                    : (porAsignar > 0 ? Colors.amber.withOpacity(0.2) : Colors.red.withOpacity(0.2)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _textoMonto(porAsignar, ocultable: false),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: porAsignar == 0 
+                                      ? Colors.green 
+                                      : (porAsignar > 0 ? Colors.amber.shade700 : Colors.red),
+                                ),
                               ),
                             ),
                           ],
                         ),
+                        if (porAsignar == 0)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Text('✅ ¡Presupuesto perfecto! Cada peso tiene su lugar.', style: TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.w500)),
+                          )
+                        else if (porAsignar > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Text('⚠️ Tienes ${_textoMonto(porAsignar)} sin asignar. Asígnalos a un presupuesto o ahorro.', style: TextStyle(color: Colors.amber.shade700, fontSize: 13, fontWeight: FontWeight.w500)),
+                          )
+                        else
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Text('❌ Estás sobrepasando tus ingresos.', style: TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500)),
+                          ),
                       ],
                     ),
                   ),
@@ -8063,51 +8090,11 @@ textInputAction: TextInputAction.done,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   
                   const Text(
-                    'Consumo del Libre (Gastos Variables)',
+                    'Presupuestos de Categorías',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Progreso Global del Variable
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Gastado: ${_textoMonto(gastoTotalVariable)}'),
-                          Text(libreParaVariable > 0 ? '${(progresoLibre * 100).toStringAsFixed(1)}%' : 'Sin limite'),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: excedidoLibre ? 1.0 : progresoLibre,
-                          minHeight: 12,
-                          backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                          color: excedidoLibre ? Colors.red : Colors.teal,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                       const Text(
-                        'Presupuestos Variables',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: _editarPresupuestoGlobal, // We reuse the edit button logic if needed, or remove it. Let's keep it simply calling a modal or removing it.
-                      )
-                    ],
                   ),
                   const SizedBox(height: 12),
                   
@@ -8115,7 +8102,6 @@ textInputAction: TextInputAction.done,
                   ...settings.activeCategories.map((categoria) {
                     final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
                     
-                    // Solo mostramos si tiene presupuesto asignado o si hay gastos
                     final gastosCat = datosDelMes.where((m) => m['tipo'] == 'Gasto' && m['categoria'] == categoria).toList();
                     final gastadoCat = gastosCat.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
                     
@@ -8123,7 +8109,17 @@ textInputAction: TextInputAction.done,
                     
                     if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) return const SizedBox();
                     
+                    final disponibleCat = presupuestoCat - gastadoCat;
                     final pct = presupuestoCat > 0 ? (gastadoCat / presupuestoCat).clamp(0.0, 1.0) : 0.0;
+                    
+                    // Lógica de colores semánticos (si pct > 0.9 rojo, si pct > 0.7 naranja)
+                    Color colorBarra = Colors.teal;
+                    if (pct >= 1.0) {
+                      colorBarra = Colors.red;
+                    } else if (pct >= 0.85) {
+                      colorBarra = Colors.orange;
+                    }
+                    
                     final iconCat = settings.categoryEmojis[categoria] ?? '📌';
                     
                     return Card(
@@ -8151,7 +8147,15 @@ textInputAction: TextInputAction.done,
                                     ),
                                     Row(
                                       children: [
-                                        Text('${_textoMonto(gastadoCat)} / ${presupuestoCat > 0 ? _textoMonto(presupuestoCat) : '∞'}'),
+                                        Text(
+                                          presupuestoCat > 0 
+                                              ? (disponibleCat >= 0 ? 'Quedan ${_textoMonto(disponibleCat)}' : 'Excedido por ${_textoMonto(disponibleCat.abs())}') 
+                                              : 'Sin límite',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: presupuestoCat > 0 ? (disponibleCat >= 0 ? (disponibleCat == 0 ? Colors.grey : Colors.teal) : Colors.red) : Colors.grey,
+                                          ),
+                                        ),
                                         const SizedBox(width: 4),
                                         const Icon(Icons.edit, size: 14, color: Colors.grey),
                                       ],
@@ -8161,17 +8165,32 @@ textInputAction: TextInputAction.done,
                               ),
                             ),
                             if (presupuestoCat > 0) ...[
-                              const SizedBox(height: 8),
-                              LinearProgressIndicator(
-                                value: pct,
-                                backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                                color: pct >= 1 ? Colors.red : Colors.teal,
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value: pct,
+                                  minHeight: 10,
+                                  backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                  color: colorBarra,
+                                ),
                               ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Gastado: ${_textoMonto(gastadoCat)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
+                                  Text('Total: ${_textoMonto(presupuestoCat)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
+                                ],
+                              ),
+                            ] else if (gastadoCat > 0) ...[
+                              const SizedBox(height: 4),
+                              Text('Gastado: ${_textoMonto(gastadoCat)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                             ],
                             
                             // Subcategorias
                             if (subs.isNotEmpty) ...[
-                               const SizedBox(height: 12),
+                               const SizedBox(height: 16),
                                ...subs.map((sub) {
                                   final presupuestoSub = settings.subcategoryBudgets['${categoria}_$sub'] ?? 0;
                                   final gastosSub = gastosCat.where((m) => m['etiquetas'] != null && (m['etiquetas'] as List).contains(sub)).toList();
@@ -8179,10 +8198,15 @@ textInputAction: TextInputAction.done,
                                   
                                   if (presupuestoSub == 0 && gastadoSub == 0) return const SizedBox();
                                   
+                                  final disponibleSub = presupuestoSub - gastadoSub;
                                   final pctSub = presupuestoSub > 0 ? (gastadoSub / presupuestoSub).clamp(0.0, 1.0) : 0.0;
                                   
+                                  Color colorBarraSub = Colors.blue;
+                                  if (pctSub >= 1.0) colorBarraSub = Colors.red;
+                                  else if (pctSub >= 0.85) colorBarraSub = Colors.orange;
+                                  
                                   return Padding(
-                                    padding: const EdgeInsets.only(left: 16, top: 8),
+                                    padding: const EdgeInsets.only(left: 16, top: 4, bottom: 12),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
@@ -8193,10 +8217,13 @@ textInputAction: TextInputAction.done,
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Text('↳ $sub', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                                Text('↳ $sub', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 14)),
                                                 Row(
                                                   children: [
-                                                    Text('${_textoMonto(gastadoSub)} / ${presupuestoSub > 0 ? _textoMonto(presupuestoSub) : '∞'}', style: const TextStyle(fontSize: 12)),
+                                                    Text(
+                                                      presupuestoSub > 0 ? (disponibleSub >= 0 ? '${_textoMonto(disponibleSub)} disp.' : 'Exc.') : '${_textoMonto(gastadoSub)} gastado', 
+                                                      style: TextStyle(fontSize: 12, color: presupuestoSub > 0 ? (disponibleSub >= 0 ? Colors.blue : Colors.red) : Colors.grey.shade600)
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     const Icon(Icons.edit, size: 12, color: Colors.grey),
                                                   ],
@@ -8206,12 +8233,15 @@ textInputAction: TextInputAction.done,
                                           ),
                                         ),
                                         if (presupuestoSub > 0) ...[
-                                          const SizedBox(height: 4),
-                                          LinearProgressIndicator(
-                                            value: pctSub,
-                                            minHeight: 4,
-                                            backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                                            color: pctSub >= 1 ? Colors.red : Colors.blue,
+                                          const SizedBox(height: 6),
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(
+                                              value: pctSub,
+                                              minHeight: 6,
+                                              backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                              color: colorBarraSub,
+                                            ),
                                           ),
                                         ]
                                       ],
@@ -8233,13 +8263,21 @@ textInputAction: TextInputAction.done,
     );
   }
 
-  Widget _filaResumenEmbudo(String titulo, int monto, Color color, bool isDark) {
+  Widget _filaZbb(String titulo, int monto, Color color, bool isDark, {IconData? icono}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700)),
+          Row(
+            children: [
+              if (icono != null) ...[
+                Icon(icono, size: 16, color: color),
+                const SizedBox(width: 6),
+              ],
+              Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700)),
+            ],
+          ),
           Text(
             _textoMonto(monto, ocultable: false),
             style: TextStyle(fontWeight: FontWeight.bold, color: color),
