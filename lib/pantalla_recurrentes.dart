@@ -308,43 +308,58 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
               const SizedBox(height: 20),
 
               // Tipo
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'Gasto',
-                      label: Text('Gasto'),
-                      icon: Icon(Icons.arrow_downward),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['Gasto', 'Cuota', 'Ahorro', 'Ingreso'].map((tipoStr) {
+                  final isSelected = _tipo == tipoStr;
+                  IconData iconData;
+                  Color activeColor;
+                  switch (tipoStr) {
+                    case 'Ingreso':
+                      iconData = Icons.arrow_upward;
+                      activeColor = Colors.green;
+                      break;
+                    case 'Ahorro':
+                      iconData = Icons.savings;
+                      activeColor = Colors.blue;
+                      break;
+                    case 'Cuota':
+                      iconData = Icons.credit_card;
+                      activeColor = Colors.orange;
+                      break;
+                    default:
+                      iconData = Icons.arrow_downward;
+                      activeColor = Colors.red;
+                  }
+                  
+                  return ChoiceChip(
+                    label: Text(tipoStr),
+                    avatar: Icon(
+                      iconData,
+                      size: 18,
+                      color: isSelected ? Colors.white : activeColor,
                     ),
-                    ButtonSegment(
-                      value: 'Cuota',
-                      label: Text('Cuota'),
-                      icon: Icon(Icons.credit_card),
+                    selected: isSelected,
+                    selectedColor: activeColor,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black87,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
-                    ButtonSegment(
-                      value: 'Ahorro',
-                      label: Text('Ahorro'),
-                      icon: Icon(Icons.savings),
-                    ),
-                    ButtonSegment(
-                      value: 'Ingreso',
-                      label: Text('Ingreso'),
-                      icon: Icon(Icons.arrow_upward),
-                    ),
-                  ],
-                  selected: {_tipo},
-                  onSelectionChanged: (Set<String> newSelection) {
-                    setState(() {
-                      _tipo = newSelection.first;
-                      // Reset category on type change
-                      final newCats = _tipo == 'Ingreso'
-                          ? settings.activeIncomeCategories
-                          : settings.activeCategories;
-                      _categoria = newCats.isNotEmpty ? newCats.first : 'Varios';
-                    });
-                  },
-                ),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _tipo = tipoStr;
+                          // Reset category on type change
+                          final newCats = _tipo == 'Ingreso'
+                              ? settings.activeIncomeCategories
+                              : settings.activeCategories;
+                          _categoria = newCats.isNotEmpty ? newCats.first : 'Varios';
+                        });
+                      }
+                    },
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 16),
 
