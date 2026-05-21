@@ -8120,8 +8120,6 @@ textInputAction: TextInputAction.done,
                     final gastosCat = datosDelMes.where((m) => m['tipo'] == 'Gasto' && m['categoria'] == categoria).toList();
                     final gastadoCat = gastosCat.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
                     
-                    final subs = settings.activeSubcategories[categoria] ?? [];
-                    
                     if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) return const SizedBox();
                     
                     final disponibleCat = presupuestoCat - gastadoCat;
