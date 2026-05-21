@@ -2114,7 +2114,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           try {
             widget.settingsController.preferences.setString('gastos_cache', jsonEncode(datos));
           } catch (_) {}
-          return datos;
+          // Normalizar tipos antiguos para no romper balances y gráficos
+          return datos.map((d) {
+             if (d['tipo'] == 'Cuota' || d['tipo'] == 'Ahorro') {
+                 final newMap = Map<String, dynamic>.from(d);
+                 newMap['tipo_original'] = d['tipo'];
+                 newMap['tipo'] = 'Gasto';
+                 return newMap;
+             }
+             return d;
+          }).toList();
         }),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -13363,7 +13372,7 @@ textInputAction: TextInputAction.done,
             'monto': p['monto'],
             'categoria': p['categoria'],
             'cuenta': p['cuenta'],
-            'tipo': p['tipo'],
+            'tipo': (p['tipo'] == 'Cuota' || p['tipo'] == 'Ahorro') ? 'Gasto' : p['tipo'],
           });
 
           // 2. Calcular nueva fecha
