@@ -64,18 +64,32 @@ class _GestionarRecurrentesScreenState
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  leading: CircleAvatar(
-                    backgroundColor: item['tipo'] == 'Ingreso'
-                        ? Colors.green.shade50
-                        : Colors.red.shade50,
-                    child: Icon(
-                      item['tipo'] == 'Ingreso'
-                          ? Icons.arrow_upward
-                          : Icons.arrow_downward,
-                      color: item['tipo'] == 'Ingreso'
-                          ? Colors.green
-                          : Colors.red,
-                    ),
+                  leading: Builder(
+                    builder: (context) {
+                      final tipo = item['tipo'] as String?;
+                      Color bgColor = Colors.red.shade50;
+                      Color fgColor = Colors.red;
+                      IconData iconData = Icons.arrow_downward;
+                      
+                      if (tipo == 'Ingreso') {
+                        bgColor = Colors.green.shade50;
+                        fgColor = Colors.green;
+                        iconData = Icons.arrow_upward;
+                      } else if (tipo == 'Ahorro') {
+                        bgColor = Colors.blue.shade50;
+                        fgColor = Colors.blue;
+                        iconData = Icons.savings;
+                      } else if (tipo == 'Cuota') {
+                        bgColor = Colors.orange.shade50;
+                        fgColor = Colors.orange;
+                        iconData = Icons.credit_card;
+                      }
+                      
+                      return CircleAvatar(
+                        backgroundColor: bgColor,
+                        child: Icon(iconData, color: fgColor),
+                      );
+                    },
                   ),
                   title: Text(
                     item['item'] ?? 'Sin nombre',
@@ -294,30 +308,43 @@ class _FormularioRecurrenteState extends State<_FormularioRecurrente> {
               const SizedBox(height: 20),
 
               // Tipo
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'Gasto',
-                    label: Text('Gasto'),
-                    icon: Icon(Icons.arrow_downward),
-                  ),
-                  ButtonSegment(
-                    value: 'Ingreso',
-                    label: Text('Ingreso'),
-                    icon: Icon(Icons.arrow_upward),
-                  ),
-                ],
-                selected: {_tipo},
-                onSelectionChanged: (Set<String> newSelection) {
-                  setState(() {
-                    _tipo = newSelection.first;
-                    // Reset category on type change
-                    final newCats = _tipo == 'Gasto'
-                        ? settings.activeCategories
-                        : settings.activeIncomeCategories;
-                    _categoria = newCats.isNotEmpty ? newCats.first : 'Varios';
-                  });
-                },
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'Gasto',
+                      label: Text('Gasto'),
+                      icon: Icon(Icons.arrow_downward),
+                    ),
+                    ButtonSegment(
+                      value: 'Cuota',
+                      label: Text('Cuota'),
+                      icon: Icon(Icons.credit_card),
+                    ),
+                    ButtonSegment(
+                      value: 'Ahorro',
+                      label: Text('Ahorro'),
+                      icon: Icon(Icons.savings),
+                    ),
+                    ButtonSegment(
+                      value: 'Ingreso',
+                      label: Text('Ingreso'),
+                      icon: Icon(Icons.arrow_upward),
+                    ),
+                  ],
+                  selected: {_tipo},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _tipo = newSelection.first;
+                      // Reset category on type change
+                      final newCats = _tipo == 'Ingreso'
+                          ? settings.activeIncomeCategories
+                          : settings.activeCategories;
+                      _categoria = newCats.isNotEmpty ? newCats.first : 'Varios';
+                    });
+                  },
+                ),
               ),
               const SizedBox(height: 16),
 

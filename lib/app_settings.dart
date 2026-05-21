@@ -26,6 +26,8 @@ class AppSettings {
     required this.archivedCategories,
     required this.activeIncomeCategories,
     required this.archivedIncomeCategories,
+    required this.activeSubcategories,
+    required this.subcategoryBudgets,
     required this.globalMonthlyBudget,
     required this.categoryBudgets,
     required this.categoryEmojis,
@@ -63,6 +65,8 @@ class AppSettings {
   final List<String> archivedCategories;
   final List<String> activeIncomeCategories;
   final List<String> archivedIncomeCategories;
+  final Map<String, List<String>> activeSubcategories;
+  final Map<String, int> subcategoryBudgets;
   final int? globalMonthlyBudget;
   final Map<String, int> categoryBudgets;
   final Map<String, String> categoryEmojis;
@@ -127,6 +131,8 @@ class AppSettings {
         'Otros Ingresos',
       ],
       archivedIncomeCategories: [],
+      activeSubcategories: {},
+      subcategoryBudgets: {},
       globalMonthlyBudget: null,
       categoryBudgets: {},
       categoryEmojis: {},
@@ -166,6 +172,8 @@ class AppSettings {
     List<String>? archivedCategories,
     List<String>? activeIncomeCategories,
     List<String>? archivedIncomeCategories,
+    Map<String, List<String>>? activeSubcategories,
+    Map<String, int>? subcategoryBudgets,
     Object? globalMonthlyBudget = _unset,
     Map<String, int>? categoryBudgets,
     Map<String, String>? categoryEmojis,
@@ -205,6 +213,8 @@ class AppSettings {
           activeIncomeCategories ?? this.activeIncomeCategories,
       archivedIncomeCategories:
           archivedIncomeCategories ?? this.archivedIncomeCategories,
+      activeSubcategories: activeSubcategories ?? this.activeSubcategories,
+      subcategoryBudgets: subcategoryBudgets ?? this.subcategoryBudgets,
       globalMonthlyBudget: identical(globalMonthlyBudget, _unset)
           ? this.globalMonthlyBudget
           : globalMonthlyBudget as int?,
@@ -255,6 +265,8 @@ class AppSettings {
       'archivedCategories': archivedCategories,
       'activeIncomeCategories': activeIncomeCategories,
       'archivedIncomeCategories': archivedIncomeCategories,
+      'activeSubcategories': activeSubcategories,
+      'subcategoryBudgets': subcategoryBudgets,
       'globalMonthlyBudget': globalMonthlyBudget,
       'categoryBudgets': categoryBudgets,
       'categoryEmojis': categoryEmojis,
@@ -308,6 +320,8 @@ class AppSettings {
       archivedIncomeCategories:
           _asStringList(json['archivedIncomeCategories']) ??
           defaults.archivedIncomeCategories,
+      activeSubcategories: _asStringListMap(json['activeSubcategories']),
+      subcategoryBudgets: _asIntMap(json['subcategoryBudgets']),
       globalMonthlyBudget: (json['globalMonthlyBudget'] as num?)?.toInt(),
       categoryBudgets: _asIntMap(json['categoryBudgets']),
       categoryEmojis: _asStringMap(json['categoryEmojis']),
@@ -364,6 +378,21 @@ class AppSettings {
       return null;
     }
     return value.map((e) => e.toString()).toList();
+  }
+
+  static Map<String, List<String>> _asStringListMap(dynamic value) {
+    if (value is! Map) {
+      return {};
+    }
+    final map = <String, List<String>>{};
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      final list = _asStringList(entry.value);
+      if (list != null) {
+        map[key] = list;
+      }
+    }
+    return map;
   }
 
   static Map<String, int> _asIntMap(dynamic value) {
@@ -726,6 +755,51 @@ class SettingsController extends ChangeNotifier {
       emojis[category] = emoji;
     }
     _apply(_settings.copyWith(categoryEmojis: emojis));
+  }
+
+  void addSubcategory(String category, String subcategory) {
+    final subcategoryTrimmed = subcategory.trim();
+    if (subcategoryTrimmed.isEmpty) return;
+    
+    final currentSubcategories = Map<String, List<String>>.from(_settings.activeSubcategories);
+    final list = List<String>.from(currentSubcategories[category] ?? []);
+    if (!list.any((x) => x.toLowerCase() == subcategoryTrimmed.toLowerCase())) {
+      list.add(subcategoryTrimmed);
+      currentSubcategories[category] = list;
+      _apply(_settings.copyWith(activeSubcategories: currentSubcategories));
+    }
+  }
+
+  void removeSubcategory(String category, String subcategory) {
+    final currentSubcategories = Map<String, List<String>>.from(_settings.activeSubcategories);
+    final list = List<String>.from(currentSubcategories[category] ?? []);
+    if (list.remove(subcategory)) {
+      if (list.isEmpty) {
+        currentSubcategories.remove(category);
+      } else {
+        currentSubcategories[category] = list;
+      }
+      // Also remove budget if exists
+      final budgets = Map<String, int>.from(_settings.subcategoryBudgets);
+      final budgetKey = '${category}_$subcategory';
+      budgets.remove(budgetKey);
+      
+      _apply(_settings.copyWith(
+        activeSubcategories: currentSubcategories,
+        subcategoryBudgets: budgets,
+      ));
+    }
+  }
+
+  void setSubcategoryBudget(String category, String subcategory, int? value) {
+    final budgets = Map<String, int>.from(_settings.subcategoryBudgets);
+    final key = '${category}_$subcategory';
+    if (value == null || value <= 0) {
+      budgets.remove(key);
+    } else {
+      budgets[key] = value;
+    }
+    _apply(_settings.copyWith(subcategoryBudgets: budgets));
   }
 
   void setSavingsTargetPercent(double value) =>

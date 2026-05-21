@@ -7890,520 +7890,271 @@ textInputAction: TextInputAction.done,
   Widget _construirPaginaPresupuestos(
     List<Map<String, dynamic>> todosLosDatos,
   ) {
-    return AnimatedBuilder(
-      animation: widget.settingsController,
-      builder: (context, _) {
-        final settings = widget.settingsController.settings;
-        final globalBudget = settings.globalMonthlyBudget ?? 0;
-        var totalPresupuestoCategorias = 0;
-        for (final cat in settings.activeCategories) {
-          totalPresupuestoCategorias += settings.categoryBudgets[cat] ?? 0;
-        }
-        final presupuestoBase = globalBudget > 0
-            ? globalBudget
-            : totalPresupuestoCategorias;
-        final usaPresupuestoCategorias =
-            globalBudget <= 0 && totalPresupuestoCategorias > 0;
-        final tienePresupuestoDefinido = presupuestoBase > 0;
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: supabase.from('gastos_programados').stream(primaryKey: ['id']).eq('activo', true),
+      builder: (context, snapshotProgramados) {
+        return AnimatedBuilder(
+          animation: widget.settingsController,
+          builder: (context, _) {
+            final settings = widget.settingsController.settings;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final formatCurrency = NumberFormat.simpleCurrency(locale: settings.localeCode);
 
-        // Modo Edicion: Logica de distribucion (Slider/Inputs)
-        if (_editandoPresupuesto) {
-          var totalAsignado = 0;
-          for (final cat in settings.activeCategories) {
-            totalAsignado += settings.categoryBudgets[cat] ?? 0;
-          }
+            int ingresoFijo = 0;
+            int gastoFijo = 0;
+            int ahorro = 0;
+            int cuota = 0;
+            
+            if (snapshotProgramados.hasData) {
+              for (final p in snapshotProgramados.data!) {
+                final monto = (p['monto'] as num).toInt();
+                final tipo = p['tipo'] as String;
+                if (tipo == 'Ingreso') {
+                  ingresoFijo += monto;
+                } else if (tipo == 'Ahorro') {
+                  ahorro += monto;
+                } else if (tipo == 'Cuota') {
+                  cuota += monto;
+                } else {
+                  gastoFijo += monto;
+                }
+              }
+            }
+            
+            final totalComprometido = gastoFijo + ahorro + cuota;
+            final libreParaVariable = ingresoFijo > 0 
+                ? (ingresoFijo - totalComprometido) 
+                : (settings.globalMonthlyBudget ?? 0);
 
-          final restante = globalBudget - totalAsignado;
-          final excedido = restante < 0;
-          final porcentajeAsignado = globalBudget > 0
-              ? (totalAsignado / globalBudget).clamp(0.0, 1.0)
-              : 0.0;
+            final datosDelMes = todosLosDatos.where((mov) {
+              final fechaMov = DateTime.parse((mov['fecha'] ?? '').toString());
+              return fechaMov.year == _mesVisualizado.year &&
+                  fechaMov.month == _mesVisualizado.month;
+            }).toList();
 
-          Color colorBarra = Colors.teal;
-          if (excedido) {
-            colorBarra = Colors.red;
-          } else if (restante > 0) {
-            colorBarra = Colors.blue;
-          }
+            int gastoTotalVariable = 0;
+            for (final m in datosDelMes) {
+               if (m['tipo'] == 'Gasto' && m['categoria'] != 'Ajuste' && m['categoria'] != 'Transferencia') {
+                   // Exclude if it's already counted as Fixed Expense (we assume recurrents are handled, but here we just show what was actually spent)
+                   gastoTotalVariable += (m['monto'] as num).toInt();
+               }
+            }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header Edicion
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Ajustando Presupuesto',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.check_circle,
-                        size: 28,
-                        color: Colors.teal,
-                      ),
-                      onPressed: () =>
-                          setState(() => _editandoPresupuesto = false),
-                      tooltip: 'Guardar y Salir',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+            final progresoLibre = libreParaVariable > 0 ? (gastoTotalVariable / libreParaVariable).clamp(0.0, 1.0) : 0.0;
+            final excedidoLibre = gastoTotalVariable > libreParaVariable && libreParaVariable > 0;
 
-                // UI Distribucion
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E2433) : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(isDark ? 50 : 12),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                    border: isDark
-                        ? Border.all(color: Colors.grey.shade800)
-                        : null,
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total Mensual',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            onPressed: _editarPresupuestoGlobal,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: _editarPresupuestoGlobal,
-                        child: Text(
-                          _textoMonto(globalBudget, ocultable: false),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            height: 1.0,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: excedido ? 1.0 : porcentajeAsignado,
-                          minHeight: 12,
-                          backgroundColor: isDark
-                              ? Colors.grey.shade800
-                              : Colors.grey.shade100,
-                          color: colorBarra,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Asignado: ${_textoMonto(totalAsignado, ocultable: false)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: excedido ? Colors.red : Colors.teal,
-                            ),
-                          ),
-                          Text(
-                            excedido
-                                ? 'Excede: ${_textoMonto(restante.abs(), ocultable: false)}'
-                                : 'Libre: ${_textoMonto(restante, ocultable: false)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: excedido ? Colors.red : Colors.blue,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-                const Text(
-                  'Asignar por Categoría',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                ...settings.activeCategories.map((categoria) {
-                  final asignado = settings.categoryBudgets[categoria] ?? 0;
-                  return Card(
-                    elevation: 0,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: isDark
-                            ? Colors.grey.shade700
-                            : Colors.grey.shade200,
-                      ),
-                    ),
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.grey.shade800
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: _iconoCategoria(categoria, size: 20),
-                      ),
-                      title: Text(
-                        categoria,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.grey.shade800
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _textoMonto(asignado, ocultable: false),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      onTap: () => _editarPresupuestoCategoria(categoria),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          );
-        }
-
-        // Modo Visualizacion: Progreso Real (Gastado vs Presupuesto)
-        // 1. Filtrar datos del mes
-        final datosDelMes = todosLosDatos.where((mov) {
-          final fechaMov = DateTime.parse(mov['fecha']);
-          return fechaMov.year == _mesVisualizado.year &&
-              fechaMov.month == _mesVisualizado.month;
-        }).toList();
-
-        // 2. Calcular gasto total y por categoria
-        var gastoTotalMes = 0;
-        final gastoPorCategoria = <String, int>{};
-
-        for (final mov in datosDelMes) {
-          if (mov['tipo'] != 'Gasto') continue;
-          final categoria = (mov['categoria'] ?? '').toString();
-          if (categoria == 'Transferencia' ||
-              categoria == 'Ajuste' ||
-              categoria == 'Cuentas por Cobrar') {
-            continue;
-          }
-          final monto = (mov['monto'] as num? ?? 0).toInt();
-          gastoTotalMes += monto;
-          final cat = categoria.isEmpty ? 'Varios' : categoria;
-          gastoPorCategoria[cat] = (gastoPorCategoria[cat] ?? 0) + monto;
-        }
-
-        final porcentajeGlobalEjecutado = presupuestoBase > 0
-            ? (gastoTotalMes / presupuestoBase).clamp(0.0, 1.0)
-            : 0.0;
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'Planificador Mensual',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Resumen Embudo
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(isDark ? 50 : 12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        _filaResumenEmbudo('Ingresos Fijos', ingresoFijo, Colors.green, isDark),
+                        const Divider(height: 24),
+                        _filaResumenEmbudo('Gastos Fijos', -gastoFijo, Colors.red, isDark),
+                        _filaResumenEmbudo('Metas de Ahorro', -ahorro, Colors.blue, isDark),
+                        _filaResumenEmbudo('Cuotas Programadas', -cuota, Colors.orange, isDark),
+                        const Divider(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Libre para gastar:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              _textoMonto(libreParaVariable, ocultable: false),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: libreParaVariable >= 0 ? Colors.teal : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  const Text(
+                    'Consumo del Libre (Gastos Variables)',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Progreso Global del Variable
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Presupuesto',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined, size: 24),
-                    onPressed: () =>
-                        setState(() => _editandoPresupuesto = true),
-                    tooltip: 'Ajustar Presupuestos',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Card Resumen Ejecucion Global
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.teal.shade700, Colors.teal.shade500],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.teal.withAlpha(80),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tienePresupuestoDefinido
-                          ? (usaPresupuestoCategorias
-                                ? 'Gasto Total vs Presupuesto por categorias'
-                                : 'Gasto Total vs Presupuesto')
-                          : 'Gasto Total del mes',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _textoMonto(gastoTotalMes, ocultable: false),
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        if (tienePresupuestoDefinido)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4, left: 6),
-                            child: Text(
-                              '/ ${_textoMonto(presupuestoBase, ocultable: false)}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    if (!tienePresupuestoDefinido)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 4),
-                        child: Text(
-                          'Sin presupuesto asignado (global ni por categoria)',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: porcentajeGlobalEjecutado,
-                        minHeight: 8,
-                        backgroundColor: Colors.black12,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        tienePresupuestoDefinido
-                            ? '${(porcentajeGlobalEjecutado * 100).toStringAsFixed(1)}% gastado'
-                            : 'Configura presupuestos para ver avance',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              const Text(
-                'Progreso por Categoría',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              // Lista Progreso Categorias
-              ...settings.activeCategories.map((categoria) {
-                final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
-                if (presupuestoCat == 0) {
-                  return const SizedBox.shrink();
-                }
-
-                final gastado = gastoPorCategoria[categoria] ?? 0;
-                final progress = (gastado / presupuestoCat).clamp(0.0, 1.0);
-                final saldoRestante = presupuestoCat - gastado;
-
-                Color colorStatus = Colors.green;
-                if (progress > 1.0 || saldoRestante < 0) {
-                  colorStatus = Colors.red;
-                } else if (progress > 0.8) {
-                  colorStatus = Colors.orange;
-                }
-
-                final isDark = Theme.of(context).brightness == Brightness.dark;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E2433) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(isDark ? 50 : 8),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                    border: isDark
-                        ? Border.all(color: Colors.grey.shade800)
-                        : null,
-                  ),
-                  child: Column(
-                    children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _iconoCategoria(
-                            categoria,
-                            size: 20,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade700,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              categoria,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            _textoMonto(gastado, ocultable: false),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: saldoRestante < 0
-                                  ? Colors.red
-                                  : (isDark ? Colors.white : Colors.black87),
-                            ),
-                          ),
-                          Text(
-                            ' / ${_textoMonto(presupuestoCat, ocultable: false)}',
-                            style: TextStyle(
-                              color: isDark
-                                  ? Colors.grey.shade500
-                                  : Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
-                          ),
+                          Text('Gastado: ${_textoMonto(gastoTotalVariable)}'),
+                          Text(libreParaVariable > 0 ? '${(progresoLibre * 100).toStringAsFixed(1)}%' : 'Sin limite'),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 6,
-                          backgroundColor: isDark
-                              ? Colors.grey.shade800
-                              : Colors.grey.shade100,
-                          color: colorStatus,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          saldoRestante >= 0
-                              ? 'Quedan ${_textoMonto(saldoRestante, ocultable: false)}'
-                              : 'Excedido por ${_textoMonto(saldoRestante.abs(), ocultable: false)}',
-                          style: TextStyle(
-                            color: saldoRestante >= 0
-                                ? (isDark
-                                      ? Colors.grey.shade400
-                                      : Colors.grey.shade600)
-                                : Colors.red,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          value: excedidoLibre ? 1.0 : progresoLibre,
+                          minHeight: 12,
+                          backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                          color: excedidoLibre ? Colors.red : Colors.teal,
                         ),
                       ),
                     ],
                   ),
-                );
-              }),
-
-              const SizedBox(height: 24),
-              if (settings.activeCategories.any(
-                (c) => (settings.categoryBudgets[c] ?? 0) == 0,
-              ))
-                Center(
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.info_outline, size: 16),
-                    label: const Text(
-                      'Hay categorías sin presupuesto asignado',
-                    ),
-                    onPressed: () =>
-                        setState(() => _editandoPresupuesto = true),
+                  const SizedBox(height: 24),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                       const Text(
+                        'Presupuestos Variables',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: _editarPresupuestoGlobal, // We reuse the edit button logic if needed, or remove it. Let's keep it simply calling a modal or removing it.
+                      )
+                    ],
                   ),
-                ),
-            ],
-          ),
+                  const SizedBox(height: 12),
+                  
+                  // Listado de Categorias Variables y Subcategorias
+                  ...settings.activeCategories.map((categoria) {
+                    final presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+                    
+                    // Solo mostramos si tiene presupuesto asignado o si hay gastos
+                    final gastosCat = datosDelMes.where((m) => m['tipo'] == 'Gasto' && m['categoria'] == categoria).toList();
+                    final gastadoCat = gastosCat.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
+                    
+                    final subs = settings.activeSubcategories[categoria] ?? [];
+                    
+                    if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) return const SizedBox();
+                    
+                    final pct = presupuestoCat > 0 ? (gastadoCat / presupuestoCat).clamp(0.0, 1.0) : 0.0;
+                    final iconCat = settings.categoryEmojis[categoria] ?? '📌';
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(iconCat, style: const TextStyle(fontSize: 20)),
+                                    const SizedBox(width: 8),
+                                    Text(categoria, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  ],
+                                ),
+                                Text('${_textoMonto(gastadoCat)} / ${presupuestoCat > 0 ? _textoMonto(presupuestoCat) : '∞'}'),
+                              ],
+                            ),
+                            if (presupuestoCat > 0) ...[
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: pct,
+                                backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                color: pct >= 1 ? Colors.red : Colors.teal,
+                              ),
+                            ],
+                            
+                            // Subcategorias
+                            if (subs.isNotEmpty) ...[
+                               const SizedBox(height: 12),
+                               ...subs.map((sub) {
+                                  final presupuestoSub = settings.subcategoryBudgets['${categoria}_$sub'] ?? 0;
+                                  final gastosSub = gastosCat.where((m) => m['etiquetas'] != null && (m['etiquetas'] as List).contains(sub)).toList();
+                                  final gastadoSub = gastosSub.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
+                                  
+                                  if (presupuestoSub == 0 && gastadoSub == 0) return const SizedBox();
+                                  
+                                  final pctSub = presupuestoSub > 0 ? (gastadoSub / presupuestoSub).clamp(0.0, 1.0) : 0.0;
+                                  
+                                  return Padding(
+                                    padding: const EdgeInsets.only(left: 16, top: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('↳ $sub', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                            Text('${_textoMonto(gastadoSub)} / ${presupuestoSub > 0 ? _textoMonto(presupuestoSub) : '∞'}', style: const TextStyle(fontSize: 12)),
+                                          ],
+                                        ),
+                                        if (presupuestoSub > 0) ...[
+                                          const SizedBox(height: 4),
+                                          LinearProgressIndicator(
+                                            value: pctSub,
+                                            minHeight: 4,
+                                            backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                            color: pctSub >= 1 ? Colors.red : Colors.blue,
+                                          ),
+                                        ]
+                                      ],
+                                    ),
+                                  );
+                               })
+                            ]
+                          ],
+                        ),
+                      ),
+                    );
+                  })
+                ],
+              ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _filaResumenEmbudo(String titulo, int monto, Color color, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700)),
+          Text(
+            _textoMonto(monto, ocultable: false),
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
+          ),
+        ],
+      ),
     );
   }
 
@@ -11024,8 +10775,55 @@ textInputAction: TextInputAction.done,
                                 }
                               },
                             );
-                          }).toList(),
+                        }).toList(),
                         ),
+                        
+                        // Selector de Subcategoria (si aplica)
+                        if (categoriaSeleccionada != null && (settings.activeSubcategories[categoriaSeleccionada] ?? []).isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Subcategoría',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: settings.activeSubcategories[categoriaSeleccionada]!.map((sub) {
+                              final isSelected = etiquetasSeleccionadas.contains(sub);
+                              return ChoiceChip(
+                                label: Text(sub),
+                                selected: isSelected,
+                                selectedColor: colorTipo.shade400,
+                                backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade100,
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : (Theme.of(context).brightness == Brightness.dark
+                                          ? Colors.grey.shade300
+                                          : Colors.black87),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                                onSelected: (selected) {
+                                  setStateSB(() {
+                                    // Remove any other subcategories of this category first
+                                    final subs = settings.activeSubcategories[categoriaSeleccionada]!;
+                                    etiquetasSeleccionadas.removeWhere((e) => subs.contains(e));
+                                    if (selected) {
+                                      etiquetasSeleccionadas.add(sub);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        
                         const SizedBox(height: 14),
 
                         const Text(
