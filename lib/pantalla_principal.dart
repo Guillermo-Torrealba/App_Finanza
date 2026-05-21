@@ -10395,6 +10395,7 @@ textInputAction: TextInputAction.done,
     String cuentaSeleccionada;
     String? cuentaDestinoSeleccionada;
     String? categoriaSeleccionada;
+    String? subcategoriaSeleccionada;
     bool esCredito = false;
     bool esFantasmaForm = false;
     bool esCompartido = false;
@@ -10403,6 +10404,7 @@ textInputAction: TextInputAction.done,
     final montoControllers = <TextEditingController>[];
     List<String> etiquetasSeleccionadas = [];
     final TextEditingController _etiquetaController = TextEditingController();
+    final FocusNode _etiquetaFocusNode = FocusNode();
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
@@ -10413,6 +10415,9 @@ textInputAction: TextInputAction.done,
       if (itemParaEditar['etiquetas'] != null && itemParaEditar['etiquetas'] is List) {
         etiquetasSeleccionadas = List<String>.from(itemParaEditar['etiquetas']);
       }
+
+      final sub = (itemParaEditar['subcategoria'] ?? '').toString();
+      if (sub.isNotEmpty) subcategoriaSeleccionada = sub;
 
       final cat = (itemParaEditar['categoria'] ?? '').toString();
       if (cat.isNotEmpty && !categoriasDisponibles.contains(cat)) {
@@ -10437,6 +10442,7 @@ textInputAction: TextInputAction.done,
       _montoController.clear();
       fechaSeleccionada = DateTime.now();
       categoriaSeleccionada = categoriasDisponibles.first;
+      subcategoriaSeleccionada = null;
       cuentaSeleccionada = settings.defaultAccount;
       if (esTransferencia && cuentasDisponibles.length > 1) {
         cuentaDestinoSeleccionada = cuentasDisponibles.firstWhere(
@@ -10545,6 +10551,7 @@ textInputAction: TextInputAction.done,
                         'detalle': detalle,
                         'monto': monto,
                         'categoria': categoria,
+                        'subcategoria': subcategoriaSeleccionada,
                         'cuenta': cuentaSeleccionada,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
@@ -10586,6 +10593,7 @@ textInputAction: TextInputAction.done,
                         // Guardamos SOLO el gasto real del usuario (Opción C)
                         'monto': montoReal,
                         'categoria': categoria,
+                        'subcategoria': subcategoriaSeleccionada,
                         'cuenta': cuentaSeleccionada,
                         'tipo': tipo,
                         'metodo_pago': metodo,
@@ -10882,7 +10890,10 @@ textInputAction: TextInputAction.done,
                               ),
                               onSelected: (selected) {
                                 if (selected) {
-                                  setStateSB(() => categoriaSeleccionada = cat);
+                                  setStateSB(() {
+                                    categoriaSeleccionada = cat;
+                                    subcategoriaSeleccionada = null;
+                                  });
                                 }
                               },
                             );
@@ -10890,49 +10901,87 @@ textInputAction: TextInputAction.done,
                         ),
                         
                         // Selector de Subcategoria (si aplica)
-                        if (categoriaSeleccionada != null && (settings.activeSubcategories[categoriaSeleccionada] ?? []).isNotEmpty) ...[
+                        if (categoriaSeleccionada != null) ...[
                           const SizedBox(height: 14),
-                          const Text(
-                            'Subcategoría',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Subcategoría',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final controller = TextEditingController();
+                                  final result = await showDialog<String>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Nueva Subcategoría'),
+                                      content: TextField(
+                                        controller: controller,
+                                        autofocus: true,
+                                        decoration: const InputDecoration(hintText: 'Ej. Bencina, Supermercado...'),
+                                      ),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+                                        FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Añadir')),
+                                      ],
+                                    ),
+                                  );
+                                  if (result != null && result.trim().isNotEmpty) {
+                                    widget.settingsController.addSubcategory(categoriaSeleccionada!, result);
+                                    setStateSB(() => subcategoriaSeleccionada = result.trim());
+                                  }
+                                },
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Añadir'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: settings.activeSubcategories[categoriaSeleccionada]!.map((sub) {
-                              final isSelected = etiquetasSeleccionadas.contains(sub);
-                              return ChoiceChip(
-                                label: Text(sub),
-                                selected: isSelected,
-                                selectedColor: colorTipo.shade400,
-                                backgroundColor: Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade100,
-                                labelStyle: TextStyle(
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (Theme.of(context).brightness == Brightness.dark
-                                          ? Colors.grey.shade300
-                                          : Colors.black87),
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                ),
-                                onSelected: (selected) {
-                                  setStateSB(() {
-                                    // Remove any other subcategories of this category first
-                                    final subs = settings.activeSubcategories[categoriaSeleccionada]!;
-                                    etiquetasSeleccionadas.removeWhere((e) => subs.contains(e));
-                                    if (selected) {
-                                      etiquetasSeleccionadas.add(sub);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
+                          if ((settings.activeSubcategories[categoriaSeleccionada] ?? []).isNotEmpty)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: settings.activeSubcategories[categoriaSeleccionada]!.map((sub) {
+                                final isSelected = subcategoriaSeleccionada == sub;
+                                return ChoiceChip(
+                                  label: Text(sub),
+                                  selected: isSelected,
+                                  selectedColor: colorTipo.shade400,
+                                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade100,
+                                  labelStyle: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (Theme.of(context).brightness == Brightness.dark
+                                            ? Colors.grey.shade300
+                                            : Colors.black87),
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  onSelected: (selected) {
+                                    setStateSB(() {
+                                      if (selected) {
+                                        subcategoriaSeleccionada = sub;
+                                      } else {
+                                        subcategoriaSeleccionada = null;
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            )
+                          else
+                            const Text('No hay subcategorías. ¡Crea una!', style: TextStyle(color: Colors.grey, fontSize: 13)),
                         ],
                         
                         const SizedBox(height: 14),
@@ -10945,48 +10994,89 @@ textInputAction: TextInputAction.done,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ...etiquetasSeleccionadas.map((tag) => Chip(
-                                  label: Text(tag, style: const TextStyle(fontSize: 12)),
-                                  deleteIcon: const Icon(Icons.close, size: 16),
-                                  onDeleted: () {
-                                    setStateSB(() => etiquetasSeleccionadas.remove(tag));
-                                  },
-                                  backgroundColor: colorTipo.withAlpha(isDark ? 30 : 15),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: colorTipo.withAlpha(50))),
-                                )),
-                            Container(
-                              width: 100,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.withAlpha(100)),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: TextField(
-                                controller: _etiquetaController,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: InputBorder.none,
-                                  hintText: '+ Nueva tag',
-                                  hintStyle: TextStyle(fontSize: 12),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withAlpha(15) : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              ...etiquetasSeleccionadas.map((tag) => Chip(
+                                    label: Text(tag, style: const TextStyle(fontSize: 12)),
+                                    deleteIcon: const Icon(Icons.close, size: 14),
+                                    onDeleted: () {
+                                      setStateSB(() => etiquetasSeleccionadas.remove(tag));
+                                    },
+                                    backgroundColor: colorTipo.withAlpha(isDark ? 30 : 15),
+                                    side: BorderSide.none,
+                                    visualDensity: VisualDensity.compact,
+                                  )),
+                              IntrinsicWidth(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(minWidth: 80),
+                                  child: KeyboardListener(
+                                    focusNode: FocusNode(), // Dummy node, events bubble up or we can just use _etiquetaFocusNode? Actually, KeyboardListener requires its own node or it won't work well. Let's just use the built-in trick: Text is never truly empty.
+                                    // Let's use the zero-width space trick for ultimate reliability without focus node bugs.
+                                    // Wait, let's just use KeyboardListener with a shared focus node.
+                                    // Actually, Flutter 3.0+ recommends `Focus` widget for this.
+                                    child: Focus(
+                                      onKeyEvent: (node, event) {
+                                        if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Backspace') {
+                                          if (_etiquetaController.text.isEmpty && etiquetasSeleccionadas.isNotEmpty) {
+                                            setStateSB(() {
+                                              etiquetasSeleccionadas.removeLast();
+                                            });
+                                            return KeyEventResult.handled;
+                                          }
+                                        }
+                                        return KeyEventResult.ignored;
+                                      },
+                                      child: TextField(
+                                        controller: _etiquetaController,
+                                        focusNode: _etiquetaFocusNode,
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          border: InputBorder.none,
+                                          hintText: 'Escribe y presiona espacio...',
+                                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                                        ),
+                                        style: const TextStyle(fontSize: 13),
+                                        textInputAction: TextInputAction.done,
+                                        onChanged: (val) {
+                                          if (val.endsWith(' ') && val.trim().isNotEmpty) {
+                                            final tag = val.trim();
+                                            if (!etiquetasSeleccionadas.contains(tag)) {
+                                              setStateSB(() {
+                                                etiquetasSeleccionadas.add(tag);
+                                              });
+                                            }
+                                            _etiquetaController.clear();
+                                            _etiquetaFocusNode.requestFocus();
+                                          }
+                                        },
+                                        onSubmitted: (val) {
+                                          final tag = val.trim();
+                                          if (tag.isNotEmpty && !etiquetasSeleccionadas.contains(tag)) {
+                                            setStateSB(() {
+                                              etiquetasSeleccionadas.add(tag);
+                                              _etiquetaController.clear();
+                                              _etiquetaFocusNode.requestFocus();
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                style: const TextStyle(fontSize: 12),
-                                onSubmitted: (val) {
-                                  final tag = val.trim();
-                                  if (tag.isNotEmpty && !etiquetasSeleccionadas.contains(tag)) {
-                                    setStateSB(() {
-                                      etiquetasSeleccionadas.add(tag);
-                                      _etiquetaController.clear();
-                                    });
-                                  }
-                                },
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         // Sugerencias de etiquetas
                         if (etiquetasDisponibles.where((t) => !etiquetasSeleccionadas.contains(t)).isNotEmpty) ...[
