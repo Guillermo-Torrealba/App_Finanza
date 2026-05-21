@@ -1533,6 +1533,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 const SizedBox(height: 2),
                 Text(
                   alert.message,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? Colors.grey.shade300 : Colors.black87,
                     fontSize: 13,
@@ -3870,7 +3872,7 @@ textInputAction: TextInputAction.done,
           // Body Collapsible (Carousel)
           AnimatedCrossFade(
             firstChild: Container(
-              height: 140, // Altura fija para el carrusel
+              height: 160, // Altura fija para el carrusel
               margin: const EdgeInsets.only(bottom: 16),
               child: PageView.builder(
                 controller: PageController(viewportFraction: 0.92),
