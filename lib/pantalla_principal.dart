@@ -7943,19 +7943,36 @@ textInputAction: TextInputAction.done,
             int ahorro = 0;
             int cuota = 0;
             
+            List<Map<String, dynamic>> listaGastosFijos = [];
+            List<Map<String, dynamic>> listaCuotas = [];
+            
             if (snapshotProgramados.hasData) {
               for (final p in snapshotProgramados.data!) {
                 final monto = (p['monto'] as num).toInt();
                 final tipo = p['tipo'] as String;
+                final nombre = p['item'] ?? 'Sin nombre';
                 if (tipo == 'Ingreso') {
                   ingresoFijo += monto;
                 } else if (tipo == 'Ahorro') {
                   ahorro += monto;
                 } else if (tipo == 'Cuota') {
                   cuota += monto;
+                  listaCuotas.add({'nombre': nombre, 'monto': monto});
                 } else {
                   gastoFijo += monto;
+                  listaGastosFijos.add({'nombre': nombre, 'monto': monto});
                 }
+              }
+            }
+            
+            // Agregar cuotas de créditos pendientes al presupuesto
+            for (final c in settings.consumptionCredits) {
+              final totalCuotas = c['installments'] as int;
+              final cuotasPagadas = (c['paidInstallments'] as int?) ?? 0;
+              if (cuotasPagadas < totalCuotas) {
+                final montoCuota = c['amount'] as int;
+                cuota += montoCuota;
+                listaCuotas.add({'nombre': c['name'] ?? 'Crédito', 'monto': montoCuota, 'isCredit': true});
               }
             }
             
@@ -7981,6 +7998,55 @@ textInputAction: TextInputAction.done,
               return fechaMov.year == _mesVisualizado.year &&
                   fechaMov.month == _mesVisualizado.month;
             }).toList();
+
+            Widget expandableZbb(String titulo, int monto, Color color, bool isDark, List<Map<String, dynamic>> items, {IconData? icono}) {
+              if (items.isEmpty) {
+                return _filaZbb(titulo, monto, color, isDark, icono: icono);
+              }
+              return Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  iconColor: color,
+                  collapsedIconColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          if (icono != null) ...[
+                            Icon(icono, size: 16, color: color),
+                            const SizedBox(width: 6),
+                          ],
+                          Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 14)),
+                        ],
+                      ),
+                      Text(
+                        _textoMonto(monto, ocultable: false),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  children: items.map((item) {
+                    final isCredit = item['isCredit'] == true;
+                    final nombre = item['nombre'] as String;
+                    final itemMonto = item['monto'] as int;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 16, bottom: 8, right: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text('↳ $nombre ${isCredit ? '(Crédito)' : ''}', style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 13), overflow: TextOverflow.ellipsis),
+                          ),
+                          Text(_textoMonto(monto < 0 ? -itemMonto : itemMonto, ocultable: false), style: TextStyle(color: color.withOpacity(0.8), fontSize: 13)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            }
 
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
@@ -8017,9 +8083,9 @@ textInputAction: TextInputAction.done,
                           icono: Icons.arrow_downward,
                         ),
                         const Divider(height: 24),
-                        _filaZbb('Gastos Fijos', -gastoFijo, Colors.red, isDark),
+                        expandableZbb('Gastos Fijos', -gastoFijo, Colors.red, isDark, listaGastosFijos),
                         _filaZbb('Metas de Ahorro', -ahorro, Colors.blue, isDark),
-                        _filaZbb('Cuotas', -cuota, Colors.orange, isDark),
+                        expandableZbb('Cuotas', -cuota, Colors.orange, isDark, listaCuotas),
                         _filaZbb('Presupuestos Variables', -totalPresupuestosVariablesAsignados, Colors.purple, isDark),
                         const Divider(height: 24),
                         Row(
