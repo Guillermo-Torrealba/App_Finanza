@@ -6375,11 +6375,50 @@ textInputAction: TextInputAction.done,
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(account),
-                      trailing: TextButton(
-                        onPressed: () {
-                          widget.settingsController.restoreAccount(account);
-                        },
-                        child: const Text('Restaurar'),
+                      trailing: Wrap(
+                        spacing: 0,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              widget.settingsController.restoreAccount(account);
+                            },
+                            child: const Text('Restaurar'),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            tooltip: 'Eliminar permanentemente',
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Eliminar cuenta'),
+                                  content: Text('¿Estás seguro de eliminar permanentemente la cuenta "$account"?\n\nEsta acción quitará la cuenta de tu lista, pero no eliminará las transacciones previas asociadas a ella.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('Eliminar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                widget.settingsController.deleteAccount(account);
+                                if (mounted) {
+                                  _mostrarSnack('Cuenta "$account" eliminada');
+                                }
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     );
                   }),

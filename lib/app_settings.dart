@@ -637,6 +637,27 @@ class SettingsController extends ChangeNotifier {
     );
   }
 
+  void deleteAccount(String account) {
+    final active = [..._settings.activeAccounts];
+    final archived = [..._settings.archivedAccounts];
+    
+    active.remove(account);
+    archived.remove(account);
+    
+    var defaultAccount = _settings.defaultAccount;
+    if (defaultAccount == account) {
+      defaultAccount = active.isNotEmpty ? active.first : '';
+    }
+    
+    _apply(
+      _settings.copyWith(
+        activeAccounts: active,
+        archivedAccounts: archived,
+        defaultAccount: defaultAccount,
+      ),
+    );
+  }
+
   void setDefaultAccount(String account) {
     if (!_settings.activeAccounts.contains(account)) {
       return;
