@@ -103,8 +103,35 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
 
   Future<void> _escanearBoleta() async {
+    ImageSource? source;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Seleccionar origen'),
+        content: const Text('¿De dónde quieres obtener la imagen de la boleta?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              source = ImageSource.camera;
+              Navigator.pop(ctx);
+            },
+            child: const Icon(Icons.camera_alt),
+          ),
+          TextButton(
+            onPressed: () {
+              source = ImageSource.photo_library;
+              Navigator.pop(ctx);
+            },
+            child: const Icon(Icons.photo_library),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return;
+
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.camera);
+    final XFile? image = await picker.pickImage(source: source!);
     
     if (image == null) return;
     final file = File(image.path);
@@ -172,7 +199,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         if (!mounted) return;
         Navigator.pop(context); // cerrar loader
         
-        Navigator.push(
+        final result = await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (ctx) => DivisorCuentaScreen(
@@ -181,6 +208,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ),
           ),
         );
+
+        if (result != null && result is Map && result['action'] == 'guardar_compartido') {
+           _mostrarFormulario(
+             tipo: 'Gasto Compartido',
+             valoresIniciales: {
+               'item': 'Cuenta Dividida',
+               'monto': result['total'],
+               'fecha': DateTime.now().toString().substring(0, 10),
+               'categoria': 'Restaurante',
+               'boleta_url': result['boleta_url'],
+               'amigos': result['amigos'],
+             }
+           );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -10724,6 +10765,15 @@ textInputAction: TextInputAction.done,
           categoriaSeleccionada = catStr;
         }
         if (valoresIniciales['boleta_url'] != null) boletaUrl = valoresIniciales['boleta_url'];
+        if (valoresIniciales['amigos'] != null) {
+          esCompartido = true;
+          final List<dynamic> preAmigos = valoresIniciales['amigos'];
+          for (final a in preAmigos) {
+            amigosCompartidos.add({'nombre': a['nombre'], 'monto': a['monto']});
+            nombreControllers.add(TextEditingController(text: a['nombre']));
+            montoControllers.add(TextEditingController(text: a['monto'].toString()));
+          }
+        }
       }
       if (esTransferencia && cuentasDisponibles.length > 1) {
         cuentaDestinoSeleccionada = cuentasDisponibles.firstWhere(

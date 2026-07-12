@@ -150,14 +150,14 @@ class _DivisorCuentaScreenState extends State<DivisorCuentaScreen> {
   Future<void> _guardarMiParte() async {
     if (_participantes.isEmpty) return;
     
-    // Asumimos que el usuario es el primero en la lista o pedimos quién es
-    // Para simplificar, le mostraremos un diálogo para elegir cuál de los participantes es él
+    // Como esto es un Gasto Compartido, el usuario actual pagó la cuenta completa
+    // y los demás le deben dinero.
     String? yo;
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('¿Cuál eres tú?'),
+          title: const Text('¿Cuál de estos eres tú?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: _participantes.map((p) => ListTile(
@@ -174,41 +174,36 @@ class _DivisorCuentaScreenState extends State<DivisorCuentaScreen> {
 
     if (yo == null) return;
 
-    final miDeuda = _calcularDeudas()[yo] ?? 0.0;
-    if (miDeuda == 0) return;
+    final deudas = _calcularDeudas();
+    final total = deudas.values.fold(0.0, (a, b) => a + b);
+    
+    // Los amigos son todos menos "yo"
+    final amigosList = deudas.entries
+        .where((e) => e.key != yo && e.value > 0)
+        .map((e) => {'nombre': e.key, 'monto': e.value.round()})
+        .toList();
 
     setState(() => _guardando = true);
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception("No estás autenticado");
-
       // Subir imagen si no se ha subido
       if (_boletaUrlFinal == null) {
         final scanner = ReceiptScannerService();
         _boletaUrlFinal = await scanner.uploadReceiptImage(widget.receiptImage);
       }
 
-      await Supabase.instance.client.from('gastos').insert({
-        'user_id': userId,
-        'tipo': 'Gasto',
-        'monto': miDeuda.round(),
-        'item': 'Mi parte de la cuenta (Salida)',
-        'categoria': 'Restaurante', // O sugerida
-        'fecha': DateTime.now().toString().substring(0, 10),
-        'boleta_url': _boletaUrlFinal,
-      });
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gasto guardado con éxito')),
-        );
-        Navigator.pop(context); // Volver
+        Navigator.pop(context, {
+          'action': 'guardar_compartido',
+          'total': total.round(),
+          'amigos': amigosList,
+          'boleta_url': _boletaUrlFinal,
+        });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar: $e')),
+          SnackBar(content: Text('Error al procesar: $e')),
         );
       }
     } finally {
