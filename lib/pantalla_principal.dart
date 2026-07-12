@@ -98,6 +98,96 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       'fecha_desc'; // fecha_desc, fecha_asc, monto_desc, monto_asc
   bool _ordenamientoVisible = false;
   String _filtroTipo = 'Todos'; // Todos, Gasto, Ingreso
+
+  Future<void> _escanearBoleta() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.camera);
+    
+    if (image == null) return;
+    final file = File(image.path);
+
+    if (!mounted) return;
+
+    String? opcionSeleccionada;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Qué quieres hacer?'),
+        content: const Text('Puedes registrar esta boleta como un gasto personal o dividir la cuenta con amigos.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              opcionSeleccionada = 'Personal';
+              Navigator.pop(ctx);
+            },
+            child: const Text('Gasto Personal'),
+          ),
+          TextButton(
+            onPressed: () {
+              opcionSeleccionada = 'Dividir';
+              Navigator.pop(ctx);
+            },
+            child: const Text('Dividir Cuenta'),
+          ),
+        ],
+      ),
+    );
+
+    if (opcionSeleccionada == null) return;
+
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final scanner = ReceiptScannerService();
+      
+      if (opcionSeleccionada == 'Personal') {
+        final data = await scanner.parsePersonalReceipt(file);
+        final url = await scanner.uploadReceiptImage(file);
+        if (!mounted) return;
+        Navigator.pop(context); // cerrar loader
+        
+        _mostrarFormulario(
+          tipo: 'Gasto',
+          valoresIniciales: {
+            'item': data.comercio,
+            'monto': data.montoTotal.toInt(),
+            'fecha': data.fecha,
+            'categoria': data.categoriaSugerida,
+            'boleta_url': url,
+          }
+        );
+      } else if (opcionSeleccionada == 'Dividir') {
+        final data = await scanner.parseSharedReceipt(file);
+        if (!mounted) return;
+        Navigator.pop(context); // cerrar loader
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (ctx) => DivisorCuentaScreen(
+              receiptImage: file,
+              sharedData: data,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // cerrar loader
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al procesar boleta: $e')),
+        );
+      }
+    }
+  }
   String? _filtroEtiqueta; // Tag seleccionado para filtrar
   int? _limiteMovimientos = 15;
 
@@ -2107,6 +2197,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          if (_indicePestana == 0) // Solo mostrar en inicio
+            IconButton(
+              icon: const Icon(Icons.document_scanner),
+              onPressed: _escanearBoleta,
+              tooltip: 'Escanear Boleta',
+            ),
+        ],
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         initialData: _cachedGastos,
@@ -10526,6 +10624,7 @@ textInputAction: TextInputAction.done,
   void _mostrarFormulario({
     required String tipo,
     Map<String, dynamic>? itemParaEditar,
+    Map<String, dynamic>? valoresIniciales,
   }) {
     final settings = widget.settingsController.settings;
     final esEdicion = itemParaEditar != null;
@@ -10564,6 +10663,7 @@ textInputAction: TextInputAction.done,
     bool esCredito = false;
     bool esFantasmaForm = false;
     bool esCompartido = false;
+    String? boletaUrl;
     final amigosCompartidos = <Map<String, dynamic>>[];
     final nombreControllers = <TextEditingController>[];
     final montoControllers = <TextEditingController>[];
@@ -10601,6 +10701,7 @@ textInputAction: TextInputAction.done,
       final metodo = (itemParaEditar['metodo_pago'] ?? 'Debito').toString();
       esCredito = metodo == 'Credito';
       esFantasmaForm = (itemParaEditar['estado'] ?? 'real') == 'fantasma';
+      boletaUrl = itemParaEditar['boleta_url']?.toString();
     } else {
       _itemController.clear();
       _detalleController.clear();
@@ -10609,6 +10710,18 @@ textInputAction: TextInputAction.done,
       categoriaSeleccionada = categoriasDisponibles.first;
       subcategoriaSeleccionada = null;
       cuentaSeleccionada = settings.defaultAccount;
+
+      if (valoresIniciales != null) {
+        if (valoresIniciales['item'] != null) _itemController.text = valoresIniciales['item'];
+        if (valoresIniciales['monto'] != null) _montoController.text = valoresIniciales['monto'].toString();
+        if (valoresIniciales['fecha'] != null) fechaSeleccionada = DateTime.tryParse(valoresIniciales['fecha']) ?? DateTime.now();
+        if (valoresIniciales['categoria'] != null) {
+          final catStr = valoresIniciales['categoria'].toString();
+          if (!categoriasDisponibles.contains(catStr)) categoriasDisponibles.add(catStr);
+          categoriaSeleccionada = catStr;
+        }
+        if (valoresIniciales['boleta_url'] != null) boletaUrl = valoresIniciales['boleta_url'];
+      }
       if (esTransferencia && cuentasDisponibles.length > 1) {
         cuentaDestinoSeleccionada = cuentasDisponibles.firstWhere(
           (c) => c != cuentaSeleccionada,
@@ -10721,6 +10834,7 @@ textInputAction: TextInputAction.done,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
                         'etiquetas': etiquetasSeleccionadas,
+                        if (boletaUrl != null) 'boleta_url': boletaUrl,
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else {
@@ -10764,6 +10878,7 @@ textInputAction: TextInputAction.done,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
                         'etiquetas': etiquetasSeleccionadas,
+                        if (boletaUrl != null) 'boleta_url': boletaUrl,
                       })
                       .select()
                       .single();
@@ -11648,6 +11763,55 @@ textInputAction: TextInputAction.done,
                                 ),
                               ],
                             ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (boletaUrl != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.withAlpha(50)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.receipt, color: Colors.blue),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text('Boleta adjunta', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => Dialog(
+                                      insetPadding: EdgeInsets.zero,
+                                      backgroundColor: Colors.transparent,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          InteractiveViewer(
+                                            child: Image.network(boletaUrl!),
+                                          ),
+                                          Positioned(
+                                            top: 40,
+                                            right: 20,
+                                            child: IconButton(
+                                              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                              onPressed: () => Navigator.pop(ctx),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: const Text('Ver Boleta'),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),
