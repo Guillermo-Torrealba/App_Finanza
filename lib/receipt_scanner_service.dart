@@ -18,11 +18,19 @@ class ReceiptPersonalData {
   });
 
   factory ReceiptPersonalData.fromJson(Map<String, dynamic> json) {
+    final montoRaw = json['monto_total'];
+    double montoParsed = 0.0;
+    if (montoRaw is num) {
+      montoParsed = montoRaw.toDouble();
+    } else if (montoRaw is String) {
+      montoParsed = double.tryParse(montoRaw.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+    }
+
     return ReceiptPersonalData(
-      comercio: json['comercio'] ?? 'Desconocido',
-      fecha: json['fecha'] ?? DateTime.now().toString().substring(0, 10),
-      montoTotal: (json['monto_total'] as num?)?.toDouble() ?? 0.0,
-      categoriaSugerida: json['categoria_sugerida'] ?? 'Varios',
+      comercio: json['comercio']?.toString() ?? 'Desconocido',
+      fecha: json['fecha']?.toString() ?? DateTime.now().toString().substring(0, 10),
+      montoTotal: montoParsed,
+      categoriaSugerida: json['categoria_sugerida']?.toString() ?? 'Varios',
     );
   }
 }
@@ -63,7 +71,7 @@ class ReceiptScannerService {
   static const String _apiUrl = 'https://api.openai.com/v1/chat/completions';
 
   /// Sube la imagen a Supabase Storage y retorna la URL pública
-  Future<String> uploadReceiptImage(File imageFile) async {
+  Future<String?> uploadReceiptImage(File imageFile) async {
     final fileName = 'boleta_${DateTime.now().millisecondsSinceEpoch}.jpg';
     try {
       await Supabase.instance.client.storage
@@ -77,7 +85,7 @@ class ReceiptScannerService {
       return publicUrl;
     } catch (e) {
       print('Error uploading receipt image: $e');
-      throw Exception('No se pudo subir la imagen de la boleta.');
+      return null;
     }
   }
 

@@ -231,6 +231,27 @@ class _DivisorCuentaScreenState extends State<DivisorCuentaScreen> {
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: _pedirParticipantes,
+            tooltip: 'Participantes',
+          ),
+          IconButton(
+            icon: const Icon(Icons.done_all),
+            tooltip: 'Asignar todo a todos',
+            onPressed: () {
+              if (_participantes.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Primero agrega participantes')),
+                );
+                return;
+              }
+              setState(() {
+                for (int i = 0; i < widget.sharedData.items.length; i++) {
+                  _asignaciones[i] = List.from(_participantes);
+                }
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Todos los ítems asignados a todos')),
+              );
+            },
           )
         ],
       ),
