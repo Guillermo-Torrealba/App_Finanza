@@ -26,6 +26,9 @@ import 'pantalla_recurrentes.dart';
 import 'gastos_compartidos_screen.dart';
 import 'ai_insights_service.dart';
 import 'app_secrets.dart';
+import 'package:image_picker/image_picker.dart';
+import 'receipt_scanner_service.dart';
+import 'divisor_cuenta_screen.dart';
 
 final supabase = Supabase.instance.client;
 
