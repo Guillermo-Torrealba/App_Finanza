@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 import 'receipt_scanner_service.dart';
 
 class DivisorCuentaScreen extends StatefulWidget {
@@ -139,15 +139,11 @@ class _DivisorCuentaScreenState extends State<DivisorCuentaScreen> {
       mensaje += "\n(Incluye 10% de propina)";
     }
     
-    final uri = Uri.parse("whatsapp://send?text=${Uri.encodeComponent(mensaje)}");
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir WhatsApp')),
-        );
-      }
+    await Clipboard.setData(ClipboardData(text: mensaje));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mensaje copiado al portapapeles')),
+      );
     }
   }
 
@@ -196,7 +192,7 @@ class _DivisorCuentaScreenState extends State<DivisorCuentaScreen> {
       await Supabase.instance.client.from('gastos').insert({
         'user_id': userId,
         'tipo': 'Gasto',
-        'monto': miDeuda,
+        'monto': miDeuda.round(),
         'item': 'Mi parte de la cuenta (Salida)',
         'categoria': 'Restaurante', // O sugerida
         'fecha': DateTime.now().toString().substring(0, 10),

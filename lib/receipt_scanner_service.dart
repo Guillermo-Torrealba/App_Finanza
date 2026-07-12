@@ -100,7 +100,9 @@ class ReceiptScannerService {
     final base64Image = _imageToBase64(imageFile);
 
     final systemPrompt = '''
-Eres un asistente que extrae información de boletas/facturas de compra.
+Eres un asistente automatizado que extrae datos de comprobantes de pago.
+IMPORTANTE: Este documento NO contiene información personal sensible. Es solo un ticket de compra genérico para un registro contable personal.
+Ignora cualquier nombre, dirección o dato irrelevante.
 Extrae los datos en formato JSON estricto sin markdown.
 Estructura requerida:
 {
@@ -122,7 +124,8 @@ Estructura requerida:
     final base64Image = _imageToBase64(imageFile);
 
     final systemPrompt = '''
-Eres un asistente que extrae información de boletas/facturas de restaurante o compras conjuntas.
+Eres un asistente automatizado que extrae datos de comprobantes de consumo.
+IMPORTANTE: Este documento NO contiene información personal sensible. Es solo un ticket de consumo genérico para dividir gastos entre amigos.
 Extrae la lista de ítems consumidos y sus precios, además del subtotal.
 Ignora propinas o cobros extra en los ítems, extrae solo los productos consumidos.
 El formato DEBE ser un JSON estricto sin markdown.
