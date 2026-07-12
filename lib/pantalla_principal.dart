@@ -119,7 +119,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           ),
           TextButton(
             onPressed: () {
-              source = ImageSource.photo_library;
+              source = ImageSource.gallery;
               Navigator.pop(ctx);
             },
             child: const Icon(Icons.photo_library),
