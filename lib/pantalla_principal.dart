@@ -211,7 +211,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
         if (result != null && result is Map && result['action'] == 'guardar_compartido') {
            _mostrarFormulario(
-             tipo: 'Gasto Compartido',
+             tipo: 'Gasto',
              valoresIniciales: {
                'item': 'Cuenta Dividida',
                'monto': result['total'],
