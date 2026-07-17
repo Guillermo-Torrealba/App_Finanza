@@ -67,27 +67,31 @@ class _GestionarRecurrentesScreenState
                   leading: Builder(
                     builder: (context) {
                       final tipo = item['tipo'] as String?;
-                      Color bgColor = Colors.red.shade50;
-                      Color fgColor = Colors.red;
+                      Color accentColor;
                       IconData iconData = Icons.arrow_downward;
-                      
+
                       if (tipo == 'Ingreso') {
-                        bgColor = Colors.green.shade50;
-                        fgColor = Colors.green;
+                        accentColor = const Color(0xFF00E5A0);
                         iconData = Icons.arrow_upward;
                       } else if (tipo == 'Ahorro') {
-                        bgColor = Colors.blue.shade50;
-                        fgColor = Colors.blue;
+                        accentColor = const Color(0xFF6B8CFF);
                         iconData = Icons.savings;
                       } else if (tipo == 'Cuota') {
-                        bgColor = Colors.orange.shade50;
-                        fgColor = Colors.orange;
+                        accentColor = const Color(0xFFFFB347);
                         iconData = Icons.credit_card;
+                      } else {
+                        accentColor = const Color(0xFFFF4D6A);
                       }
-                      
-                      return CircleAvatar(
-                        backgroundColor: bgColor,
-                        child: Icon(iconData, color: fgColor),
+
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: accentColor.withAlpha(20),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: accentColor.withAlpha(50)),
+                        ),
+                        child: Icon(iconData, color: accentColor, size: 18),
                       );
                     },
                   ),
@@ -127,7 +131,7 @@ class _GestionarRecurrentesScreenState
                         },
                       ),
                       IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        icon: const Icon(Icons.edit, color: Color(0xFF888888)),
                         onPressed: () => _mostrarFormulario(item: item),
                       ),
                       IconButton(
@@ -347,16 +351,25 @@ class FormularioRecurrenteState extends State<FormularioRecurrente> {
                     avatar: Icon(
                       iconData,
                       size: 18,
-                      color: isSelected ? Colors.white : activeColor,
+                      color: isSelected ? activeColor : const Color(0xFF888888),
                     ),
                     selected: isSelected,
-                    selectedColor: activeColor,
-                    backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                    selectedColor: activeColor.withAlpha(25),
+                    backgroundColor: const Color(0xFF1C1C1C),
+                    side: BorderSide(
+                      color: isSelected
+                          ? activeColor.withAlpha(80)
+                          : const Color(0xFF2A2A2A),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    showCheckmark: false,
                     labelStyle: TextStyle(
-                      color: isSelected 
-                        ? Colors.white 
-                        : (isDark ? Colors.grey.shade300 : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected
+                          ? activeColor
+                          : const Color(0xFF888888),
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
                     onSelected: (selected) {
                       if (selected) {

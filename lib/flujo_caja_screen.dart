@@ -420,7 +420,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
             isHeader: isSection,
             isDark: isDark,
             bold: isSubtotal || isSection,
-            textColor: val < 0 ? Colors.red : textColor,
+            textColor: val < 0 ? const Color(0xFFFF4D6A) : textColor,
           ),
         );
       }
@@ -463,7 +463,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       'INGRESOS',
       tIng,
       isSection: true,
-      textColor: Colors.green,
+      textColor: const Color(0xFF00E5A0),
       icon: _ingresosExpandidos
           ? Icons.keyboard_arrow_up
           : Icons.keyboard_arrow_down,
@@ -517,7 +517,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       'GASTOS FIJOS',
       tGasFijos,
       isSection: true,
-      textColor: Colors.redAccent,
+      textColor: const Color(0xFFFF4D6A),
       icon: _gastosFijosExpandidos
           ? Icons.keyboard_arrow_up
           : Icons.keyboard_arrow_down,
@@ -554,7 +554,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       'GASTOS VARIABLES',
       tGasVariables,
       isSection: true,
-      textColor: Colors.redAccent,
+      textColor: const Color(0xFFFF4D6A),
       icon: _gastosVariablesExpandidos
           ? Icons.keyboard_arrow_up
           : Icons.keyboard_arrow_down,
@@ -584,11 +584,11 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       'TOTAL GASTOS F+V',
       tGasTotal,
       isSubtotal: true,
-      textColor: Colors.red,
+      textColor: const Color(0xFFFF4D6A),
     );
 
     // 5. RESULTADOS
-    addRow('RESULTADOS', [], isSection: true, textColor: Colors.blue);
+    addRow('RESULTADOS', [], isSection: true, textColor: const Color(0xFFF5F5F5));
     List<double> flujos = [];
     List<double> cajas = [];
     for (int m = 1; m <= 12; m++) {
@@ -600,7 +600,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
       'CAJA ACUMULADA',
       cajas,
       isSubtotal: true,
-      textColor: Colors.amber.shade700,
+      textColor: const Color(0xFF00E5A0),
     );
 
     // Constructor de la tabla scrolleable
@@ -670,12 +670,12 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
     VoidCallback? onTap,
   }) {
     Color bgColor = isDark
-        ? (isHeader ? const Color(0xFF1E293B) : Colors.transparent)
+        ? (isHeader ? const Color(0xFF141414) : Colors.transparent)
         : (isHeader ? Colors.grey.shade100 : Colors.white);
 
     // Add alternating row colors or distinct backgrounds if needed here
     if (isFirstCol && !isHeader) {
-      bgColor = isDark ? const Color(0xFF0F172A) : Colors.grey.shade50;
+      bgColor = isDark ? const Color(0xFF1C1C1C) : Colors.grey.shade50;
     }
 
     Widget content = Text(
@@ -707,11 +707,11 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
         color: bgColor,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade300,
             width: 0.5,
           ),
           right: BorderSide(
-            color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade300,
             width: 0.5,
           ),
         ),
@@ -728,8 +728,8 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
   // --- Skeleton Loader Flujo de Caja ---
   Widget _construirSkeletonTabla(bool isDark) {
     return Shimmer.fromColors(
-      baseColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
-      highlightColor: isDark ? Colors.grey.shade700 : Colors.grey.shade100,
+      baseColor: isDark ? const Color(0xFF1C1C1C) : Colors.grey.shade300,
+      highlightColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
       child: Column(
         children: [
           Row(

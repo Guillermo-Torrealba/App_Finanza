@@ -70,7 +70,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   bool _bloqueada = false;
   bool _desbloqueando = false;
-  bool _editandoPresupuesto = false;
   bool _alertasExpandidas = true;
   DateTime? _pausedAt;
   List<String> _cuentasSeleccionadas = [];
@@ -585,15 +584,15 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         child: Container(
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? Colors.teal.shade100
-                                : Colors.grey.shade100,
+                                ? const Color(0xFF00E5A0).withAlpha(30)
+                                : const Color(0xFF1C1C1C),
                             borderRadius: BorderRadius.circular(8),
                             border: isSelected
                                 ? Border.all(
-                                    color: Colors.teal.shade400,
-                                    width: 2,
+                                    color: const Color(0xFF00E5A0),
+                                    width: 1.5,
                                   )
-                                : null,
+                                : Border.all(color: const Color(0xFF2A2A2A)),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -635,23 +634,24 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required int index,
     required String tooltip,
   }) {
+    const Color kAccent = Color(0xFF00E5A0);
+    const Color kInactive = Color(0xFF555555);
     final isSelected = _indicePestana == index;
     return Expanded(
       child: IconButton(
         icon: AnimatedScale(
-          scale: isSelected ? 1.15 : 1.0,
-          duration: const Duration(milliseconds: 250),
+          scale: isSelected ? 1.12 : 1.0,
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutBack,
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
+            duration: const Duration(milliseconds: 200),
             transitionBuilder: (child, animation) =>
                 FadeTransition(opacity: animation, child: child),
             child: Icon(
               isSelected ? filled : outlined,
               key: ValueKey<bool>(isSelected),
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.grey,
+              color: isSelected ? kAccent : kInactive,
+              size: 22,
             ),
           ),
         ),
@@ -670,8 +670,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     required String valor,
     required String descripcion,
   }) {
+    const Color kAccent = Color(0xFF00E5A0);
+    const Color kBorder = Color(0xFF2A2A2A);
     final seleccionado = _ordenamiento == valor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Expanded(
       child: Tooltip(
@@ -683,10 +684,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             children: [
               Icon(
                 icono,
-                size: 14,
-                color: seleccionado
-                    ? (isDark ? Colors.black87 : Colors.white)
-                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
+                size: 13,
+                color: seleccionado ? kAccent : const Color(0xFF888888),
               ),
               const SizedBox(width: 2),
               Flexible(
@@ -695,25 +694,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: seleccionado
-                        ? (isDark ? Colors.black87 : Colors.white)
-                        : (isDark
-                              ? Colors.grey.shade300
-                              : Colors.grey.shade800),
+                    color: seleccionado ? kAccent : const Color(0xFF888888),
+                    fontWeight: seleccionado ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               ),
             ],
           ),
           selected: seleccionado,
-          selectedColor: Colors.teal.shade400,
-          backgroundColor: Theme.of(context).cardColor,
+          selectedColor: kAccent.withAlpha(25),
+          backgroundColor: const Color(0xFF1C1C1C),
           side: BorderSide(
-            color: isDark ? Colors.grey.shade800 : Colors.transparent,
+            color: seleccionado ? kAccent.withAlpha(80) : kBorder,
             width: 1,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
           ),
           showCheckmark: false,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -1061,7 +1057,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         ((b['monto'] as num).abs()).compareTo((a['monto'] as num).abs()));
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF141414) : Colors.white;
 
     showModalBottomSheet(
       context: context,
@@ -1597,88 +1593,86 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: alert.color.withAlpha(isDark ? 0x4D : 0x1A)),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: alert.color.withAlpha(0x33),
-              shape: BoxShape.circle,
+      child: SingleChildScrollView(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: alert.color.withAlpha(0x33),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(alert.icon, color: alert.color, size: 20),
             ),
-            child: Icon(alert.icon, color: alert.color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        alert.title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: isDark
-                              ? alert.color.withAlpha(0xE6)
-                              : alert.color,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          alert.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: isDark
+                                ? alert.color.withAlpha(0xE6)
+                                : alert.color,
+                          ),
                         ),
                       ),
-                    ),
-                    if (alert.isAi)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.purple.shade900.withAlpha(80)
-                              : Colors.purple.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 10,
-                              color: isDark
-                                  ? Colors.purpleAccent.shade100
-                                  : Colors.purple.shade700,
+                      if (alert.isAi)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00E5A0).withAlpha(18),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFF00E5A0).withAlpha(40),
                             ),
-                            const SizedBox(width: 3),
-                            Text(
-                              'IA',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.purpleAccent.shade100
-                                    : Colors.purple.shade700,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.auto_awesome,
+                                size: 10,
+                                color: Color(0xFF00E5A0),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 3),
+                              const Text(
+                                'IA',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF00E5A0),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  alert.message,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isDark ? Colors.grey.shade300 : Colors.black87,
-                    fontSize: 13,
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    alert.message,
+                    style: TextStyle(
+                      color: isDark ? Colors.grey.shade300 : Colors.black87,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1994,19 +1988,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Header con gradiente
+              // Header IA oscuro
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark
-                        ? [Colors.purple.shade900, Colors.indigo.shade900]
-                        : [Colors.purple.shade400, Colors.indigo.shade400],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFF141414),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
                 ),
                 child: Column(
                   children: [
@@ -2015,13 +2004,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(40),
+                            color: const Color(0xFF00E5A0).withAlpha(18),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
                           ),
                           child: const Icon(
                             Icons.auto_awesome,
-                            color: Colors.white,
-                            size: 24,
+                            color: Color(0xFF00E5A0),
+                            size: 22,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -2029,9 +2019,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           child: Text(
                             'Resumen Semanal IA',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Color(0xFFF5F5F5),
                             ),
                           ),
                         ),
@@ -2042,7 +2032,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       summary.resumen,
                       style: const TextStyle(
                         fontSize: 14,
-                        color: Colors.white,
+                        color: Color(0xFFAAAAAA),
                         height: 1.4,
                       ),
                     ),
@@ -2082,16 +2072,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
               // Categoría top
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withAlpha(8)
-                      : Colors.grey.shade50,
+                  color: const Color(0xFF1C1C1C),
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
                 ),
                 child: Row(
                   children: [
@@ -2225,7 +2213,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final scaffold = Scaffold(
       extendBody:
           true, // Allows body to scroll under the floating bottom app bar
@@ -2365,86 +2352,84 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   HapticFeedback.lightImpact();
                   _mostrarDialogo();
                 },
-                child: const Icon(Icons.add),
+                child: const Icon(Icons.add, size: 26),
               ),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: BottomAppBar(
-            shape: const CircularNotchedRectangle(),
-            notchMargin: 8.0,
-            color: isDark
-                ? const Color(0xFF1E293B).withAlpha(150)
-                : Colors.white.withAlpha(200),
-            elevation: 0,
-            child: Row(
-              children: <Widget>[
-                // Lado izquierdo: 3 iconos
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _navIcon(
-                        filled: Icons.home,
-                        outlined: Icons.home_outlined,
-                        index: 0,
-                        tooltip: 'Inicio',
-                      ),
-                      _navIcon(
-                        filled: Icons.pie_chart,
-                        outlined: Icons.pie_chart_outline,
-                        index: 1,
-                        tooltip: 'Análisis',
-                      ),
-                      _navIcon(
-                        filled: Icons.flag,
-                        outlined: Icons.flag_outlined,
-                        index: 2,
-                        tooltip: 'Metas',
-                      ),
-                    ],
-                  ),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF141414),
+          border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 1)),
+        ),
+        child: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8.0,
+          color: Colors.transparent,
+          elevation: 0,
+          child: Row(
+            children: <Widget>[
+              // Lado izquierdo: 3 iconos
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _navIcon(
+                      filled: Icons.home_rounded,
+                      outlined: Icons.home_outlined,
+                      index: 0,
+                      tooltip: 'Inicio',
+                    ),
+                    _navIcon(
+                      filled: Icons.pie_chart_rounded,
+                      outlined: Icons.pie_chart_outline,
+                      index: 1,
+                      tooltip: 'Análisis',
+                    ),
+                    _navIcon(
+                      filled: Icons.flag_rounded,
+                      outlined: Icons.flag_outlined,
+                      index: 2,
+                      tooltip: 'Metas',
+                    ),
+                  ],
                 ),
-                // Espacio central para el FAB
-                const SizedBox(width: 72),
-                // Lado derecho: 3 iconos
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
+              ),
+              // Espacio central para el FAB
+              const SizedBox(width: 72),
+              // Lado derecho: 3 iconos
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _navIcon(
+                      filled: Icons.calculate_rounded,
+                      outlined: Icons.calculate_outlined,
+                      index: 3,
+                      tooltip: 'Presupuestos',
+                    ),
+                    if (widget.settingsController.settings.hasCreditCard)
                       _navIcon(
-                        filled: Icons.calculate,
-                        outlined: Icons.calculate_outlined,
-                        index: 3,
-                        tooltip: 'Presupuestos',
+                        filled: Icons.calendar_month_rounded,
+                        outlined: Icons.calendar_today_outlined,
+                        index: 4,
+                        tooltip: 'Planificación',
                       ),
-                      if (widget.settingsController.settings.hasCreditCard)
-                        _navIcon(
-                          filled: Icons.calendar_month,
-                          outlined: Icons.calendar_today_outlined,
-                          index: 4,
-                          tooltip: 'Planificación',
-                        ),
-                      _navIcon(
-                        filled: Icons.menu,
-                        outlined: Icons.menu_open,
-                        index: widget.settingsController.settings.hasCreditCard
-                            ? 5
-                            : 4,
-                        tooltip: 'Más',
-                      ),
-                    ],
-                  ),
+                    _navIcon(
+                      filled: Icons.menu_rounded,
+                      outlined: Icons.menu_open,
+                      index: widget.settingsController.settings.hasCreditCard
+                          ? 5
+                          : 4,
+                      tooltip: 'Más',
+                    ),
+                  ],
                 ),
-              ],
-            ), // BottomAppBar child Row
-          ), // BottomAppBar
-        ), // BackdropFilter
-      ), // ClipRRect
+              ),
+            ],
+          ), // BottomAppBar child Row
+        ), // BottomAppBar
+      ) // Container
     ); // Scaffold
 
     if (!_bloqueada) {
@@ -2828,71 +2813,59 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   final double fraccionCredito = 1.0 - fraccionCuenta;
                   final bool esNegativo = saldoNeto < 0;
 
-                  final Color colorNeto = esNegativo
-                      ? (isDark
-                            ? Colors.redAccent.shade100
-                            : Colors.red.shade700)
-                      : (isDark
-                            ? Colors.tealAccent.shade400
-                            : Colors.teal.shade700);
+                  const Color kAccent  = Color(0xFF00E5A0);
+                  const Color kDanger  = Color(0xFFFF4D6A);
+                  const Color kBorder  = Color(0xFF2A2A2A);
+                  const Color kSurface = Color(0xFF141414);
+                  const Color kLabel   = Color(0xFF888888);
+
+                  final Color colorNeto = esNegativo ? kDanger : kAccent;
 
                   return Container(
                     margin: EdgeInsets.symmetric(horizontal: margin),
-                    padding: EdgeInsets.all(padding),
+                    padding: EdgeInsets.all(padding + 4),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
+                      color: kSurface,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(isDark ? 60 : 18),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      border: Border.all(color: kBorder),
                     ),
                     child: Column(
                       children: [
                         // ── Título ──
                         Text(
-                          'Liquidez Neta',
+                          'LIQUIDEZ NETA',
                           style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade600,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 2.5,
+                            color: kLabel,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 8),
                         // ── Monto Neto ──
                         Text(
                           _textoMonto(saldoNeto),
                           style: TextStyle(
-                            fontSize: 38,
+                            fontSize: 52,
                             fontWeight: FontWeight.w900,
                             color: colorNeto,
-                            height: 1.1,
+                            height: 1.05,
+                            letterSpacing: -1.5,
                           ),
                         ),
                         // ── Saldo Proyectado (visible solo si hay fantasmas) ──
                         if (hayFantasmas) ...[
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.purple.shade900.withAlpha(80)
-                                  : Colors.purple.shade50,
-                              borderRadius: BorderRadius.circular(8),
+                              color: const Color(0xFF1A1A2E),
+                              borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: isDark
-                                    ? Colors.purple.shade700.withAlpha(100)
-                                    : Colors.purple.shade200,
-                                width: 0.8,
+                                color: Colors.purple.shade800.withAlpha(120),
                               ),
                             ),
                             child: Row(
@@ -2900,32 +2873,28 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               children: [
                                 Icon(
                                   Icons.auto_awesome,
-                                  size: 12,
-                                  color: isDark
-                                      ? Colors.purpleAccent.shade100
-                                      : Colors.purple.shade700,
+                                  size: 11,
+                                  color: Colors.purpleAccent.shade100,
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
                                   'Proyectado al ${ultimoFantasmaFecha!.day}/${ultimoFantasmaFecha.month}: ${formatoMoneda(saldoProyectado - saldoCreditoUtilizado)}',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.purpleAccent.shade100
-                                        : Colors.purple.shade800,
+                                    color: Colors.purpleAccent.shade100,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ],
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 18),
                         // ── Barra de Composición ──
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                           child: SizedBox(
-                            height: 10,
+                            height: 6,
                             child: Row(
                               children: [
                                 Flexible(
@@ -2933,21 +2902,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     1,
                                     999,
                                   ),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: isDark
-                                            ? [
-                                                Colors.tealAccent.shade700,
-                                                Colors.tealAccent.shade400,
-                                              ]
-                                            : [
-                                                Colors.teal.shade600,
-                                                Colors.teal.shade400,
-                                              ],
-                                      ),
-                                    ),
-                                  ),
+                                  child: Container(color: kAccent),
                                 ),
                                 const SizedBox(width: 2),
                                 Flexible(
@@ -2955,27 +2910,13 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     1,
                                     999,
                                   ),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: isDark
-                                            ? [
-                                                Colors.redAccent.shade100,
-                                                Colors.red.shade300,
-                                              ]
-                                            : [
-                                                Colors.red.shade300,
-                                                Colors.red.shade400,
-                                              ],
-                                      ),
-                                    ),
-                                  ),
+                                  child: Container(color: kDanger),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 18),
                         // ── Desglose Inferior ──
                         Row(
                           children: [
@@ -2986,19 +2927,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   Container(
                                     padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
-                                      color:
-                                          (isDark
-                                                  ? Colors.tealAccent.shade700
-                                                  : Colors.teal.shade600)
-                                              .withAlpha(30),
+                                      color: kAccent.withAlpha(20),
                                       borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: kAccent.withAlpha(40)),
                                     ),
                                     child: Icon(
                                       Icons.account_balance,
-                                      size: 18,
-                                      color: isDark
-                                          ? Colors.tealAccent.shade400
-                                          : Colors.teal.shade600,
+                                      size: 16,
+                                      color: kAccent,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -3007,23 +2943,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          'Total Débito',
+                                        const Text(
+                                          'TOTAL DÉBITO',
                                           style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.grey.shade400
-                                                : Colors.grey.shade600,
+                                            fontSize: 9,
+                                            letterSpacing: 1.2,
+                                            color: Color(0xFF888888),
                                           ),
                                         ),
                                         Text(
                                           _textoMonto(saldoCuentaCorriente),
-                                          style: TextStyle(
-                                            fontSize: 14,
+                                          style: const TextStyle(
+                                            fontSize: 15,
                                             fontWeight: FontWeight.w700,
-                                            color: isDark
-                                                ? Colors.tealAccent.shade400
-                                                : Colors.teal.shade700,
+                                            color: Color(0xFF00E5A0),
                                           ),
                                         ),
                                       ],
@@ -3035,11 +2968,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             if (settings.hasCreditCard) ...[
                               // Separador vertical
                               Container(
-                                height: 32,
+                                height: 28,
                                 width: 1,
-                                color: isDark
-                                    ? Colors.grey.shade700
-                                    : Colors.grey.shade300,
+                                color: kBorder,
                               ),
                               // TC Utilizado
                               Expanded(
@@ -3051,25 +2982,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.end,
                                         children: [
-                                          Text(
-                                            'TC Utilizado',
+                                          const Text(
+                                            'TC UTILIZADO',
                                             style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark
-                                                  ? Colors.grey.shade400
-                                                  : Colors.grey.shade600,
+                                              fontSize: 9,
+                                              letterSpacing: 1.2,
+                                              color: Color(0xFF888888),
                                             ),
                                           ),
                                           Text(
                                             saldoCreditoUtilizado == 0
                                                 ? _textoMonto(0)
                                                 : '- ${_textoMonto(saldoCreditoUtilizado)}',
-                                            style: TextStyle(
-                                              fontSize: 14,
+                                            style: const TextStyle(
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
-                                              color: isDark
-                                                  ? Colors.redAccent.shade100
-                                                  : Colors.red.shade600,
+                                              color: Color(0xFFFF4D6A),
                                             ),
                                           ),
                                         ],
@@ -3079,19 +3007,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color:
-                                            (isDark
-                                                    ? Colors.redAccent.shade100
-                                                    : Colors.red.shade400)
-                                                .withAlpha(30),
+                                        color: kDanger.withAlpha(20),
                                         borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: kDanger.withAlpha(40)),
                                       ),
-                                      child: Icon(
+                                      child: const Icon(
                                         Icons.credit_card,
-                                        size: 18,
-                                        color: isDark
-                                            ? Colors.redAccent.shade100
-                                            : Colors.red.shade500,
+                                        size: 16,
+                                        color: Color(0xFFFF4D6A),
                                       ),
                                     ),
                                   ],
@@ -3108,30 +3031,30 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               const SizedBox(height: 12),
               Container(
                 margin: EdgeInsets.symmetric(horizontal: margin),
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                  color: const Color(0xFF141414),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                  ),
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.chevron_left),
+                      icon: const Icon(Icons.chevron_left, color: Color(0xFFF5F5F5)),
                       onPressed: () => _cambiarMes(-1),
                     ),
                     Text(
                       '${obtenerNombreMes(_mesVisualizado.month)} ${_mesVisualizado.year}',
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFF5F5F5),
+                        letterSpacing: 0.3,
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.chevron_right),
+                      icon: const Icon(Icons.chevron_right, color: Color(0xFFF5F5F5)),
                       onPressed: () => _cambiarMes(1),
                     ),
                   ],
@@ -3141,15 +3064,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 margin: EdgeInsets.all(margin),
                 padding: EdgeInsets.all(padding),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
+                  color: const Color(0xFF141414),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(isDark ? 50 : 12),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -3163,7 +3080,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Container(
                       height: 40,
                       width: 1,
-                      color: Theme.of(context).dividerColor,
+                      color: const Color(0xFF2A2A2A),
                     ),
                     _construirResumen(
                       'Gastos',
@@ -3174,7 +3091,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     Container(
                       height: 40,
                       width: 1,
-                      color: Theme.of(context).dividerColor,
+                      color: const Color(0xFF2A2A2A),
                     ),
                     _construirResumen(
                       'Total Mes',
@@ -3231,8 +3148,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   margin: EdgeInsets.symmetric(horizontal: margin, vertical: 8),
                   padding: EdgeInsets.all(padding),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
+                    color: const Color(0xFF141414),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF2A2A2A)),
                   ),
                   child: Column(
                     children: desgloseCategorias.map((catData) {
@@ -3614,7 +3532,7 @@ textInputAction: TextInputAction.done,
               ),
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 90)),
+        const SliverToBoxAdapter(child: SizedBox(height: 140)),
       ],
     );
   }
@@ -3627,68 +3545,62 @@ textInputAction: TextInputAction.done,
     final esIngreso = item['tipo'] == 'Ingreso';
     final categoria = (item['categoria'] ?? 'Varios').toString();
     final fechaItem = DateTime.parse(item['fecha']);
-    final colorBase = esIngreso ? Colors.teal : Colors.red;
     final esFantasma = (item['estado'] ?? 'real') == 'fantasma';
 
     Widget card = InkWell(
       onTap: () => _mostrarDialogo(itemParaEditar: item),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: esFantasma
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(isDark ? 30 : 8),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(14),
+          border: esFantasma
+              ? null
+              : Border.all(color: const Color(0xFF2A2A2A)),
         ),
         child: Row(
           children: [
             Hero(
               tag: 'mov_${item['id']}',
               child: Container(
-                width: 48,
-                height: 48,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: esFantasma
-                      ? Colors.grey.withAlpha(isDark ? 40 : 25)
-                      : colorBase.withAlpha(isDark ? 40 : 25),
-                  shape: BoxShape.circle,
+                      ? const Color(0xFF1C1C1C)
+                      : esIngreso
+                          ? const Color(0xFF00E5A0).withAlpha(22)
+                          : const Color(0xFFFF4D6A).withAlpha(22),
+                  borderRadius: BorderRadius.circular(11),
+                  border: esFantasma
+                      ? Border.all(color: const Color(0xFF2A2A2A))
+                      : Border.all(
+                          color: esIngreso
+                              ? const Color(0xFF00E5A0).withAlpha(50)
+                              : const Color(0xFFFF4D6A).withAlpha(50),
+                        ),
                 ),
                 child: Center(
                   child: esIngreso
                       ? Icon(
                           Icons.add_chart_rounded,
                           color: esFantasma
-                              ? (isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade500)
-                              : (isDark
-                                    ? Colors.tealAccent.shade400
-                                    : Colors.teal.shade700),
-                          size: 24,
+                              ? const Color(0xFF555555)
+                              : const Color(0xFF00E5A0),
+                          size: 20,
                         )
                       : _iconoCategoria(
                           categoria,
                           color: esFantasma
-                              ? (isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade500)
-                              : (isDark
-                                    ? Colors.redAccent.shade100
-                                    : Colors.red.shade700),
-                          size: 24,
+                              ? const Color(0xFF555555)
+                              : const Color(0xFFFF4D6A),
+                          size: 20,
                         ),
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3699,9 +3611,10 @@ textInputAction: TextInputAction.done,
                         child: Text(
                           (item['item'] ?? 'Sin nombre').toString(),
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            letterSpacing: -0.2,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            letterSpacing: -0.1,
+                            color: Color(0xFFF5F5F5),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -3715,14 +3628,10 @@ textInputAction: TextInputAction.done,
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.purple.shade900.withAlpha(100)
-                                : Colors.purple.shade50,
+                            color: Colors.purple.shade900.withAlpha(100),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isDark
-                                  ? Colors.purple.shade700.withAlpha(120)
-                                  : Colors.purple.shade200,
+                              color: Colors.purple.shade700.withAlpha(120),
                               width: 0.8,
                             ),
                           ),
@@ -3732,69 +3641,62 @@ textInputAction: TextInputAction.done,
                               fontSize: 7,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.4,
-                              color: isDark
-                                  ? Colors.purpleAccent.shade100
-                                  : Colors.purple.shade800,
+                              color: Colors.purpleAccent.shade100,
                             ),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     '${fechaItem.day} ${obtenerNombreMes(fechaItem.month).substring(0, 3)} · ${(item['cuenta'] ?? '-').toString()}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF888888),
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   _textoMonto(item['monto'] as num),
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    letterSpacing: -0.3,
                     color: esFantasma
-                        ? (isDark ? Colors.grey.shade400 : Colors.grey.shade600)
-                        : (esIngreso
-                              ? (isDark
-                                    ? Colors.tealAccent.shade400
-                                    : Colors.teal.shade700)
-                              : (isDark
-                                    ? Colors.redAccent.shade100
-                                    : Colors.red.shade700)),
+                        ? const Color(0xFF555555)
+                        : esIngreso
+                            ? const Color(0xFF00E5A0)
+                            : const Color(0xFFFF4D6A),
                   ),
                 ),
                 if ((item['metodo_pago'] ?? 'Debito') == 'Credito')
                   Container(
-                    margin: const EdgeInsets.only(top: 2),
+                    margin: const EdgeInsets.only(top: 3),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
+                      horizontal: 5,
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.orangeAccent.withAlpha(40)
-                          : Colors.orange.shade50,
+                      color: Colors.orangeAccent.withAlpha(30),
                       borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.orangeAccent.withAlpha(60),
+                      ),
                     ),
-                    child: Text(
-                      'CREDITO',
+                    child: const Text(
+                      'CRÉDITO',
                       style: TextStyle(
                         fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? Colors.orangeAccent
-                            : Colors.orange.shade800,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orangeAccent,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -3957,17 +3859,10 @@ textInputAction: TextInputAction.done,
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 0x4D : 0x0C),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: isDark ? Border.all(color: Colors.grey.shade800) : null,
+      decoration: const BoxDecoration(
+        color: Color(0xFF141414),
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+        border: Border.fromBorderSide(BorderSide(color: Color(0xFF2A2A2A))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4024,7 +3919,7 @@ textInputAction: TextInputAction.done,
           // Body Collapsible (Carousel)
           AnimatedCrossFade(
             firstChild: Container(
-              height: 160, // Altura fija para el carrusel
+              height: 190, // Aumentado para evitar overflow de textos largos
               margin: const EdgeInsets.only(bottom: 16),
               child: PageView.builder(
                 controller: PageController(viewportFraction: 0.92),
@@ -4150,28 +4045,13 @@ textInputAction: TextInputAction.done,
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark
-                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
-                : [Colors.blue.shade50, Colors.blue.shade100.withAlpha(150)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: isDark ? const Color(0xFF141414) : Colors.blue.shade50,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDark
-                ? Colors.blue.shade700.withAlpha(100)
+                ? const Color(0xFF4DA6FF).withAlpha(50)
                 : Colors.blue.shade300,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: (isDark ? Colors.black : Colors.blue.shade200).withAlpha(
-                100,
-              ),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4180,7 +4060,7 @@ textInputAction: TextInputAction.done,
               children: [
                 Icon(
                   Icons.account_balance_wallet,
-                  color: isDark ? Colors.blueAccent : Colors.blue.shade700,
+                  color: isDark ? const Color(0xFF4DA6FF) : Colors.blue.shade700,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
@@ -4189,7 +4069,7 @@ textInputAction: TextInputAction.done,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.blue.shade100 : Colors.blue.shade900,
+                    color: isDark ? const Color(0xFFF5F5F5) : Colors.blue.shade900,
                   ),
                 ),
               ],
@@ -4200,15 +4080,16 @@ textInputAction: TextInputAction.done,
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.blue.shade900,
+                color: isDark ? const Color(0xFF4DA6FF) : Colors.blue.shade900,
               ),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: (isDark ? Colors.black : Colors.white).withAlpha(150),
+                color: isDark ? const Color(0xFF1C1C1C) : Colors.white.withAlpha(150),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isDark ? const Color(0xFF2A2A2A) : Colors.transparent),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4221,7 +4102,7 @@ textInputAction: TextInputAction.done,
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark
-                              ? Colors.grey.shade400
+                              ? const Color(0xFFAAAAAA)
                               : Colors.grey.shade600,
                         ),
                       ),
@@ -4230,7 +4111,7 @@ textInputAction: TextInputAction.done,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isDark
-                              ? Colors.greenAccent.shade400
+                              ? const Color(0xFF00E5A0)
                               : Colors.green.shade700,
                         ),
                       ),
@@ -4287,7 +4168,7 @@ textInputAction: TextInputAction.done,
           Container(
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E2433) : Colors.white,
+              color: isDark ? const Color(0xFF141414) : Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -4846,27 +4727,13 @@ textInputAction: TextInputAction.done,
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF312E81), const Color(0xFF1E1B4B)]
-              : [const Color(0xFFEDE9FE), const Color(0xFFE0E7FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? const Color(0xFF141414) : const Color(0xFFF3F0FF),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
-              ? Colors.purple.shade700.withAlpha(80)
+              ? const Color(0xFFB57EDC).withAlpha(50)
               : Colors.purple.shade200,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: (isDark ? Colors.purple.shade900 : Colors.purple.shade100)
-                .withAlpha(isDark ? 120 : 180),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4891,14 +4758,15 @@ textInputAction: TextInputAction.done,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.purple.shade700.withAlpha(60)
+                          ? const Color(0xFFB57EDC).withAlpha(20)
                           : Colors.purple.shade100.withAlpha(180),
+                      border: Border.all(color: isDark ? const Color(0xFFB57EDC).withAlpha(50) : Colors.transparent),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.auto_awesome,
                       color: isDark
-                          ? Colors.purpleAccent.shade100
+                          ? const Color(0xFFB57EDC)
                           : Colors.purple.shade700,
                       size: 22,
                     ),
@@ -4914,7 +4782,7 @@ textInputAction: TextInputAction.done,
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
                             color: isDark
-                                ? Colors.purple.shade100
+                                ? const Color(0xFFF5F5F5)
                                 : Colors.purple.shade900,
                           ),
                         ),
@@ -4926,7 +4794,7 @@ textInputAction: TextInputAction.done,
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark
-                                ? Colors.purple.shade200
+                                ? const Color(0xFFAAAAAA)
                                 : Colors.purple.shade700,
                           ),
                         ),
@@ -4962,9 +4830,9 @@ textInputAction: TextInputAction.done,
                       label: const Text('Analizar'),
                       style: FilledButton.styleFrom(
                         backgroundColor: isDark
-                            ? Colors.purpleAccent.shade700
+                            ? const Color(0xFFB57EDC).withAlpha(40)
                             : Colors.purple.shade600,
-                        foregroundColor: Colors.white,
+                        foregroundColor: isDark ? const Color(0xFFB57EDC) : Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
@@ -5474,7 +5342,7 @@ textInputAction: TextInputAction.done,
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -5539,25 +5407,40 @@ textInputAction: TextInputAction.done,
     Color color,
     IconData icono,
   ) {
+    const Color kAccent = Color(0xFF00E5A0);
+    const Color kDanger = Color(0xFFFF4D6A);
+    // Map generic colors to brand palette for dark mode
+    final Color resolvedColor = (color == Colors.green || color == Colors.teal)
+        ? kAccent
+        : (color == Colors.red)
+            ? kDanger
+            : color;
     return Column(
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icono, color: color, size: 16),
+            Icon(icono, color: resolvedColor, size: 13),
             const SizedBox(width: 4),
             Text(
-              titulo,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              titulo.toUpperCase(),
+              style: const TextStyle(
+                color: Color(0xFF888888),
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
         Text(
           _textoMonto(monto),
           style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
+            color: resolvedColor,
+            fontWeight: FontWeight.w800,
+            fontSize: 17,
+            letterSpacing: -0.5,
           ),
         ),
       ],
@@ -5875,10 +5758,7 @@ textInputAction: TextInputAction.done,
       final facturadoVisual = (gastosFacturadosBruto - pagoAFacturadoV).clamp(0, 1 << 31).toInt();
       final porFacturarVisual = (gastosPorFacturarBruto - pagoRestanteV).clamp(0, 1 << 31).toInt();
 
-      final pagoAFacturadoR = pagosAcumuladosReal > gastosFacturadosReal ? gastosFacturadosReal : pagosAcumuladosReal;
-      final pagoRestanteR = pagosAcumuladosReal - pagoAFacturadoR;
-      final facturadoRealSinAjustes = (gastosFacturadosReal - pagoAFacturadoR).clamp(0, 1 << 31).toInt();
-      final porFacturarRealSinAjustes = (gastosPorFacturarReal - pagoRestanteR).clamp(0, 1 << 31).toInt();
+      // Variables de ajuste real de crédito reservadas para futura expansión
 
       if (!mounted) return;
 
@@ -6143,65 +6023,63 @@ textInputAction: TextInputAction.done,
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    return Card(
-      elevation: 0,
-      color: isDark ? const Color(0xFF1E2433) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
         ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(isDark ? 50 : 30),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icono,
-                  color: isDark ? color.shade200 : color.shade700,
-                ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1C),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2A2A2A)),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titulo,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+              child: Icon(
+                icono,
+                color: const Color(0xFFF5F5F5),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFF5F5F5),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitulo,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade600,
-                      ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitulo,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF888888),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_right,
-                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              color: Color(0xFF555555),
+              size: 20,
+            ),
+          ],
         ),
       ),
     );
@@ -6344,7 +6222,7 @@ textInputAction: TextInputAction.done,
                             ),
                           ),
                           value: tienePermiso,
-                          activeThumbColor: Colors.teal.shade400,
+                          activeThumbColor: const Color(0xFF00E5A0),
                           onChanged: (val) async {
                             HapticFeedback.lightImpact();
                             if (val) {
@@ -7069,7 +6947,7 @@ textInputAction: TextInputAction.done,
                 ),
               ],
             ),
-            const SizedBox(height: 90),
+            const SizedBox(height: 140),
           ],
         );
       },
@@ -7297,7 +7175,7 @@ textInputAction: TextInputAction.done,
                   ),
                 ),
               ),
-              const SizedBox(height: 90),
+              const SizedBox(height: 140),
             ],
           ),
         );
@@ -7317,7 +7195,7 @@ textInputAction: TextInputAction.done,
               Icons.flag_circle_outlined,
               size: 80,
               color: isDark
-                  ? Colors.tealAccent.withAlpha(100)
+                  ? const Color(0xFF00E5A0).withAlpha(100)
                   : Colors.teal.shade200,
             ),
             const SizedBox(height: 20),
@@ -7332,7 +7210,7 @@ textInputAction: TextInputAction.done,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                color: isDark ? const Color(0xFFAAAAAA) : Colors.grey.shade600,
               ),
             ),
             const SizedBox(height: 28),
@@ -7364,24 +7242,16 @@ textInputAction: TextInputAction.done,
     int completadas,
     bool isDark,
   ) {
-    final colorBarra = progresoTotal >= 1.0
-        ? Colors.greenAccent
-        : Colors.tealAccent;
+    final colorBarra = const Color(0xFF00E5A0);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1A2E2A), const Color(0xFF1E2433)]
-              : [Colors.teal.shade50, Colors.white],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? const Color(0xFF1C1C1C) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? Colors.teal.shade800 : Colors.teal.shade100,
+          color: isDark ? const Color(0xFF2A2A2A) : Colors.teal.shade100,
         ),
       ),
       child: Column(
@@ -7391,7 +7261,7 @@ textInputAction: TextInputAction.done,
             children: [
               Icon(
                 Icons.savings,
-                color: isDark ? Colors.tealAccent : Colors.teal,
+                color: isDark ? const Color(0xFF00E5A0) : Colors.teal,
                 size: 22,
               ),
               const SizedBox(width: 8),
@@ -7400,7 +7270,7 @@ textInputAction: TextInputAction.done,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                  color: isDark ? const Color(0xFFF5F5F5) : Colors.grey.shade700,
                 ),
               ),
             ],
@@ -7411,7 +7281,7 @@ textInputAction: TextInputAction.done,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: isDark ? Colors.tealAccent : Colors.teal.shade700,
+              color: isDark ? const Color(0xFF00E5A0) : Colors.teal.shade700,
             ),
           ),
           const SizedBox(height: 2),
@@ -7419,7 +7289,7 @@ textInputAction: TextInputAction.done,
             'de ${_textoMonto(totalObjetivo)} objetivo total',
             style: TextStyle(
               fontSize: 13,
-              color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+              color: isDark ? const Color(0xFFAAAAAA) : Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 14),
@@ -7433,7 +7303,7 @@ textInputAction: TextInputAction.done,
                 value: value,
                 minHeight: 8,
                 backgroundColor: isDark
-                    ? Colors.grey.shade800
+                    ? const Color(0xFF141414)
                     : Colors.grey.shade200,
                 valueColor: AlwaysStoppedAnimation(colorBarra),
               ),
@@ -7501,21 +7371,14 @@ textInputAction: TextInputAction.done,
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: completada
-              ? (isDark ? Colors.green.shade900 : Colors.green.shade100)
-              : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+              ? (isDark ? const Color(0xFF00E5A0).withAlpha(40) : Colors.green.shade100)
+              : (isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100),
           width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 40 : 6),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -7547,10 +7410,10 @@ textInputAction: TextInputAction.done,
                                   value: value,
                                   strokeWidth: 4,
                                   backgroundColor: isDark
-                                      ? Colors.grey.shade800
+                                      ? const Color(0xFF1C1C1C)
                                       : Colors.grey.shade200,
                                   valueColor: AlwaysStoppedAnimation(
-                                    completada ? Colors.green : color,
+                                    completada ? const Color(0xFF00E5A0) : color,
                                   ),
                                 ),
                           ),
@@ -8117,7 +7980,6 @@ textInputAction: TextInputAction.done,
           builder: (context, _) {
             final settings = widget.settingsController.settings;
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            final formatCurrency = NumberFormat.simpleCurrency(locale: settings.localeCode);
 
             int ingresoFijo = 0;
             int gastoFijo = 0;
@@ -8220,7 +8082,7 @@ textInputAction: TextInputAction.done,
                           Expanded(
                             child: Text('↳ $nombre ${isCredit ? '(Crédito)' : ''}', style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 13), overflow: TextOverflow.ellipsis),
                           ),
-                          Text(_textoMonto(monto < 0 ? -itemMonto : itemMonto, ocultable: false), style: TextStyle(color: color.withOpacity(0.8), fontSize: 13)),
+                          Text(_textoMonto(monto < 0 ? -itemMonto : itemMonto, ocultable: false), style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 13)),
                         ],
                       ),
                     );
@@ -8244,7 +8106,7 @@ textInputAction: TextInputAction.done,
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                      color: isDark ? const Color(0xFF141414) : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
@@ -8280,8 +8142,8 @@ textInputAction: TextInputAction.done,
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color: porAsignar == 0 
-                                    ? Colors.green.withOpacity(0.2) 
-                                    : (porAsignar > 0 ? Colors.amber.withOpacity(0.2) : Colors.red.withOpacity(0.2)),
+                                    ? Colors.green.withValues(alpha: 0.2) 
+                                    : (porAsignar > 0 ? Colors.amber.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2)),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -8394,7 +8256,7 @@ textInputAction: TextInputAction.done,
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                      color: isDark ? const Color(0xFF141414) : Colors.white,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -8471,8 +8333,8 @@ textInputAction: TextInputAction.done,
                                   final pctSub = presupuestoSub > 0 ? (gastadoSub / presupuestoSub).clamp(0.0, 1.0) : 0.0;
                                   
                                   Color colorBarraSub = Colors.blue;
-                                  if (pctSub >= 1.0) colorBarraSub = Colors.red;
-                                  else if (pctSub >= 0.85) colorBarraSub = Colors.orange;
+                                  if (pctSub >= 1.0) { colorBarraSub = Colors.red; }
+                                  else if (pctSub >= 0.85) { colorBarraSub = Colors.orange; }
                                   
                                   return Padding(
                                     padding: const EdgeInsets.only(left: 16, top: 4, bottom: 12),
@@ -8561,35 +8423,37 @@ textInputAction: TextInputAction.done,
     required List<Widget> children,
     IconData? icono,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // En modo oscuro usamos un gris oscuro (surface) y en claro blanco
-    final bgColor = isDark
-        ? Theme.of(context).colorScheme.surfaceContainerHighest
-        : Colors.white;
-    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
-
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
-      color: bgColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: borderColor),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2A2A2A)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           leading: icono != null
-              ? Icon(icono, color: Theme.of(context).colorScheme.primary)
+              ? Icon(icono, color: const Color(0xFFF5F5F5), size: 20)
               : null,
           title: Text(
             titulo,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Color(0xFFF5F5F5),
+            ),
           ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          backgroundColor: bgColor,
-          collapsedBackgroundColor: bgColor,
+          trailing: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF555555),
+          ),
+          iconColor: const Color(0xFF555555),
+          collapsedIconColor: const Color(0xFF555555),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          backgroundColor: const Color(0xFF141414),
+          collapsedBackgroundColor: const Color(0xFF141414),
           shape: const Border(),
           collapsedShape: const Border(),
           children: children,
@@ -9659,19 +9523,23 @@ textInputAction: TextInputAction.done,
     required bool activo,
     required VoidCallback onTap,
   }) {
+    const Color kAccent = Color(0xFF00E5A0);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: activo ? Colors.teal.shade400 : Colors.transparent,
+          color: activo ? kAccent.withAlpha(30) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: activo ? kAccent.withAlpha(80) : Colors.transparent,
+          ),
         ),
         child: Icon(
           icono,
           size: 18,
-          color: activo ? Colors.white : Colors.grey.shade600,
+          color: activo ? kAccent : const Color(0xFF555555),
         ),
       ),
     );
@@ -9710,7 +9578,7 @@ textInputAction: TextInputAction.done,
             ),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0xFF1E2433)
+                  ? const Color(0xFF141414)
                   : Colors.white,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(32),
@@ -9801,7 +9669,7 @@ textInputAction: TextInputAction.done,
                 SizedBox(
                   width: double.infinity,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     onTap: () {
                       Navigator.pop(context);
                       _mostrarEntradaRapida();
@@ -9812,71 +9680,56 @@ textInputAction: TextInputAction.done,
                         horizontal: 20,
                       ),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors:
-                              Theme.of(context).brightness == Brightness.dark
-                              ? [
-                                  const Color(0xFF312E81),
-                                  const Color(0xFF1E1B4B),
-                                ]
-                              : [
-                                  const Color(0xFFEDE9FE),
-                                  const Color(0xFFE0E7FF),
-                                ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+                        color: const Color(0xFF141414),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.purple.shade700.withAlpha(80)
-                              : Colors.purple.shade200,
+                          color: const Color(0xFF00E5A0).withAlpha(50),
                         ),
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.auto_awesome,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.purpleAccent.shade100
-                                : Colors.purple.shade700,
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00E5A0).withAlpha(18),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome,
+                              color: Color(0xFF00E5A0),
+                              size: 18,
+                            ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
+                          const SizedBox(width: 14),
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   'Entrada Rápida IA',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.purple.shade100
-                                        : Colors.purple.shade900,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    color: Color(0xFF00E5A0),
+                                    letterSpacing: -0.1,
                                   ),
                                 ),
+                                SizedBox(height: 2),
                                 Text(
                                   'Escribe o dicta tu gasto en lenguaje natural',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.purple.shade200
-                                        : Colors.purple.shade700,
+                                    color: Color(0xFF888888),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Icon(
+                          const Icon(
                             Icons.mic,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.purple.shade200
-                                : Colors.purple.shade600,
+                            color: Color(0xFF00E5A0),
+                            size: 20,
                           ),
                         ],
                       ),
@@ -9898,52 +9751,57 @@ textInputAction: TextInputAction.done,
     required MaterialColor color,
     required VoidCallback onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Map MaterialColors to brand palette
+    const Color kAccent  = Color(0xFF00E5A0); // green → ingresos
+    const Color kDanger  = Color(0xFFFF4D6A); // red → gastos
+    const Color kTransfer = Color(0xFF4DA6FF); // blue → transferencia
+    const Color kSimulate = Color(0xFFB57EDC); // purple → simular
+
+    final Color resolvedColor;
+    if (color == Colors.green) {
+      resolvedColor = kAccent;
+    } else if (color == Colors.red) {
+      resolvedColor = kDanger;
+    } else if (color == Colors.blue) {
+      resolvedColor = kTransfer;
+    } else {
+      resolvedColor = kSimulate;
+    }
+
     return _ScaleTap(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
         decoration: BoxDecoration(
-          color: isDark
-              ? color.shade900.withAlpha(60)
-              : color.shade50.withAlpha(150),
-          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark
-                ? color.shade700.withAlpha(100)
-                : color.shade200.withAlpha(150),
-            width: 1.2,
+            color: resolvedColor.withAlpha(50),
           ),
         ),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isDark ? color.shade800.withAlpha(100) : Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withAlpha(isDark ? 0 : 20),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                color: resolvedColor.withAlpha(18),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: resolvedColor.withAlpha(40)),
               ),
               child: Icon(
                 icono,
-                size: 28,
-                color: isDark ? color.shade200 : color.shade700,
+                size: 26,
+                color: resolvedColor,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Text(
               titulo,
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: isDark ? color.shade100 : color.shade900,
-                letterSpacing: -0.3,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: resolvedColor,
+                letterSpacing: -0.2,
               ),
             ),
           ],
@@ -10295,12 +10153,12 @@ textInputAction: TextInputAction.done,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? const Color(0xFF1E293B)
+                                ? const Color(0xFF141414)
                                 : Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: isDark
-                                  ? Colors.purple.shade700.withAlpha(80)
+                                  ? const Color(0xFF2A2A2A)
                                   : Colors.purple.shade200,
                             ),
                           ),
@@ -10712,8 +10570,8 @@ textInputAction: TextInputAction.done,
     final nombreControllers = <TextEditingController>[];
     final montoControllers = <TextEditingController>[];
     List<String> etiquetasSeleccionadas = [];
-    final TextEditingController _etiquetaController = TextEditingController();
-    final FocusNode _etiquetaFocusNode = FocusNode();
+    final TextEditingController etiquetaController = TextEditingController();
+    final FocusNode etiquetaFocusNode = FocusNode();
 
     if (esEdicion) {
       _itemController.text = (itemParaEditar['item'] ?? '').toString();
@@ -10804,7 +10662,7 @@ textInputAction: TextInputAction.done,
           builder: (context, setStateSB) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             Future<void> guardar() async {
-              final pendingTag = _etiquetaController.text.trim();
+              final pendingTag = etiquetaController.text.trim();
               if (pendingTag.isNotEmpty && !etiquetasSeleccionadas.contains(pendingTag)) {
                 etiquetasSeleccionadas.add(pendingTag);
               }
@@ -11353,14 +11211,14 @@ textInputAction: TextInputAction.done,
                                 child: ConstrainedBox(
                                   constraints: const BoxConstraints(minWidth: 80),
                                   child: KeyboardListener(
-                                    focusNode: FocusNode(), // Dummy node, events bubble up or we can just use _etiquetaFocusNode? Actually, KeyboardListener requires its own node or it won't work well. Let's just use the built-in trick: Text is never truly empty.
+                                    focusNode: FocusNode(), // Dummy node, events bubble up or we can just use etiquetaFocusNode? Actually, KeyboardListener requires its own node or it won't work well. Let's just use the built-in trick: Text is never truly empty.
                                     // Let's use the zero-width space trick for ultimate reliability without focus node bugs.
                                     // Wait, let's just use KeyboardListener with a shared focus node.
                                     // Actually, Flutter 3.0+ recommends `Focus` widget for this.
                                     child: Focus(
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Backspace') {
-                                          if (_etiquetaController.text.isEmpty && etiquetasSeleccionadas.isNotEmpty) {
+                                          if (etiquetaController.text.isEmpty && etiquetasSeleccionadas.isNotEmpty) {
                                             setStateSB(() {
                                               etiquetasSeleccionadas.removeLast();
                                             });
@@ -11370,8 +11228,8 @@ textInputAction: TextInputAction.done,
                                         return KeyEventResult.ignored;
                                       },
                                       child: TextField(
-                                        controller: _etiquetaController,
-                                        focusNode: _etiquetaFocusNode,
+                                        controller: etiquetaController,
+                                        focusNode: etiquetaFocusNode,
                                         decoration: const InputDecoration(
                                           isDense: true,
                                           border: InputBorder.none,
@@ -11389,8 +11247,8 @@ textInputAction: TextInputAction.done,
                                                 etiquetasSeleccionadas.add(tag);
                                               });
                                             }
-                                            _etiquetaController.clear();
-                                            _etiquetaFocusNode.requestFocus();
+                                            etiquetaController.clear();
+                                            etiquetaFocusNode.requestFocus();
                                           }
                                         },
                                         onSubmitted: (val) {
@@ -11398,8 +11256,8 @@ textInputAction: TextInputAction.done,
                                           if (tag.isNotEmpty && !etiquetasSeleccionadas.contains(tag)) {
                                             setStateSB(() {
                                               etiquetasSeleccionadas.add(tag);
-                                              _etiquetaController.clear();
-                                              _etiquetaFocusNode.requestFocus();
+                                              etiquetaController.clear();
+                                              etiquetaFocusNode.requestFocus();
                                             });
                                           }
                                         },
@@ -12957,7 +12815,7 @@ textInputAction: TextInputAction.done,
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2433) : Colors.white,
+            color: isDark ? const Color(0xFF141414) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -13195,7 +13053,7 @@ textInputAction: TextInputAction.done,
               Card(
                 margin: EdgeInsets.zero,
                 elevation: 0,
-                color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                color: isDark ? const Color(0xFF141414) : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
@@ -13269,7 +13127,7 @@ textInputAction: TextInputAction.done,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -14631,7 +14489,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                      color: isDark ? const Color(0xFF141414) : Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isDark
@@ -14884,7 +14742,7 @@ textInputAction: TextInputAction.done,
         hintText: hint,
         prefixIcon: Icon(icon, size: 20),
         filled: true,
-        fillColor: isDark ? const Color(0xFF1E2433) : Colors.white,
+        fillColor: isDark ? const Color(0xFF141414) : Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
@@ -14916,7 +14774,7 @@ textInputAction: TextInputAction.done,
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -15047,7 +14905,7 @@ textInputAction: TextInputAction.done,
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -15180,7 +15038,7 @@ textInputAction: TextInputAction.done,
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2433) : Colors.white,
+        color: isDark ? const Color(0xFF141414) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
@@ -15510,7 +15368,7 @@ textInputAction: TextInputAction.done,
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E2433) : Colors.white,
+          color: isDark ? const Color(0xFF141414) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,

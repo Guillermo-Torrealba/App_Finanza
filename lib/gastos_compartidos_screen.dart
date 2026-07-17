@@ -196,103 +196,122 @@ textInputAction: TextInputAction.done,
       itemBuilder: (context, index) {
         final d = deudas[index];
         final gasto = d['gastos'];
-        final Color cardColor = Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1E2433)
-            : Colors.white;
 
-        return Card(
-          elevation: 2,
-          color: cardColor,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF2A2A2A)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: esPagado
-                      ? Colors.green.shade100
-                      : Colors.red.shade100,
-                  child: Icon(
-                    Icons.person,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: esPagado
+                      ? const Color(0xFF00E5A0).withAlpha(20)
+                      : const Color(0xFFFF4D6A).withAlpha(20),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
                     color: esPagado
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        ? const Color(0xFF00E5A0).withAlpha(50)
+                        : const Color(0xFFFF4D6A).withAlpha(50),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        d['persona'],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(gasto?['item'] ?? 'Transacción eliminada'),
-                      if (gasto != null)
-                        Text(
-                          'Cuenta: ${gasto['cuenta']}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                    ],
-                  ),
+                child: Icon(
+                  Icons.person,
+                  size: 20,
+                  color: esPagado
+                      ? const Color(0xFF00E5A0)
+                      : const Color(0xFFFF4D6A),
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '\$${d['monto']}',
+                      d['persona'],
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Color(0xFFF5F5F5),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    if (!esPagado)
-                      InkWell(
-                        onTap: () => _marcarComoPagado(d),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Text(
-                            'Marcar Pagado',
-                            style: TextStyle(
-                              color: Colors.green.shade700,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                    const SizedBox(height: 3),
+                    Text(
+                      gasto?['item'] ?? 'Transacción eliminada',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF888888),
                       ),
-                    if (esPagado)
-                      const Text(
-                        'Pagado',
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                    ),
+                    if (gasto != null)
+                      Text(
+                        'Cuenta: ${gasto['cuenta']}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF666666),
                         ),
                       ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${d['monto']}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: Color(0xFFF5F5F5),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (!esPagado)
+                    InkWell(
+                      onTap: () => _marcarComoPagado(d),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E5A0).withAlpha(18),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF00E5A0).withAlpha(70),
+                          ),
+                        ),
+                        child: const Text(
+                          'Marcar Pagado',
+                          style: TextStyle(
+                            color: Color(0xFF00E5A0),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (esPagado)
+                    const Text(
+                      'Pagado',
+                      style: TextStyle(
+                        color: Color(0xFF00E5A0),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ),
         );
       },
