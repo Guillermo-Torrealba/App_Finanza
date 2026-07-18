@@ -750,6 +750,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         name: settings.currencyCode,
         symbol: _simboloMoneda(settings.currencyCode),
         decimalDigits: decimals,
+        customPattern: '\u00A4#,##0${decimals > 0 ? ".00" : ""}',
       );
       return formatter.format(numero);
     } catch (_) {
