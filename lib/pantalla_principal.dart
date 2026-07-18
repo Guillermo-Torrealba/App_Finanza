@@ -29,6 +29,7 @@ import 'app_secrets.dart';
 import 'package:image_picker/image_picker.dart';
 import 'receipt_scanner_service.dart';
 import 'divisor_cuenta_screen.dart';
+import 'gastos_pendientes_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -55,6 +56,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       .from('gastos_compartidos')
       .stream(primaryKey: ['id'])
       .eq('pagado', false);
+
+  // Stream para contar gastos pendientes de Apple Pay
+  final _pendientesStream = supabase
+      .from('gastos')
+      .stream(primaryKey: ['id'])
+      .eq('estado', 'pendiente');
 
   final _itemController = TextEditingController();
   final _detalleController = TextEditingController();
@@ -781,8 +788,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     for (final mov in movimientos) {
       // Excluir transacciones de crédito del saldo líquido
       if (mov['metodo_pago'] == 'Credito') continue;
-      // Excluir movimientos fantasma del saldo real
-      if ((mov['estado'] ?? 'real') == 'fantasma') continue;
+      // Excluir movimientos fantasma y pendientes del saldo real
+      final estadoSaldo = (mov['estado'] ?? 'real');
+      if (estadoSaldo == 'fantasma' || estadoSaldo == 'pendiente') continue;
 
       final monto = (mov['monto'] as num? ?? 0).toInt();
       if (mov['tipo'] == 'Ingreso') {
@@ -2229,6 +2237,54 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          // Badge de Buzón de Gastos Pendientes
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _pendientesStream,
+            builder: (context, snapshot) {
+              final count = snapshot.data?.length ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.inbox_rounded),
+                      tooltip: 'Buzón de gastos pendientes',
+                      onPressed: () => _abrirBuzonPendientes(),
+                    ),
+                    if (count > 0)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: AnimatedScale(
+                          scale: 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.elasticOut,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF3B30),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                count > 9 ? '9+' : '$count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
           if (_indicePestana == 0) // Solo mostrar en inicio
             IconButton(
               icon: const Icon(Icons.document_scanner),
@@ -2632,7 +2688,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     for (final mov in datosFiltrados) {
       // Ignorar transacciones de Crédito
       if ((mov['metodo_pago'] ?? 'Debito') == 'Credito') continue;
-      final esFantasmaMov = (mov['estado'] ?? 'real') == 'fantasma';
+      final estadoMov = (mov['estado'] ?? 'real');
+      final esFantasmaMov = estadoMov == 'fantasma';
+      if (estadoMov == 'pendiente') continue; // Excluir pendientes del balance
       final m = (mov['monto'] as num? ?? 0).toInt();
 
       if (!esFantasmaMov) {
@@ -2673,9 +2731,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
           fechaMov.month == _mesVisualizado.month;
     }).toList();
 
-    // Para análisis y gráficos: excluye fantasmas
+    // Para análisis y gráficos: excluye fantasmas y pendientes
     final datosDelMesSoloReales = datosDelMes
-        .where((mov) => (mov['estado'] ?? 'real') != 'fantasma')
+        .where((mov) {
+          final est = (mov['estado'] ?? 'real');
+          return est != 'fantasma' && est != 'pendiente';
+        })
         .toList();
 
     var ingresoMes = 0;
@@ -10470,6 +10531,35 @@ textInputAction: TextInputAction.done,
     );
   }
 
+  /// Abre el Buzón de Gastos Pendientes como una pantalla de página completa.
+  /// Cuando el usuario aprueba un gasto, cierra el buzón y abre el formulario
+  /// pre-rellenado con el flag [gastoIdPendiente] para hacer UPDATE.
+  void _abrirBuzonPendientes() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => GastosPendientesScreen(
+          onAprobar: (gastoPendiente) {
+            // Cerrar el buzón
+            Navigator.pop(ctx);
+            // Abrir el formulario pre-rellenado
+            _mostrarFormulario(
+              tipo: (gastoPendiente['tipo'] ?? 'Gasto').toString(),
+              valoresIniciales: {
+                'item': gastoPendiente['item'] ?? '',
+                'monto': (gastoPendiente['monto'] as num? ?? 0).toInt(),
+                'fecha': gastoPendiente['fecha']?.toString() ??
+                    DateTime.now().toIso8601String().substring(0, 10),
+                'cuenta': gastoPendiente['cuenta'] ?? '',
+              },
+              gastoIdPendiente: gastoPendiente['id'] as int?,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _toggleChip({
     required String label,
     required bool selected,
@@ -10523,10 +10613,15 @@ textInputAction: TextInputAction.done,
     );
   }
 
+  /// Abre el formulario de gasto/ingreso.
+  ///
+  /// [gastoIdPendiente] — si se pasa, al guardar se hará un UPDATE sobre ese
+  /// registro cambiando su estado a 'confirmado' en lugar de crear un INSERT.
   void _mostrarFormulario({
     required String tipo,
     Map<String, dynamic>? itemParaEditar,
     Map<String, dynamic>? valoresIniciales,
+    int? gastoIdPendiente,
   }) {
     final settings = widget.settingsController.settings;
     final esEdicion = itemParaEditar != null;
@@ -10748,6 +10843,26 @@ textInputAction: TextInputAction.done,
                         if (boletaUrl != null) 'boleta_url': boletaUrl,
                       })
                       .eq('id', itemParaEditar['id'] as int);
+                } else if (gastoIdPendiente != null) {
+                  // ── Confirmación de gasto pendiente (Apple Pay) ──
+                  // UPDATE sobre el registro existente → no crea duplicados
+                  await supabase
+                      .from('gastos')
+                      .update({
+                        'fecha': fechaSeleccionada.toIso8601String(),
+                        'item': item.isEmpty ? 'Sin nombre' : item,
+                        'detalle': detalle,
+                        'monto': monto,
+                        'categoria': categoria,
+                        'subcategoria': subcategoriaSeleccionada,
+                        'cuenta': cuentaSeleccionada,
+                        'tipo': tipo,
+                        'metodo_pago': metodo,
+                        'estado': 'confirmado', // ← Marcar como confirmado
+                        'etiquetas': etiquetasSeleccionadas,
+                        if (boletaUrl != null) 'boleta_url': boletaUrl,
+                      })
+                      .eq('id', gastoIdPendiente);
                 } else {
                   int montoReal = monto;
                   int montoAmigos = 0;
