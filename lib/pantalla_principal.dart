@@ -2542,131 +2542,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     );
   }
 
-  Widget _bannerGastosARevisar(List<Map<String, dynamic>> gastos) {
-    return Card(
-      color: Colors.orange.shade50,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.orange.shade300, width: 1.5),
-      ),
-      margin: EdgeInsets.symmetric(horizontal: widget.settingsController.settings.compactMode ? 12.0 : 16.0),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          _mostrarModalGastosARevisar(gastos);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
-          child: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pagos por revisar',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Colors.orange.shade900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tienes ${gastos.length} movimiento(s) sin categorizar.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.orange.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, color: Colors.orange.shade800),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _mostrarModalGastosARevisar(List<Map<String, dynamic>> gastos) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              const Text('Gastos a Revisar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: gastos.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final gasto = gastos[index];
-                    final date = DateTime.tryParse(gasto['fecha'] ?? '');
-                    final dateStr = date != null ? DateFormat('dd MMM').format(date) : '';
-                    final esIngreso = (gasto['tipo'] ?? 'Gasto') == 'Ingreso';
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      leading: CircleAvatar(
-                        backgroundColor: esIngreso ? Colors.green.shade100 : Colors.orange.shade100,
-                        child: Icon(
-                          esIngreso ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                          color: esIngreso ? Colors.green.shade800 : Colors.orange.shade800,
-                        ),
-                      ),
-                      title: Text(gasto['item']?.toString() ?? 'Sin Detalles', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('$dateStr · ${esIngreso ? "Ingreso" : "Gasto"}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            formatoMoneda(gasto['monto'] ?? 0),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            onPressed: () async {
-                              final id = gasto['id'];
-                              if (id != null) {
-                                await supabase.from('gastos').delete().eq('id', id);
-                                if (context.mounted) Navigator.pop(context); // Cerrar hoja modal para refrescar
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        Navigator.pop(context); // Cerrar hoja modal
-                        _mostrarDialogo(itemParaEditar: gasto); // Abrir editor de gasto
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _construirPaginaInicio(List<Map<String, dynamic>> todosLosDatos) {
     final settings = widget.settingsController.settings;
     final compacto = settings.compactMode;
@@ -2844,12 +2719,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               ? _limiteMovimientos!
               : totalFiltrados);
 
-    final gastosARevisar = todosLosDatos.where((mov) {
-      final cat = (mov['categoria'] ?? '').toString();
-      final noBorrado = (mov['estado'] ?? 'real') != 'eliminado';
-      return cat == 'A revisar' && noBorrado;
-    }).toList();
-
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -2857,10 +2726,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             children: [
               _selectorCuentas(),
               const SizedBox(height: 12),
-              if (gastosARevisar.isNotEmpty) ...[
-                _bannerGastosARevisar(gastosARevisar),
-                const SizedBox(height: 12),
-              ],
               // ── Tarjeta Liquidez Neta ──
               Builder(
                 builder: (context) {
