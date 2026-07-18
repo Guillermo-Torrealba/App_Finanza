@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -84,7 +85,7 @@ class ReceiptScannerService {
           
       return publicUrl;
     } catch (e) {
-      print('Error uploading receipt image: $e');
+      debugPrint('Error uploading receipt image: $e');
       return null;
     }
   }

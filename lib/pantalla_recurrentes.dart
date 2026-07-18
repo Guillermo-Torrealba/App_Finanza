@@ -206,6 +206,7 @@ class FormularioRecurrente extends StatefulWidget {
   final String? initialType;
 
   const FormularioRecurrente({
+    super.key,
     required this.settingsController,
     this.itemParaEditar,
     this.initialType,

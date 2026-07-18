@@ -5513,7 +5513,7 @@ textInputAction: TextInputAction.done,
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      // Traer TODO incluyendo ID para poder borrar por ID
+      // Traer todo incluyendo ID para poder borrar por ID
       final List<dynamic> response = await supabase
           .from('gastos')
           .select('id, monto, tipo, categoria, metodo_pago, fecha, item, estado')
@@ -10840,7 +10840,7 @@ textInputAction: TextInputAction.done,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
                         'etiquetas': etiquetasSeleccionadas,
-                        if (boletaUrl != null) 'boleta_url': boletaUrl,
+                        'boleta_url': ?boletaUrl,
                       })
                       .eq('id', itemParaEditar['id'] as int);
                 } else if (gastoIdPendiente != null) {
@@ -10860,7 +10860,7 @@ textInputAction: TextInputAction.done,
                         'metodo_pago': metodo,
                         'estado': 'confirmado', // ← Marcar como confirmado
                         'etiquetas': etiquetasSeleccionadas,
-                        if (boletaUrl != null) 'boleta_url': boletaUrl,
+                        'boleta_url': ?boletaUrl,
                       })
                       .eq('id', gastoIdPendiente);
                 } else {
@@ -10904,7 +10904,7 @@ textInputAction: TextInputAction.done,
                         'metodo_pago': metodo,
                         'estado': esFantasmaForm ? 'fantasma' : 'real',
                         'etiquetas': etiquetasSeleccionadas,
-                        if (boletaUrl != null) 'boleta_url': boletaUrl,
+                        'boleta_url': ?boletaUrl,
                       })
                       .select()
                       .single();
