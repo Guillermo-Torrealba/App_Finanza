@@ -28,5 +28,5 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-</dict>
+\t<key>NSSpeechRecognitionUsageDescription</key>\n\t<string>Necesitamos reconocimiento de voz para que dictes tus gastos.</string>\n\t<key>NSMicrophoneUsageDescription</key>\n\t<string>Necesitamos el micrófono para escucharte.</string>\n</dict>
 </plist>

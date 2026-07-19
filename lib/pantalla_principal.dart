@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import 'dart:ui';
 import 'dart:math';
@@ -114,7 +115,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Seleccionar origen'),
-        content: const Text('¿De dónde quieres obtener la imagen de la boleta?'),
+        content: const Text(
+          '¿De dónde quieres obtener la imagen de la boleta?',
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -138,7 +141,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: source!);
-    
+
     if (image == null) return;
     final file = File(image.path);
 
@@ -149,7 +152,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Qué quieres hacer?'),
-        content: const Text('Puedes registrar esta boleta como un gasto personal o dividir la cuenta con amigos.'),
+        content: const Text(
+          'Puedes registrar esta boleta como un gasto personal o dividir la cuenta con amigos.',
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -172,24 +177,22 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     if (opcionSeleccionada == null) return;
 
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
       final scanner = ReceiptScannerService();
-      
+
       if (opcionSeleccionada == 'Personal') {
         final data = await scanner.parsePersonalReceipt(file);
         final url = await scanner.uploadReceiptImage(file);
         if (!mounted) return;
         Navigator.pop(context); // cerrar loader
-        
+
         _mostrarFormulario(
           tipo: 'Gasto',
           valoresIniciales: {
@@ -198,46 +201,47 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             'fecha': data.fecha,
             'categoria': data.categoriaSugerida,
             'boleta_url': url,
-          }
+          },
         );
       } else if (opcionSeleccionada == 'Dividir') {
         final data = await scanner.parseSharedReceipt(file);
         if (!mounted) return;
         Navigator.pop(context); // cerrar loader
-        
+
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (ctx) => DivisorCuentaScreen(
-              receiptImage: file,
-              sharedData: data,
-            ),
+            builder: (ctx) =>
+                DivisorCuentaScreen(receiptImage: file, sharedData: data),
           ),
         );
 
-        if (result != null && result is Map && result['action'] == 'guardar_compartido') {
-           _mostrarFormulario(
-             tipo: 'Gasto',
-             valoresIniciales: {
-               'item': 'Cuenta Dividida',
-               'monto': result['total'],
-               'fecha': DateTime.now().toString().substring(0, 10),
-               'categoria': 'Restaurante',
-               'boleta_url': result['boleta_url'],
-               'amigos': result['amigos'],
-             }
-           );
+        if (result != null &&
+            result is Map &&
+            result['action'] == 'guardar_compartido') {
+          _mostrarFormulario(
+            tipo: 'Gasto',
+            valoresIniciales: {
+              'item': 'Cuenta Dividida',
+              'monto': result['total'],
+              'fecha': DateTime.now().toString().substring(0, 10),
+              'categoria': 'Restaurante',
+              'boleta_url': result['boleta_url'],
+              'amigos': result['amigos'],
+            },
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // cerrar loader
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al procesar boleta: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al procesar boleta: $e')));
       }
     }
   }
+
   String? _filtroEtiqueta; // Tag seleccionado para filtrar
   int? _limiteMovimientos = 15;
 
@@ -288,12 +292,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       final strGastos = prefs.getString('gastos_cache');
       if (strGastos != null) {
         final List decoded = jsonDecode(strGastos);
-        _cachedGastos = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+        _cachedGastos = decoded
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
       final strMetas = prefs.getString('metas_cache');
       if (strMetas != null) {
         final List decoded = jsonDecode(strMetas);
-        _cachedMetas = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+        _cachedMetas = decoded
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
     } catch (e) {
       debugPrint('Error leyendo cache: $e');
@@ -702,7 +710,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   style: TextStyle(
                     fontSize: 12,
                     color: seleccionado ? kAccent : const Color(0xFF888888),
-                    fontWeight: seleccionado ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: seleccionado
+                        ? FontWeight.w600
+                        : FontWeight.w400,
                   ),
                 ),
               ),
@@ -715,9 +725,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             color: seleccionado ? kAccent.withAlpha(80) : kBorder,
             width: 1,
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           showCheckmark: false,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           onSelected: (_) => setState(() => _ordenamiento = valor),
@@ -1062,8 +1070,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       return (mov['categoria'] ?? 'Varios').toString() == categoria;
     }).toList();
 
-    gastos.sort((a, b) =>
-        ((b['monto'] as num).abs()).compareTo((a['monto'] as num).abs()));
+    gastos.sort(
+      (a, b) =>
+          ((b['monto'] as num).abs()).compareTo((a['monto'] as num).abs()),
+    );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF141414) : Colors.white;
@@ -1091,7 +1101,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -1113,10 +1126,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         children: [
                           const Text(
                             'Detalle de categoría',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
-                            ),
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
                           ),
                           Text(
                             categoria,
@@ -1131,7 +1141,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                     IconButton(
                       icon: Icon(
                         Icons.close,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
                       ),
                       onPressed: () => Navigator.pop(ctx),
                     ),
@@ -1145,7 +1157,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         child: Text(
                           'No hay gastos registrados en esta categoría.',
                           style: TextStyle(
-                            color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.grey.shade500
+                                : Colors.grey.shade600,
                           ),
                         ),
                       )
@@ -1153,7 +1167,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         itemCount: gastos.length,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         separatorBuilder: (_, _) => Divider(
-                          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade200,
                           indent: 72,
                           endIndent: 16,
                           height: 1,
@@ -1165,10 +1181,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           final detalle = (mov['detalle'] ?? '').toString();
                           final monto = (mov['monto'] as num? ?? 0).toInt();
                           final fechaStr = (mov['fecha'] ?? '').toString();
-                          final fecha = DateTime.tryParse(fechaStr) ?? DateTime.now();
-                          
+                          final fecha =
+                              DateTime.tryParse(fechaStr) ?? DateTime.now();
+
                           return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 4,
+                            ),
                             onTap: () {
                               Navigator.pop(ctx);
                               _mostrarDialogo(itemParaEditar: mov);
@@ -1177,7 +1197,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade100,
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
@@ -1185,14 +1207,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   '${fecha.day}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: isDark ? Colors.white70 : Colors.black87,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black87,
                                   ),
                                 ),
                               ),
                             ),
                             title: Text(
                               item.isNotEmpty ? item : 'Gasto sin título',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1201,7 +1227,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   cuenta.isNotEmpty ? cuenta : 'Efectivo',
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                    color: isDark
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade600,
                                   ),
                                 ),
                                 if (detalle.isNotEmpty) ...[
@@ -1213,7 +1241,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontStyle: FontStyle.italic,
-                                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                                      color: isDark
+                                          ? Colors.grey.shade500
+                                          : Colors.grey.shade600,
                                     ),
                                   ),
                                 ],
@@ -2004,7 +2034,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 decoration: BoxDecoration(
                   color: const Color(0xFF141414),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
+                  border: Border.all(
+                    color: const Color(0xFF00E5A0).withAlpha(40),
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -2015,7 +2047,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                           decoration: BoxDecoration(
                             color: const Color(0xFF00E5A0).withAlpha(18),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
+                            border: Border.all(
+                              color: const Color(0xFF00E5A0).withAlpha(40),
+                            ),
                           ),
                           child: const Icon(
                             Icons.auto_awesome,
@@ -2298,17 +2332,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         initialData: _cachedGastos,
         stream: _stream.map((datos) {
           try {
-            widget.settingsController.preferences.setString('gastos_cache', jsonEncode(datos));
+            widget.settingsController.preferences.setString(
+              'gastos_cache',
+              jsonEncode(datos),
+            );
           } catch (_) {}
           // Normalizar tipos antiguos para no romper balances y gráficos
           return datos.map((d) {
-             if (d['tipo'] == 'Cuota' || d['tipo'] == 'Ahorro') {
-                 final newMap = Map<String, dynamic>.from(d);
-                 newMap['tipo_original'] = d['tipo'];
-                 newMap['tipo'] = 'Gasto';
-                 return newMap;
-             }
-             return d;
+            if (d['tipo'] == 'Cuota' || d['tipo'] == 'Ahorro') {
+              final newMap = Map<String, dynamic>.from(d);
+              newMap['tipo_original'] = d['tipo'];
+              newMap['tipo'] = 'Gasto';
+              return newMap;
+            }
+            return d;
           }).toList();
         }),
         builder: (context, snapshot) {
@@ -2325,14 +2362,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       Icon(
                         Icons.cloud_sync_rounded,
                         size: 36,
-                        color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                        color: isDark
+                            ? Colors.grey.shade600
+                            : Colors.grey.shade400,
                       ),
                       SizedBox(
                         width: 64,
                         height: 64,
                         child: CircularProgressIndicator(
                           strokeWidth: 3,
-                          color: isDark ? Colors.indigo.shade300 : Colors.indigo.shade600,
+                          color: isDark
+                              ? Colors.indigo.shade300
+                              : Colors.indigo.shade600,
                         ),
                       ),
                     ],
@@ -2486,7 +2527,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             ],
           ), // BottomAppBar child Row
         ), // BottomAppBar
-      ) // Container
+      ), // Container
     ); // Scaffold
 
     if (!_bloqueada) {
@@ -2608,12 +2649,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
     }).toList();
 
     // Para análisis y gráficos: excluye fantasmas y pendientes
-    final datosDelMesSoloReales = datosDelMes
-        .where((mov) {
-          final est = (mov['estado'] ?? 'real');
-          return est != 'fantasma' && est != 'pendiente';
-        })
-        .toList();
+    final datosDelMesSoloReales = datosDelMes.where((mov) {
+      final est = (mov['estado'] ?? 'real');
+      return est != 'fantasma' && est != 'pendiente';
+    }).toList();
 
     var ingresoMes = 0;
     var gastoMes = 0;
@@ -2740,11 +2779,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   final double fraccionCredito = 1.0 - fraccionCuenta;
                   final bool esNegativo = saldoNeto < 0;
 
-                  const Color kAccent  = Color(0xFF00E5A0);
-                  const Color kDanger  = Color(0xFFFF4D6A);
-                  const Color kBorder  = Color(0xFF2A2A2A);
+                  const Color kAccent = Color(0xFF00E5A0);
+                  const Color kDanger = Color(0xFFFF4D6A);
+                  const Color kBorder = Color(0xFF2A2A2A);
                   const Color kSurface = Color(0xFF141414);
-                  const Color kLabel   = Color(0xFF888888);
+                  const Color kLabel = Color(0xFF888888);
 
                   final Color colorNeto = esNegativo ? kDanger : kAccent;
 
@@ -2856,7 +2895,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                     decoration: BoxDecoration(
                                       color: kAccent.withAlpha(20),
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: kAccent.withAlpha(40)),
+                                      border: Border.all(
+                                        color: kAccent.withAlpha(40),
+                                      ),
                                     ),
                                     child: Icon(
                                       Icons.account_balance,
@@ -2894,11 +2935,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             ),
                             if (settings.hasCreditCard) ...[
                               // Separador vertical
-                              Container(
-                                height: 28,
-                                width: 1,
-                                color: kBorder,
-                              ),
+                              Container(height: 28, width: 1, color: kBorder),
                               // TC Utilizado
                               Expanded(
                                 child: Row(
@@ -2936,7 +2973,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       decoration: BoxDecoration(
                                         color: kDanger.withAlpha(20),
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: kDanger.withAlpha(40)),
+                                        border: Border.all(
+                                          color: kDanger.withAlpha(40),
+                                        ),
                                       ),
                                       child: const Icon(
                                         Icons.credit_card,
@@ -2968,7 +3007,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.chevron_left, color: Color(0xFFF5F5F5)),
+                      icon: const Icon(
+                        Icons.chevron_left,
+                        color: Color(0xFFF5F5F5),
+                      ),
                       onPressed: () => _cambiarMes(-1),
                     ),
                     Text(
@@ -2981,7 +3023,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.chevron_right, color: Color(0xFFF5F5F5)),
+                      icon: const Icon(
+                        Icons.chevron_right,
+                        color: Color(0xFFF5F5F5),
+                      ),
                       onPressed: () => _cambiarMes(1),
                     ),
                   ],
@@ -3089,57 +3134,63 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         ),
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
-                          padding: const EdgeInsets.only(bottom: 12, top: 4, left: 4, right: 4),
+                          padding: const EdgeInsets.only(
+                            bottom: 12,
+                            top: 4,
+                            left: 4,
+                            right: 4,
+                          ),
                           child: Column(
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                Row(
-                                  children: [
-                                    _iconoCategoria(
-                                      catData['categoria'] as String,
-                                      size: 18,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade700,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      catData['categoria'] as String,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                  Row(
+                                    children: [
+                                      _iconoCategoria(
+                                        catData['categoria'] as String,
+                                        size: 18,
+                                        color: isDark
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade700,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  _mostrarPorcentaje
-                                      ? '${((catData['porcentaje'] as double) * 100).toStringAsFixed(1)}%'
-                                      : _textoMonto(catData['monto'] as int),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        catData['categoria'] as String,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: catData['porcentaje'] as double,
-                                backgroundColor: isDark
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade100,
-                                color: Colors.teal.shade300,
-                                minHeight: 8,
+                                  Text(
+                                    _mostrarPorcentaje
+                                        ? '${((catData['porcentaje'] as double) * 100).toStringAsFixed(1)}%'
+                                        : _textoMonto(catData['monto'] as int),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 5),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: catData['porcentaje'] as double,
+                                  backgroundColor: isDark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade100,
+                                  color: Colors.teal.shade300,
+                                  minHeight: 8,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }).toList(),
                   ),
                 ),
               ],
@@ -3147,7 +3198,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
               Padding(
                 padding: EdgeInsets.fromLTRB(margin, 8, margin, 0),
                 child: TextField(
-textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.done,
                   controller: _busquedaController,
                   decoration: InputDecoration(
                     hintText: 'Buscar movimiento...',
@@ -3265,7 +3316,10 @@ textInputAction: TextInputAction.done,
                     child: Row(
                       children: [
                         ChoiceChip(
-                          label: const Text('Todas las etiquetas', style: TextStyle(fontSize: 12)),
+                          label: const Text(
+                            'Todas las etiquetas',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           selected: _filtroEtiqueta == null,
                           onSelected: (val) {
                             if (val) setState(() => _filtroEtiqueta = null);
@@ -3276,17 +3330,24 @@ textInputAction: TextInputAction.done,
                           // Calcular total de esta etiqueta (solo gastos)
                           double totalTag = 0;
                           for (final m in datosDelMes) {
-                            if (m['tipo'] == 'Gasto' && m['etiquetas'] != null && (m['etiquetas'] as List).contains(tag)) {
+                            if (m['tipo'] == 'Gasto' &&
+                                m['etiquetas'] != null &&
+                                (m['etiquetas'] as List).contains(tag)) {
                               totalTag += (m['monto'] as num? ?? 0).toDouble();
                             }
                           }
                           return Padding(
                             padding: const EdgeInsets.only(right: 8.0),
                             child: ChoiceChip(
-                              label: Text('$tag (${_textoMonto(totalTag.toInt(), ocultable: false)})', style: const TextStyle(fontSize: 12)),
+                              label: Text(
+                                '$tag (${_textoMonto(totalTag.toInt(), ocultable: false)})',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                               selected: _filtroEtiqueta == tag,
                               onSelected: (val) {
-                                setState(() => _filtroEtiqueta = val ? tag : null);
+                                setState(
+                                  () => _filtroEtiqueta = val ? tag : null,
+                                );
                               },
                             ),
                           );
@@ -3497,8 +3558,8 @@ textInputAction: TextInputAction.done,
                   color: esFantasma
                       ? const Color(0xFF1C1C1C)
                       : esIngreso
-                          ? const Color(0xFF00E5A0).withAlpha(22)
-                          : const Color(0xFFFF4D6A).withAlpha(22),
+                      ? const Color(0xFF00E5A0).withAlpha(22)
+                      : const Color(0xFFFF4D6A).withAlpha(22),
                   borderRadius: BorderRadius.circular(11),
                   border: esFantasma
                       ? Border.all(color: const Color(0xFF2A2A2A))
@@ -3600,8 +3661,8 @@ textInputAction: TextInputAction.done,
                     color: esFantasma
                         ? const Color(0xFF555555)
                         : esIngreso
-                            ? const Color(0xFF00E5A0)
-                            : const Color(0xFFFF4D6A),
+                        ? const Color(0xFF00E5A0)
+                        : const Color(0xFFFF4D6A),
                   ),
                 ),
                 if ((item['metodo_pago'] ?? 'Debito') == 'Credito')
@@ -3987,7 +4048,9 @@ textInputAction: TextInputAction.done,
               children: [
                 Icon(
                   Icons.account_balance_wallet,
-                  color: isDark ? const Color(0xFF4DA6FF) : Colors.blue.shade700,
+                  color: isDark
+                      ? const Color(0xFF4DA6FF)
+                      : Colors.blue.shade700,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
@@ -3996,7 +4059,9 @@ textInputAction: TextInputAction.done,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? const Color(0xFFF5F5F5) : Colors.blue.shade900,
+                    color: isDark
+                        ? const Color(0xFFF5F5F5)
+                        : Colors.blue.shade900,
                   ),
                 ),
               ],
@@ -4014,9 +4079,13 @@ textInputAction: TextInputAction.done,
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1C) : Colors.white.withAlpha(150),
+                color: isDark
+                    ? const Color(0xFF1C1C1C)
+                    : Colors.white.withAlpha(150),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: isDark ? const Color(0xFF2A2A2A) : Colors.transparent),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF2A2A2A) : Colors.transparent,
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4687,7 +4756,11 @@ textInputAction: TextInputAction.done,
                       color: isDark
                           ? const Color(0xFFB57EDC).withAlpha(20)
                           : Colors.purple.shade100.withAlpha(180),
-                      border: Border.all(color: isDark ? const Color(0xFFB57EDC).withAlpha(50) : Colors.transparent),
+                      border: Border.all(
+                        color: isDark
+                            ? const Color(0xFFB57EDC).withAlpha(50)
+                            : Colors.transparent,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -4759,7 +4832,9 @@ textInputAction: TextInputAction.done,
                         backgroundColor: isDark
                             ? const Color(0xFFB57EDC).withAlpha(40)
                             : Colors.purple.shade600,
-                        foregroundColor: isDark ? const Color(0xFFB57EDC) : Colors.white,
+                        foregroundColor: isDark
+                            ? const Color(0xFFB57EDC)
+                            : Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
@@ -5340,8 +5415,8 @@ textInputAction: TextInputAction.done,
     final Color resolvedColor = (color == Colors.green || color == Colors.teal)
         ? kAccent
         : (color == Colors.red)
-            ? kDanger
-            : color;
+        ? kDanger
+        : color;
     return Column(
       children: [
         Row(
@@ -5382,15 +5457,21 @@ textInputAction: TextInputAction.done,
       // Traer todo incluyendo ID para poder borrar por ID
       final List<dynamic> response = await supabase
           .from('gastos')
-          .select('id, monto, tipo, categoria, metodo_pago, fecha, item, estado')
+          .select(
+            'id, monto, tipo, categoria, metodo_pago, fecha, item, estado',
+          )
           .eq('user_id', user.id)
           .eq('cuenta', cuenta);
 
       final movimientos = List<Map<String, dynamic>>.from(response);
-      
+
       final esNombreCredito = _esCuentaCreditoPorNombre(cuenta);
-      final hasCredit = movimientos.any((mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito');
-      final hasDebit = movimientos.any((mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito');
+      final hasCredit = movimientos.any(
+        (mov) => (mov['metodo_pago'] ?? 'Debito') == 'Credito',
+      );
+      final hasDebit = movimientos.any(
+        (mov) => (mov['metodo_pago'] ?? 'Debito') != 'Credito',
+      );
 
       bool ajustarCredito = false;
 
@@ -5422,12 +5503,15 @@ textInputAction: TextInputAction.done,
       }
 
       if (ajustarCredito) {
-        await _ajustarDeudaTarjetaCuenta(cuenta, movimientosCuenta: movimientos);
+        await _ajustarDeudaTarjetaCuenta(
+          cuenta,
+          movimientosCuenta: movimientos,
+        );
         return;
       }
 
       // ── Paso 1: Calcular saldo actual (con todos los ajustes, como un ledger real) ──
-      var saldoActual = 0;     // lo que el dashboard muestra (con ajustes)
+      var saldoActual = 0; // lo que el dashboard muestra (con ajustes)
 
       for (final mov in movimientos) {
         // Solo débito (metodo_pago null se trata como Debito)
@@ -5456,7 +5540,7 @@ textInputAction: TextInputAction.done,
             text: saldoActual.abs().toString(),
           );
           bool esPositivo = saldoActual >= 0;
-          
+
           return StatefulBuilder(
             builder: (context, setDialogState) {
               return AlertDialog(
@@ -5479,11 +5563,14 @@ textInputAction: TextInputAction.done,
                             setDialogState(() => esPositivo = !esPositivo);
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 14,
+                            ),
                             decoration: BoxDecoration(
-                              color: esPositivo 
-                                ? Colors.green.withAlpha(30) 
-                                : Colors.red.withAlpha(30),
+                              color: esPositivo
+                                  ? Colors.green.withAlpha(30)
+                                  : Colors.red.withAlpha(30),
                               borderRadius: const BorderRadius.only(
                                 topLeft: Radius.circular(8),
                                 bottomLeft: Radius.circular(8),
@@ -5509,7 +5596,9 @@ textInputAction: TextInputAction.done,
                             textInputAction: TextInputAction.done,
                             controller: controller,
                             keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
                             decoration: const InputDecoration(
                               labelText: 'Nuevo saldo',
                               border: OutlineInputBorder(),
@@ -5523,7 +5612,10 @@ textInputAction: TextInputAction.done,
                     const SizedBox(height: 8),
                     Text(
                       'Toca +/- para cambiar el signo',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                      ),
                     ),
                   ],
                 ),
@@ -5534,9 +5626,11 @@ textInputAction: TextInputAction.done,
                   ),
                   ElevatedButton(
                     onPressed: () {
-                      final montoAbs = int.tryParse(
-                        controller.text.replaceAll(RegExp(r'[^0-9]'), ''),
-                      ) ?? 0;
+                      final montoAbs =
+                          int.tryParse(
+                            controller.text.replaceAll(RegExp(r'[^0-9]'), ''),
+                          ) ??
+                          0;
                       final resultado = esPositivo ? montoAbs : -montoAbs;
                       Navigator.pop(ctx, resultado);
                     },
@@ -5565,9 +5659,10 @@ textInputAction: TextInputAction.done,
           builder: (ctx) => AlertDialog(
             title: Text('Confirmar Ajuste en $cuenta'),
             content: Text(
-                'Estás a punto de ingresar un ajuste en la cuenta "$cuenta".\n\n'
-                'La cuenta seleccionada es estrictamente "$cuenta".\n'
-                '¿Continuar?'),
+              'Estás a punto de ingresar un ajuste en la cuenta "$cuenta".\n\n'
+              'La cuenta seleccionada es estrictamente "$cuenta".\n'
+              '¿Continuar?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -5603,7 +5698,9 @@ textInputAction: TextInputAction.done,
       _aiService.invalidateCache();
 
       if (mounted) {
-        _mostrarSnack('Saldo de $cuenta ajustado a ${_textoMonto(nuevoSaldo, ocultable: false)}');
+        _mostrarSnack(
+          'Saldo de $cuenta ajustado a ${_textoMonto(nuevoSaldo, ocultable: false)}',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -5620,20 +5717,26 @@ textInputAction: TextInputAction.done,
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      final movimientos = movimientosCuenta ??
+      final movimientos =
+          movimientosCuenta ??
           List<Map<String, dynamic>>.from(
             await supabase
                 .from('gastos')
-                .select('monto, tipo, categoria, metodo_pago, fecha, item, estado')
+                .select(
+                  'monto, tipo, categoria, metodo_pago, fecha, item, estado',
+                )
                 .eq('user_id', user.id)
                 .eq('cuenta', cuenta),
           );
 
       final settings = widget.settingsController.settings;
       final now = DateTime.now();
-      final rangosCredito = _obtenerRangosCicloCredito(settings, referenceDate: now);
+      final rangosCredito = _obtenerRangosCicloCredito(
+        settings,
+        referenceDate: now,
+      );
       final curStart = rangosCredito['curStart']!;
-      
+
       var gastosFacturadosBruto = 0;
       var gastosPorFacturarBruto = 0;
       var pagosAcumulados = 0;
@@ -5645,19 +5748,19 @@ textInputAction: TextInputAction.done,
       for (final mov in movimientos) {
         if ((mov['metodo_pago'] ?? 'Debito') != 'Credito') continue;
         if ((mov['estado'] ?? 'real') == 'fantasma') continue;
-        
+
         final monto = (mov['monto'] as num? ?? 0).toInt();
         final tipo = (mov['tipo'] ?? '').toString();
-        
+
         DateTime? movDate;
         try {
           movDate = DateTime.parse(mov['fecha']);
         } catch (_) {}
         if (movDate == null) continue;
-        
+
         final esPorFacturar = !movDate.isBefore(curStart);
         final esAjuste = mov['categoria'] == 'Ajuste';
-        
+
         if (tipo == 'Gasto') {
           if (esPorFacturar) {
             gastosPorFacturarBruto += monto;
@@ -5680,10 +5783,16 @@ textInputAction: TextInputAction.done,
         }
       }
 
-      final pagoAFacturadoV = pagosAcumulados > gastosFacturadosBruto ? gastosFacturadosBruto : pagosAcumulados;
+      final pagoAFacturadoV = pagosAcumulados > gastosFacturadosBruto
+          ? gastosFacturadosBruto
+          : pagosAcumulados;
       final pagoRestanteV = pagosAcumulados - pagoAFacturadoV;
-      final facturadoVisual = (gastosFacturadosBruto - pagoAFacturadoV).clamp(0, 1 << 31).toInt();
-      final porFacturarVisual = (gastosPorFacturarBruto - pagoRestanteV).clamp(0, 1 << 31).toInt();
+      final facturadoVisual = (gastosFacturadosBruto - pagoAFacturadoV)
+          .clamp(0, 1 << 31)
+          .toInt();
+      final porFacturarVisual = (gastosPorFacturarBruto - pagoRestanteV)
+          .clamp(0, 1 << 31)
+          .toInt();
 
       // Variables de ajuste real de crédito reservadas para futura expansión
 
@@ -5707,12 +5816,16 @@ textInputAction: TextInputAction.done,
         'metodo_pago': 'Credito',
       });
 
-      final ajusteFacturado = (pagosAcumuladosReal + nuevoFacturado) - gastosFacturadosReal;
+      final ajusteFacturado =
+          (pagosAcumuladosReal + nuevoFacturado) - gastosFacturadosReal;
       final ajustePorFacturar = nuevoPorFacturar - gastosPorFacturarReal;
 
       if (ajusteFacturado != 0) {
         final fechaAjusteFacturado = curStart.subtract(const Duration(days: 1));
-        final fechaStr = fechaAjusteFacturado.toIso8601String().split('T').first;
+        final fechaStr = fechaAjusteFacturado
+            .toIso8601String()
+            .split('T')
+            .first;
         await supabase.from('gastos').insert({
           'user_id': user.id,
           'fecha': fechaStr,
@@ -5740,7 +5853,7 @@ textInputAction: TextInputAction.done,
       }
 
       if (mounted) _mostrarSnack('Deuda de tarjeta ajustada correctamente');
-      
+
       // Invalidar cache
       _aiService.invalidateCache();
     } catch (e) {
@@ -5753,8 +5866,12 @@ textInputAction: TextInputAction.done,
     required int facturadoActual,
     required int porFacturarActual,
   }) async {
-    final facturadoController = TextEditingController(text: facturadoActual.toString());
-    final porFacturarController = TextEditingController(text: porFacturarActual.toString());
+    final facturadoController = TextEditingController(
+      text: facturadoActual.toString(),
+    );
+    final porFacturarController = TextEditingController(
+      text: porFacturarActual.toString(),
+    );
 
     return showDialog<Map<String, int>>(
       context: context,
@@ -5769,12 +5886,13 @@ textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: 16),
             TextField(
-textInputAction: TextInputAction.done,
+              textInputAction: TextInputAction.done,
               controller: facturadoController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: 'Monto Facturado',
-                helperText: 'Actual: ${_textoMonto(facturadoActual, ocultable: false)}',
+                helperText:
+                    'Actual: ${_textoMonto(facturadoActual, ocultable: false)}',
                 border: const OutlineInputBorder(),
                 prefixText: '\$ ',
               ),
@@ -5782,12 +5900,13 @@ textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: 16),
             TextField(
-textInputAction: TextInputAction.done,
+              textInputAction: TextInputAction.done,
               controller: porFacturarController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: 'Monto Por Facturar',
-                helperText: 'Actual: ${_textoMonto(porFacturarActual, ocultable: false)}',
+                helperText:
+                    'Actual: ${_textoMonto(porFacturarActual, ocultable: false)}',
                 border: const OutlineInputBorder(),
                 prefixText: '\$ ',
               ),
@@ -5802,9 +5921,23 @@ textInputAction: TextInputAction.done,
           ),
           ElevatedButton(
             onPressed: () {
-              final facturado = int.tryParse(facturadoController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-              final porFacturar = int.tryParse(porFacturarController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-              Navigator.pop(ctx, {'facturado': facturado, 'porFacturar': porFacturar});
+              final facturado =
+                  int.tryParse(
+                    facturadoController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+                  ) ??
+                  0;
+              final porFacturar =
+                  int.tryParse(
+                    porFacturarController.text.replaceAll(
+                      RegExp(r'[^0-9]'),
+                      '',
+                    ),
+                  ) ??
+                  0;
+              Navigator.pop(ctx, {
+                'facturado': facturado,
+                'porFacturar': porFacturar,
+              });
             },
             child: const Text('Guardar'),
           ),
@@ -5970,11 +6103,7 @@ textInputAction: TextInputAction.done,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFF2A2A2A)),
               ),
-              child: Icon(
-                icono,
-                color: const Color(0xFFF5F5F5),
-                size: 20,
-              ),
+              child: Icon(icono, color: const Color(0xFFF5F5F5), size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -6001,11 +6130,7 @@ textInputAction: TextInputAction.done,
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right,
-              color: Color(0xFF555555),
-              size: 20,
-            ),
+            const Icon(Icons.chevron_right, color: Color(0xFF555555), size: 20),
           ],
         ),
       ),
@@ -6141,11 +6266,13 @@ textInputAction: TextInputAction.done,
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Notificaciones Push'),
                           subtitle: Text(
-                            tienePermiso 
-                                ? 'Habilitadas en este dispositivo' 
+                            tienePermiso
+                                ? 'Habilitadas en este dispositivo'
                                 : 'Deshabilitadas',
                             style: TextStyle(
-                              color: tienePermiso ? Colors.green.shade700 : Colors.grey,
+                              color: tienePermiso
+                                  ? Colors.green.shade700
+                                  : Colors.grey,
                             ),
                           ),
                           value: tienePermiso,
@@ -6153,7 +6280,10 @@ textInputAction: TextInputAction.done,
                           onChanged: (val) async {
                             HapticFeedback.lightImpact();
                             if (val) {
-                              final exito = await PushNotificationService.solicitarPermiso(context);
+                              final exito =
+                                  await PushNotificationService.solicitarPermiso(
+                                    context,
+                                  );
                               if (exito) {
                                 setSectionState(() {});
                               } else {
@@ -6163,18 +6293,20 @@ textInputAction: TextInputAction.done,
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Para desactivarlas, debes ir a Configuración de tu iPhone > Safari > Notificaciones.'),
+                                  content: Text(
+                                    'Para desactivarlas, debes ir a Configuración de tu iPhone > Safari > Notificaciones.',
+                                  ),
                                   backgroundColor: Colors.orange,
                                   duration: Duration(seconds: 4),
-                                )
+                                ),
                               );
                               setSectionState(() {});
                             }
                           },
                         );
-                      }
+                      },
                     );
-                  }
+                  },
                 ),
               ],
             ),
@@ -6333,17 +6465,23 @@ textInputAction: TextInputAction.done,
                             child: const Text('Restaurar'),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
                             tooltip: 'Eliminar permanentemente',
                             onPressed: () async {
                               final confirm = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
                                   title: const Text('Eliminar cuenta'),
-                                  content: Text('¿Estás seguro de eliminar permanentemente la cuenta "$account"?\n\nEsta acción quitará la cuenta de tu lista, pero no eliminará las transacciones previas asociadas a ella.'),
+                                  content: Text(
+                                    '¿Estás seguro de eliminar permanentemente la cuenta "$account"?\n\nEsta acción quitará la cuenta de tu lista, pero no eliminará las transacciones previas asociadas a ella.',
+                                  ),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(ctx, false),
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
                                       child: const Text('Cancelar'),
                                     ),
                                     ElevatedButton(
@@ -6358,7 +6496,9 @@ textInputAction: TextInputAction.done,
                                 ),
                               );
                               if (confirm == true) {
-                                widget.settingsController.deleteAccount(account);
+                                widget.settingsController.deleteAccount(
+                                  account,
+                                );
                                 if (mounted) {
                                   _mostrarSnack('Cuenta "$account" eliminada');
                                 }
@@ -6381,23 +6521,34 @@ textInputAction: TextInputAction.done,
                 ...settings.activeCategories.map((category) {
                   final budget = settings.categoryBudgets[category];
                   return Theme(
-                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       leading: GestureDetector(
                         onTap: () => _mostrarEmojiCategoria(category),
                         child: _iconoCategoria(category, size: 24),
                       ),
-                      title: Text(category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      title: Text(
+                        category,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       subtitle: budget != null
-                          ? Text('Presupuesto: ${formatoMoneda(budget)}', style: TextStyle(color: Colors.grey.shade600))
+                          ? Text(
+                              'Presupuesto: ${formatoMoneda(budget)}',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            )
                           : null,
                       trailing: Wrap(
                         spacing: -4,
                         children: [
                           IconButton(
                             tooltip: 'Emoji',
-                            icon: const Icon(Icons.emoji_emotions_outlined, size: 20),
+                            icon: const Icon(
+                              Icons.emoji_emotions_outlined,
+                              size: 20,
+                            ),
                             onPressed: () => _mostrarEmojiCategoria(category),
                           ),
                           IconButton(
@@ -6409,7 +6560,9 @@ textInputAction: TextInputAction.done,
                             tooltip: 'Archivar',
                             icon: const Icon(Icons.archive_outlined, size: 20),
                             onPressed: () {
-                              widget.settingsController.archiveCategory(category);
+                              widget.settingsController.archiveCategory(
+                                category,
+                              );
                             },
                           ),
                         ],
@@ -6423,11 +6576,18 @@ textInputAction: TextInputAction.done,
                               child: ListTile(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.subdirectory_arrow_right, size: 16),
+                                leading: const Icon(
+                                  Icons.subdirectory_arrow_right,
+                                  size: 16,
+                                ),
                                 title: Text(sub),
                                 trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                  onPressed: () => widget.settingsController.removeSubcategory(category, sub),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 18,
+                                  ),
+                                  onPressed: () => widget.settingsController
+                                      .removeSubcategory(category, sub),
                                 ),
                               ),
                             );
@@ -6812,7 +6972,9 @@ textInputAction: TextInputAction.done,
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.apple, size: 36),
                   title: const Text('Apple Pay (Atajos)'),
-                  subtitle: const Text('Registra gastos al pagar con tu iPhone'),
+                  subtitle: const Text(
+                    'Registra gastos al pagar con tu iPhone',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _mostrarConfiguracionApplePay,
                 ),
@@ -6929,7 +7091,10 @@ textInputAction: TextInputAction.done,
       key: ValueKey(_metasRefreshNonce),
       stream: _streamMetasUsuario().map((datos) {
         try {
-          widget.settingsController.preferences.setString('metas_cache', jsonEncode(datos));
+          widget.settingsController.preferences.setString(
+            'metas_cache',
+            jsonEncode(datos),
+          );
         } catch (_) {}
         return datos;
       }),
@@ -6946,14 +7111,18 @@ textInputAction: TextInputAction.done,
                     Icon(
                       Icons.cloud_sync_rounded,
                       size: 36,
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      color: isDark
+                          ? Colors.grey.shade600
+                          : Colors.grey.shade400,
                     ),
                     SizedBox(
                       width: 64,
                       height: 64,
                       child: CircularProgressIndicator(
                         strokeWidth: 3,
-                        color: isDark ? Colors.indigo.shade300 : Colors.indigo.shade600,
+                        color: isDark
+                            ? Colors.indigo.shade300
+                            : Colors.indigo.shade600,
                       ),
                     ),
                   ],
@@ -7197,7 +7366,9 @@ textInputAction: TextInputAction.done,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? const Color(0xFFF5F5F5) : Colors.grey.shade700,
+                  color: isDark
+                      ? const Color(0xFFF5F5F5)
+                      : Colors.grey.shade700,
                 ),
               ),
             ],
@@ -7302,7 +7473,9 @@ textInputAction: TextInputAction.done,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: completada
-              ? (isDark ? const Color(0xFF00E5A0).withAlpha(40) : Colors.green.shade100)
+              ? (isDark
+                    ? const Color(0xFF00E5A0).withAlpha(40)
+                    : Colors.green.shade100)
               : (isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100),
           width: 1.2,
         ),
@@ -7340,7 +7513,9 @@ textInputAction: TextInputAction.done,
                                       ? const Color(0xFF1C1C1C)
                                       : Colors.grey.shade200,
                                   valueColor: AlwaysStoppedAnimation(
-                                    completada ? const Color(0xFF00E5A0) : color,
+                                    completada
+                                        ? const Color(0xFF00E5A0)
+                                        : color,
                                   ),
                                 ),
                           ),
@@ -7900,7 +8075,10 @@ textInputAction: TextInputAction.done,
     List<Map<String, dynamic>> todosLosDatos,
   ) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: supabase.from('gastos_programados').stream(primaryKey: ['id']).eq('activo', true),
+      stream: supabase
+          .from('gastos_programados')
+          .stream(primaryKey: ['id'])
+          .eq('activo', true),
       builder: (context, snapshotProgramados) {
         return AnimatedBuilder(
           animation: widget.settingsController,
@@ -7912,10 +8090,10 @@ textInputAction: TextInputAction.done,
             int gastoFijo = 0;
             int ahorro = 0;
             int cuota = 0;
-            
+
             List<Map<String, dynamic>> listaGastosFijos = [];
             List<Map<String, dynamic>> listaCuotas = [];
-            
+
             if (snapshotProgramados.hasData) {
               for (final p in snapshotProgramados.data!) {
                 final monto = (p['monto'] as num).toInt();
@@ -7934,7 +8112,7 @@ textInputAction: TextInputAction.done,
                 }
               }
             }
-            
+
             // Agregar cuotas de créditos pendientes al presupuesto
             for (final c in settings.consumptionCredits) {
               final totalCuotas = c['installments'] as int;
@@ -7942,25 +8120,33 @@ textInputAction: TextInputAction.done,
               if (cuotasPagadas < totalCuotas) {
                 final montoCuota = c['amount'] as int;
                 cuota += montoCuota;
-                listaCuotas.add({'nombre': c['name'] ?? 'Crédito', 'monto': montoCuota, 'isCredit': true});
+                listaCuotas.add({
+                  'nombre': c['name'] ?? 'Crédito',
+                  'monto': montoCuota,
+                  'isCredit': true,
+                });
               }
             }
-            
+
             // ZBB Logic
             int totalPresupuestosVariablesAsignados = 0;
             for (final cat in settings.activeCategories) {
               int catBudget = settings.categoryBudgets[cat] ?? 0;
               if (catBudget == 0) {
-                 final subcats = settings.activeSubcategories[cat] ?? [];
-                 for (final sub in subcats) {
-                    catBudget += (settings.subcategoryBudgets['${cat}_$sub'] as num?)?.toInt() ?? 0;
-                 }
+                final subcats = settings.activeSubcategories[cat] ?? [];
+                for (final sub in subcats) {
+                  catBudget +=
+                      (settings.subcategoryBudgets['${cat}_$sub'] as num?)
+                          ?.toInt() ??
+                      0;
+                }
               }
               totalPresupuestosVariablesAsignados += catBudget;
             }
 
             final totalComprometidoFijo = gastoFijo + ahorro + cuota;
-            final totalAsignado = totalComprometidoFijo + totalPresupuestosVariablesAsignados;
+            final totalAsignado =
+                totalComprometidoFijo + totalPresupuestosVariablesAsignados;
             final porAsignar = ingresoFijo - totalAsignado;
 
             final datosDelMes = todosLosDatos.where((mov) {
@@ -7969,16 +8155,27 @@ textInputAction: TextInputAction.done,
                   fechaMov.month == _mesVisualizado.month;
             }).toList();
 
-            Widget expandableZbb(String titulo, int monto, Color color, bool isDark, List<Map<String, dynamic>> items, {IconData? icono}) {
+            Widget expandableZbb(
+              String titulo,
+              int monto,
+              Color color,
+              bool isDark,
+              List<Map<String, dynamic>> items, {
+              IconData? icono,
+            }) {
               if (items.isEmpty) {
                 return _filaZbb(titulo, monto, color, isDark, icono: icono);
               }
               return Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
                   tilePadding: EdgeInsets.zero,
                   iconColor: color,
-                  collapsedIconColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  collapsedIconColor: isDark
+                      ? Colors.grey.shade400
+                      : Colors.grey.shade600,
                   title: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -7988,12 +8185,24 @@ textInputAction: TextInputAction.done,
                             Icon(icono, size: 16, color: color),
                             const SizedBox(width: 6),
                           ],
-                          Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 14)),
+                          Text(
+                            titulo,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey.shade300
+                                  : Colors.grey.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                       Text(
                         _textoMonto(monto, ocultable: false),
-                        style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -8002,14 +8211,36 @@ textInputAction: TextInputAction.done,
                     final nombre = item['nombre'] as String;
                     final itemMonto = item['monto'] as int;
                     return Padding(
-                      padding: const EdgeInsets.only(left: 16, bottom: 8, right: 8),
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        bottom: 8,
+                        right: 8,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text('↳ $nombre ${isCredit ? '(Crédito)' : ''}', style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 13), overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              '↳ $nombre ${isCredit ? '(Crédito)' : ''}',
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade600,
+                                fontSize: 13,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          Text(_textoMonto(monto < 0 ? -itemMonto : itemMonto, ocultable: false), style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 13)),
+                          Text(
+                            _textoMonto(
+                              monto < 0 ? -itemMonto : itemMonto,
+                              ocultable: false,
+                            ),
+                            style: TextStyle(
+                              color: color.withValues(alpha: 0.8),
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     );
@@ -8028,7 +8259,7 @@ textInputAction: TextInputAction.done,
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Dashboard ZBB
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -8046,31 +8277,61 @@ textInputAction: TextInputAction.done,
                     child: Column(
                       children: [
                         _filaZbb(
-                          'Ingresos Mensuales', 
-                          ingresoFijo, 
-                          Colors.green, 
-                          isDark, 
+                          'Ingresos Mensuales',
+                          ingresoFijo,
+                          Colors.green,
+                          isDark,
                           icono: Icons.arrow_downward,
                         ),
                         const Divider(height: 24),
-                        expandableZbb('Gastos Fijos', -gastoFijo, Colors.red, isDark, listaGastosFijos),
-                        _filaZbb('Metas de Ahorro', -ahorro, Colors.blue, isDark),
-                        expandableZbb('Cuotas', -cuota, Colors.orange, isDark, listaCuotas),
-                        _filaZbb('Presupuestos Variables', -totalPresupuestosVariablesAsignados, Colors.purple, isDark),
+                        expandableZbb(
+                          'Gastos Fijos',
+                          -gastoFijo,
+                          Colors.red,
+                          isDark,
+                          listaGastosFijos,
+                        ),
+                        _filaZbb(
+                          'Metas de Ahorro',
+                          -ahorro,
+                          Colors.blue,
+                          isDark,
+                        ),
+                        expandableZbb(
+                          'Cuotas',
+                          -cuota,
+                          Colors.orange,
+                          isDark,
+                          listaCuotas,
+                        ),
+                        _filaZbb(
+                          'Presupuestos Variables',
+                          -totalPresupuestosVariablesAsignados,
+                          Colors.purple,
+                          isDark,
+                        ),
                         const Divider(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text(
                               'Por Asignar:',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                color: porAsignar == 0 
-                                    ? Colors.green.withValues(alpha: 0.2) 
-                                    : (porAsignar > 0 ? Colors.amber.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2)),
+                                color: porAsignar == 0
+                                    ? Colors.green.withValues(alpha: 0.2)
+                                    : (porAsignar > 0
+                                          ? Colors.amber.withValues(alpha: 0.2)
+                                          : Colors.red.withValues(alpha: 0.2)),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -8078,9 +8339,11 @@ textInputAction: TextInputAction.done,
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
-                                  color: porAsignar == 0 
-                                      ? Colors.green 
-                                      : (porAsignar > 0 ? Colors.amber.shade700 : Colors.red),
+                                  color: porAsignar == 0
+                                      ? Colors.green
+                                      : (porAsignar > 0
+                                            ? Colors.amber.shade700
+                                            : Colors.red),
                                 ),
                               ),
                             ),
@@ -8089,17 +8352,38 @@ textInputAction: TextInputAction.done,
                         if (porAsignar == 0)
                           const Padding(
                             padding: EdgeInsets.only(top: 12),
-                            child: Text('✅ ¡Presupuesto perfecto! Cada peso tiene su lugar.', style: TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.w500)),
+                            child: Text(
+                              '✅ ¡Presupuesto perfecto! Cada peso tiene su lugar.',
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           )
                         else if (porAsignar > 0)
                           Padding(
                             padding: const EdgeInsets.only(top: 12),
-                            child: Text('⚠️ Tienes ${_textoMonto(porAsignar)} sin asignar. Asígnalos a un presupuesto o ahorro.', style: TextStyle(color: Colors.amber.shade700, fontSize: 13, fontWeight: FontWeight.w500)),
+                            child: Text(
+                              '⚠️ Tienes ${_textoMonto(porAsignar)} sin asignar. Asígnalos a un presupuesto o ahorro.',
+                              style: TextStyle(
+                                color: Colors.amber.shade700,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           )
                         else
                           const Padding(
                             padding: EdgeInsets.only(top: 12),
-                            child: Text('❌ Estás sobrepasando tus ingresos.', style: TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500)),
+                            child: Text(
+                              '❌ Estás sobrepasando tus ingresos.',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -8120,7 +8404,10 @@ textInputAction: TextInputAction.done,
                             );
                           },
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Compromiso', style: TextStyle(fontSize: 13)),
+                          label: const Text(
+                            'Compromiso',
+                            style: TextStyle(fontSize: 13),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -8137,39 +8424,60 @@ textInputAction: TextInputAction.done,
                             );
                           },
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Ingreso Fijo', style: TextStyle(fontSize: 13)),
+                          label: const Text(
+                            'Ingreso Fijo',
+                            style: TextStyle(fontSize: 13),
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 32),
-                  
+
                   const Text(
                     'Presupuestos de Categorías',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Listado de Categorias Variables y Subcategorias
                   ...settings.activeCategories.map((categoria) {
-                    int presupuestoCat = settings.categoryBudgets[categoria] ?? 0;
+                    int presupuestoCat =
+                        settings.categoryBudgets[categoria] ?? 0;
                     final subs = settings.activeSubcategories[categoria] ?? [];
-                    
+
                     // Si la categoría principal no tiene presupuesto, sumamos el de sus subcategorías
                     if (presupuestoCat == 0) {
-                        for (final sub in subs) {
-                            presupuestoCat += (settings.subcategoryBudgets['${categoria}_$sub'] as num?)?.toInt() ?? 0;
-                        }
+                      for (final sub in subs) {
+                        presupuestoCat +=
+                            (settings.subcategoryBudgets['${categoria}_$sub']
+                                    as num?)
+                                ?.toInt() ??
+                            0;
+                      }
                     }
-                    
-                    final gastosCat = datosDelMes.where((m) => m['tipo'] == 'Gasto' && m['categoria'] == categoria).toList();
-                    final gastadoCat = gastosCat.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
-                    
-                    if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) return const SizedBox();
-                    
+
+                    final gastosCat = datosDelMes
+                        .where(
+                          (m) =>
+                              m['tipo'] == 'Gasto' &&
+                              m['categoria'] == categoria,
+                        )
+                        .toList();
+                    final gastadoCat = gastosCat.fold<int>(
+                      0,
+                      (sum, m) => sum + (m['monto'] as num).toInt(),
+                    );
+
+                    if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) {
+                      return const SizedBox();
+                    }
+
                     final disponibleCat = presupuestoCat - gastadoCat;
-                    final pct = presupuestoCat > 0 ? (gastadoCat / presupuestoCat).clamp(0.0, 1.0) : 0.0;
-                    
+                    final pct = presupuestoCat > 0
+                        ? (gastadoCat / presupuestoCat).clamp(0.0, 1.0)
+                        : 0.0;
+
                     // Lógica de colores semánticos (si pct > 0.9 rojo, si pct > 0.7 naranja)
                     Color colorBarra = Colors.teal;
                     if (pct >= 1.0) {
@@ -8177,12 +8485,14 @@ textInputAction: TextInputAction.done,
                     } else if (pct >= 0.85) {
                       colorBarra = Colors.orange;
                     }
-                    
+
                     final iconCat = settings.categoryEmojis[categoria] ?? '📌';
-                    
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       color: isDark ? const Color(0xFF141414) : Colors.white,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -8190,32 +8500,57 @@ textInputAction: TextInputAction.done,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             InkWell(
-                              onTap: () => _editarPresupuestoCategoria(categoria),
+                              onTap: () =>
+                                  _editarPresupuestoCategoria(categoria),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Row(
                                       children: [
-                                        Text(iconCat, style: const TextStyle(fontSize: 20)),
+                                        Text(
+                                          iconCat,
+                                          style: const TextStyle(fontSize: 20),
+                                        ),
                                         const SizedBox(width: 8),
-                                        Text(categoria, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        Text(
+                                          categoria,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     Row(
                                       children: [
                                         Text(
-                                          presupuestoCat > 0 
-                                              ? (disponibleCat >= 0 ? 'Quedan ${_textoMonto(disponibleCat)}' : 'Excedido por ${_textoMonto(disponibleCat.abs())}') 
+                                          presupuestoCat > 0
+                                              ? (disponibleCat >= 0
+                                                    ? 'Quedan ${_textoMonto(disponibleCat)}'
+                                                    : 'Excedido por ${_textoMonto(disponibleCat.abs())}')
                                               : 'Sin límite',
                                           style: TextStyle(
                                             fontWeight: FontWeight.w600,
-                                            color: presupuestoCat > 0 ? (disponibleCat >= 0 ? (disponibleCat == 0 ? Colors.grey : Colors.teal) : Colors.red) : Colors.grey,
+                                            color: presupuestoCat > 0
+                                                ? (disponibleCat >= 0
+                                                      ? (disponibleCat == 0
+                                                            ? Colors.grey
+                                                            : Colors.teal)
+                                                      : Colors.red)
+                                                : Colors.grey,
                                           ),
                                         ),
                                         const SizedBox(width: 4),
-                                        const Icon(Icons.edit, size: 14, color: Colors.grey),
+                                        const Icon(
+                                          Icons.edit,
+                                          size: 14,
+                                          color: Colors.grey,
+                                        ),
                                       ],
                                     ),
                                   ],
@@ -8229,89 +8564,178 @@ textInputAction: TextInputAction.done,
                                 child: LinearProgressIndicator(
                                   value: pct,
                                   minHeight: 10,
-                                  backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                  backgroundColor: isDark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade200,
                                   color: colorBarra,
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Gastado: ${_textoMonto(gastadoCat)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
-                                  Text('Total: ${_textoMonto(presupuestoCat)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
+                                  Text(
+                                    'Gastado: ${_textoMonto(gastadoCat)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Total: ${_textoMonto(presupuestoCat)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ] else if (gastadoCat > 0) ...[
                               const SizedBox(height: 4),
-                              Text('Gastado: ${_textoMonto(gastadoCat)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                              Text(
+                                'Gastado: ${_textoMonto(gastadoCat)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
                             ],
-                            
+
                             // Subcategorias
                             if (subs.isNotEmpty) ...[
-                               const SizedBox(height: 16),
-                               ...subs.map((sub) {
-                                  final presupuestoSub = settings.subcategoryBudgets['${categoria}_$sub'] ?? 0;
-                                  final gastosSub = gastosCat.where((m) => m['etiquetas'] != null && (m['etiquetas'] as List).contains(sub)).toList();
-                                  final gastadoSub = gastosSub.fold<int>(0, (sum, m) => sum + (m['monto'] as num).toInt());
-                                  
-                                  // Siempre mostramos la subcategoría para que se pueda tocar y agregarle presupuesto
-                                  
-                                  final disponibleSub = presupuestoSub - gastadoSub;
-                                  final pctSub = presupuestoSub > 0 ? (gastadoSub / presupuestoSub).clamp(0.0, 1.0) : 0.0;
-                                  
-                                  Color colorBarraSub = Colors.blue;
-                                  if (pctSub >= 1.0) { colorBarraSub = Colors.red; }
-                                  else if (pctSub >= 0.85) { colorBarraSub = Colors.orange; }
-                                  
-                                  return Padding(
-                                    padding: const EdgeInsets.only(left: 16, top: 4, bottom: 12),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        InkWell(
-                                          onTap: () => _editarPresupuestoSubcategoria(categoria, sub),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 4),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Text('↳ $sub', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 14)),
-                                                Row(
-                                                  children: [
-                                                    Text(
-                                                      presupuestoSub > 0 ? (disponibleSub >= 0 ? '${_textoMonto(disponibleSub)} disp.' : 'Exc.') : '${_textoMonto(gastadoSub)} gastado', 
-                                                      style: TextStyle(fontSize: 12, color: presupuestoSub > 0 ? (disponibleSub >= 0 ? Colors.blue : Colors.red) : Colors.grey.shade600)
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    const Icon(Icons.edit, size: 12, color: Colors.grey),
-                                                  ],
-                                                ),
-                                              ],
+                              const SizedBox(height: 16),
+                              ...subs.map((sub) {
+                                final presupuestoSub =
+                                    settings
+                                        .subcategoryBudgets['${categoria}_$sub'] ??
+                                    0;
+                                final gastosSub = gastosCat
+                                    .where(
+                                      (m) =>
+                                          m['etiquetas'] != null &&
+                                          (m['etiquetas'] as List).contains(
+                                            sub,
+                                          ),
+                                    )
+                                    .toList();
+                                final gastadoSub = gastosSub.fold<int>(
+                                  0,
+                                  (sum, m) => sum + (m['monto'] as num).toInt(),
+                                );
+
+                                // Siempre mostramos la subcategoría para que se pueda tocar y agregarle presupuesto
+
+                                final disponibleSub =
+                                    presupuestoSub - gastadoSub;
+                                final pctSub = presupuestoSub > 0
+                                    ? (gastadoSub / presupuestoSub).clamp(
+                                        0.0,
+                                        1.0,
+                                      )
+                                    : 0.0;
+
+                                Color colorBarraSub = Colors.blue;
+                                if (pctSub >= 1.0) {
+                                  colorBarraSub = Colors.red;
+                                } else if (pctSub >= 0.85) {
+                                  colorBarraSub = Colors.orange;
+                                }
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 16,
+                                    top: 4,
+                                    bottom: 12,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      InkWell(
+                                        onTap: () =>
+                                            _editarPresupuestoSubcategoria(
+                                              categoria,
+                                              sub,
                                             ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 4,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                '↳ $sub',
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? Colors.grey.shade300
+                                                      : Colors.grey.shade700,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    presupuestoSub > 0
+                                                        ? (disponibleSub >= 0
+                                                              ? '${_textoMonto(disponibleSub)} disp.'
+                                                              : 'Exc.')
+                                                        : '${_textoMonto(gastadoSub)} gastado',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: presupuestoSub > 0
+                                                          ? (disponibleSub >= 0
+                                                                ? Colors.blue
+                                                                : Colors.red)
+                                                          : Colors
+                                                                .grey
+                                                                .shade600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  const Icon(
+                                                    Icons.edit,
+                                                    size: 12,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        if (presupuestoSub > 0) ...[
-                                          const SizedBox(height: 6),
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(4),
-                                            child: LinearProgressIndicator(
-                                              value: pctSub,
-                                              minHeight: 6,
-                                              backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                                              color: colorBarraSub,
-                                            ),
+                                      ),
+                                      if (presupuestoSub > 0) ...[
+                                        const SizedBox(height: 6),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            4,
                                           ),
-                                        ]
+                                          child: LinearProgressIndicator(
+                                            value: pctSub,
+                                            minHeight: 6,
+                                            backgroundColor: isDark
+                                                ? Colors.grey.shade800
+                                                : Colors.grey.shade200,
+                                            color: colorBarraSub,
+                                          ),
+                                        ),
                                       ],
-                                    ),
-                                  );
-                               })
-                            ]
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
                           ],
                         ),
                       ),
                     );
-                  })
+                  }),
                 ],
               ),
             );
@@ -8321,7 +8745,13 @@ textInputAction: TextInputAction.done,
     );
   }
 
-  Widget _filaZbb(String titulo, int monto, Color color, bool isDark, {IconData? icono}) {
+  Widget _filaZbb(
+    String titulo,
+    int monto,
+    Color color,
+    bool isDark, {
+    IconData? icono,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -8333,7 +8763,12 @@ textInputAction: TextInputAction.done,
                 Icon(icono, size: 16, color: color),
                 const SizedBox(width: 6),
               ],
-              Text(titulo, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700)),
+              Text(
+                titulo,
+                style: TextStyle(
+                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                ),
+              ),
             ],
           ),
           Text(
@@ -8519,7 +8954,10 @@ textInputAction: TextInputAction.done,
     widget.settingsController.addSubcategory(categoria, value.trim());
   }
 
-  Future<void> _editarPresupuestoSubcategoria(String categoria, String subcategoria) async {
+  Future<void> _editarPresupuestoSubcategoria(
+    String categoria,
+    String subcategoria,
+  ) async {
     final key = '${categoria}_$subcategoria';
     final inicial = widget.settingsController.settings.subcategoryBudgets[key];
     final value = await _pedirEntero(
@@ -8527,7 +8965,11 @@ textInputAction: TextInputAction.done,
       etiqueta: 'Monto (vacío para quitar)',
       inicial: inicial,
     );
-    widget.settingsController.setSubcategoryBudget(categoria, subcategoria, value);
+    widget.settingsController.setSubcategoryBudget(
+      categoria,
+      subcategoria,
+      value,
+    );
   }
 
   Future<void> _cambiarBloqueo(bool activo) async {
@@ -8665,10 +9107,15 @@ textInputAction: TextInputAction.done,
   }
 
   String _generarTokenAleatorio() {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
-    return String.fromCharCodes(Iterable.generate(
-        32, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+    return String.fromCharCodes(
+      Iterable.generate(
+        32,
+        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+      ),
+    );
   }
 
   Future<void> _mostrarConfiguracionApplePay() async {
@@ -8700,7 +9147,8 @@ textInputAction: TextInputAction.done,
           builder: (ctx) => AlertDialog(
             title: const Text('Error'),
             content: const Text(
-                'Asegúrate de haber corrido el script SQL en Supabase para crear la tabla webhook_tokens antes de configurar esto.'),
+              'Asegúrate de haber corrido el script SQL en Supabase para crear la tabla webhook_tokens antes de configurar esto.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -8736,7 +9184,10 @@ textInputAction: TextInputAction.done,
               const SizedBox(height: 8),
               SelectableText(
                 endpointUrl,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -8966,7 +9417,7 @@ textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: 16),
                   TextField(
-textInputAction: TextInputAction.done,
+                    textInputAction: TextInputAction.done,
                     controller: facturadoController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -8979,7 +9430,7 @@ textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: 16),
                   TextField(
-textInputAction: TextInputAction.done,
+                    textInputAction: TextInputAction.done,
                     controller: noFacturadoController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -9169,7 +9620,7 @@ textInputAction: TextInputAction.done,
   void _mostrarConfiguracionFechas() {
     int diaCierre = widget.settingsController.settings.creditCardBillingDay;
     int diaVencimiento = widget.settingsController.settings.creditCardDueDay;
-    
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -9187,14 +9638,24 @@ textInputAction: TextInputAction.done,
                         decoration: const InputDecoration(
                           labelText: 'Día Cierre',
                           border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                         ),
                         initialValue: diaCierre,
                         items: List.generate(31, (i) => i + 1)
-                            .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
+                            .map(
+                              (day) => DropdownMenuItem(
+                                value: day,
+                                child: Text(day.toString()),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null) setStateDialog(() => diaCierre = val);
+                          if (val != null) {
+                            setStateDialog(() => diaCierre = val);
+                          }
                         },
                       ),
                     ),
@@ -9204,14 +9665,24 @@ textInputAction: TextInputAction.done,
                         decoration: const InputDecoration(
                           labelText: 'Día Pago',
                           border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                         ),
                         initialValue: diaVencimiento,
                         items: List.generate(31, (i) => i + 1)
-                            .map((day) => DropdownMenuItem(value: day, child: Text(day.toString())))
+                            .map(
+                              (day) => DropdownMenuItem(
+                                value: day,
+                                child: Text(day.toString()),
+                              ),
+                            )
                             .toList(),
                         onChanged: (val) {
-                          if (val != null) setStateDialog(() => diaVencimiento = val);
+                          if (val != null) {
+                            setStateDialog(() => diaVencimiento = val);
+                          }
                         },
                       ),
                     ),
@@ -9331,7 +9802,7 @@ textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: 12),
                   TextField(
-textInputAction: TextInputAction.done,
+                    textInputAction: TextInputAction.done,
                     controller: montoController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -9517,154 +9988,156 @@ textInputAction: TextInputAction.done,
                 children: [
                   // Handle más prominente
                   Container(
-                  width: 50,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withAlpha(80),
-                    borderRadius: BorderRadius.circular(2.5),
+                    width: 50,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withAlpha(80),
+                      borderRadius: BorderRadius.circular(2.5),
+                    ),
                   ),
-                ),
-                Text(
-                  '¿Qué deseas registrar?',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
+                  Text(
+                    '¿Qué deseas registrar?',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _tarjetaTipo(
-                        icono: Icons.arrow_downward_rounded,
-                        titulo: 'Gasto',
-                        color: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _mostrarFormulario(tipo: 'Gasto');
-                        },
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _tarjetaTipo(
+                          icono: Icons.arrow_downward_rounded,
+                          titulo: 'Gasto',
+                          color: Colors.red,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _mostrarFormulario(tipo: 'Gasto');
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _tarjetaTipo(
-                        icono: Icons.arrow_upward_rounded,
-                        titulo: 'Ingreso',
-                        color: Colors.green,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _mostrarFormulario(tipo: 'Ingreso');
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _tarjetaTipo(
-                        icono: Icons.swap_horiz_rounded,
-                        titulo: 'Transferencia',
-                        color: Colors.blue,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _mostrarFormulario(tipo: 'Transferencia');
-                        },
-                      ),
-                    ),
-                    if (widget.settingsController.settings.hasCreditCard) ...[
                       const SizedBox(width: 16),
                       Expanded(
                         child: _tarjetaTipo(
-                          icono: Icons.auto_awesome,
-                          titulo: 'Simular Compra',
-                          color: Colors.deepPurple,
+                          icono: Icons.arrow_upward_rounded,
+                          titulo: 'Ingreso',
+                          color: Colors.green,
                           onTap: () {
                             Navigator.pop(context);
-                            _mostrarSimuladorCompra();
+                            _mostrarFormulario(tipo: 'Ingreso');
                           },
                         ),
                       ),
                     ],
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Entrada rápida IA – ocupa toda la fila
-                SizedBox(
-                  width: double.infinity,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _mostrarEntradaRapida();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 16,
-                        horizontal: 20,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF141414),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF00E5A0).withAlpha(50),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _tarjetaTipo(
+                          icono: Icons.swap_horiz_rounded,
+                          titulo: 'Transferencia',
+                          color: Colors.blue,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _mostrarFormulario(tipo: 'Transferencia');
+                          },
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00E5A0).withAlpha(18),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF00E5A0).withAlpha(40)),
+                      if (widget.settingsController.settings.hasCreditCard) ...[
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _tarjetaTipo(
+                            icono: Icons.auto_awesome,
+                            titulo: 'Simular Compra',
+                            color: Colors.deepPurple,
+                            onTap: () {
+                              Navigator.pop(context);
+                              _mostrarSimuladorCompra();
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Entrada rápida IA – ocupa toda la fila
+                  SizedBox(
+                    width: double.infinity,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _mostrarEntradaRapida();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 20,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF141414),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFF00E5A0).withAlpha(50),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00E5A0).withAlpha(18),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF00E5A0).withAlpha(40),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                color: Color(0xFF00E5A0),
+                                size: 18,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.auto_awesome,
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Entrada Rápida IA',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: Color(0xFF00E5A0),
+                                      letterSpacing: -0.1,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Escribe o dicta tu gasto en lenguaje natural',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF888888),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.mic,
                               color: Color(0xFF00E5A0),
-                              size: 18,
+                              size: 20,
                             ),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Entrada Rápida IA',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                    color: Color(0xFF00E5A0),
-                                    letterSpacing: -0.1,
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Escribe o dicta tu gasto en lenguaje natural',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF888888),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.mic,
-                            color: Color(0xFF00E5A0),
-                            size: 20,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             ),
           );
         },
@@ -9679,8 +10152,8 @@ textInputAction: TextInputAction.done,
     required VoidCallback onTap,
   }) {
     // Map MaterialColors to brand palette
-    const Color kAccent  = Color(0xFF00E5A0); // green → ingresos
-    const Color kDanger  = Color(0xFFFF4D6A); // red → gastos
+    const Color kAccent = Color(0xFF00E5A0); // green → ingresos
+    const Color kDanger = Color(0xFFFF4D6A); // red → gastos
     const Color kTransfer = Color(0xFF4DA6FF); // blue → transferencia
     const Color kSimulate = Color(0xFFB57EDC); // purple → simular
 
@@ -9702,9 +10175,7 @@ textInputAction: TextInputAction.done,
         decoration: BoxDecoration(
           color: const Color(0xFF141414),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: resolvedColor.withAlpha(50),
-          ),
+          border: Border.all(color: resolvedColor.withAlpha(50)),
         ),
         child: Column(
           children: [
@@ -9715,11 +10186,7 @@ textInputAction: TextInputAction.done,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: resolvedColor.withAlpha(40)),
               ),
-              child: Icon(
-                icono,
-                size: 26,
-                color: resolvedColor,
-              ),
+              child: Icon(icono, size: 26, color: resolvedColor),
             ),
             const SizedBox(height: 12),
             Text(
@@ -9747,6 +10214,8 @@ textInputAction: TextInputAction.done,
     bool isProcessing = false;
     String? errorMsg;
     bool hasParsed = false;
+    bool isListening = false;
+    final SpeechToText speech = SpeechToText();
 
     // Editable fields (populated after AI parse)
     final editItemCtrl = TextEditingController();
@@ -9825,18 +10294,55 @@ textInputAction: TextInputAction.done,
             }
 
             Future<void> toggleListening() async {
-              // Voice input not available on desktop platforms
-              if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+              if (Platform.isWindows || Platform.isLinux) {
                 setStateSB(
                   () => errorMsg =
-                      'Entrada por voz no disponible en escritorio. Usa el campo de texto.',
+                      'Entrada por voz no soportada en este sistema.',
                 );
                 return;
               }
-              // On mobile, show not-available message (speech_to_text removed)
-              setStateSB(
-                () => errorMsg = 'Micrófono no disponible en este dispositivo',
-              );
+
+              if (isListening) {
+                await speech.stop();
+                setStateSB(() => isListening = false);
+              } else {
+                bool available = await speech.initialize(
+                  onStatus: (status) {
+                    if (status == 'done' || status == 'notListening') {
+                      setStateSB(() => isListening = false);
+                      if (quickController.text.isNotEmpty) {
+                        procesarTexto(quickController.text);
+                      }
+                    }
+                  },
+                  onError: (errorNotification) {
+                    setStateSB(() {
+                      isListening = false;
+                      errorMsg =
+                          'Error de micrófono: ${errorNotification.errorMsg}';
+                    });
+                  },
+                );
+
+                if (available) {
+                  setStateSB(() {
+                    isListening = true;
+                    errorMsg = null;
+                  });
+                  speech.listen(
+                    onResult: (result) {
+                      setStateSB(() {
+                        quickController.text = result.recognizedWords;
+                      });
+                    },
+                  );
+                } else {
+                  setStateSB(
+                    () =>
+                        errorMsg = 'Permiso denegado o micrófono no disponible',
+                  );
+                }
+              }
             }
 
             Future<void> guardar() async {
@@ -9953,7 +10459,7 @@ textInputAction: TextInputAction.done,
                         children: [
                           Expanded(
                             child: TextField(
-textInputAction: TextInputAction.done,
+                              textInputAction: TextInputAction.done,
                               controller: quickController,
                               autofocus: !hasParsed,
                               style: const TextStyle(fontSize: 16),
@@ -9983,13 +10489,15 @@ textInputAction: TextInputAction.done,
                               width: 48,
                               height: 48,
                               decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.purple.shade700
-                                    : Colors.purple.shade500,
+                                color: isListening
+                                    ? Colors.red.shade600
+                                    : (isDark
+                                          ? Colors.purple.shade700
+                                          : Colors.purple.shade500),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
-                                Icons.mic,
+                              child: Icon(
+                                isListening ? Icons.stop : Icons.mic,
                                 color: Colors.white,
                                 size: 22,
                               ),
@@ -10132,7 +10640,7 @@ textInputAction: TextInputAction.done,
 
                               // Item
                               TextField(
-textInputAction: TextInputAction.done,
+                                textInputAction: TextInputAction.done,
                                 controller: editItemCtrl,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
@@ -10160,7 +10668,7 @@ textInputAction: TextInputAction.done,
 
                               // Monto
                               TextField(
-textInputAction: TextInputAction.done,
+                                textInputAction: TextInputAction.done,
                                 controller: editMontoCtrl,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
@@ -10414,7 +10922,8 @@ textInputAction: TextInputAction.done,
               valoresIniciales: {
                 'item': gastoPendiente['item'] ?? '',
                 'monto': (gastoPendiente['monto'] as num? ?? 0).toInt(),
-                'fecha': gastoPendiente['fecha']?.toString() ??
+                'fecha':
+                    gastoPendiente['fecha']?.toString() ??
                     DateTime.now().toIso8601String().substring(0, 10),
                 'cuenta': gastoPendiente['cuenta'] ?? '',
               },
@@ -10539,8 +11048,9 @@ textInputAction: TextInputAction.done,
       _detalleController.text = (itemParaEditar['detalle'] ?? '').toString();
       _montoController.text = (itemParaEditar['monto'] ?? '').toString();
       fechaSeleccionada = DateTime.parse(itemParaEditar['fecha']);
-      
-      if (itemParaEditar['etiquetas'] != null && itemParaEditar['etiquetas'] is List) {
+
+      if (itemParaEditar['etiquetas'] != null &&
+          itemParaEditar['etiquetas'] is List) {
         etiquetasSeleccionadas = List<String>.from(itemParaEditar['etiquetas']);
       }
 
@@ -10575,22 +11085,35 @@ textInputAction: TextInputAction.done,
       cuentaSeleccionada = settings.defaultAccount;
 
       if (valoresIniciales != null) {
-        if (valoresIniciales['item'] != null) _itemController.text = valoresIniciales['item'];
-        if (valoresIniciales['monto'] != null) _montoController.text = valoresIniciales['monto'].toString();
-        if (valoresIniciales['fecha'] != null) fechaSeleccionada = DateTime.tryParse(valoresIniciales['fecha']) ?? DateTime.now();
+        if (valoresIniciales['item'] != null) {
+          _itemController.text = valoresIniciales['item'];
+        }
+        if (valoresIniciales['monto'] != null) {
+          _montoController.text = valoresIniciales['monto'].toString();
+        }
+        if (valoresIniciales['fecha'] != null) {
+          fechaSeleccionada =
+              DateTime.tryParse(valoresIniciales['fecha']) ?? DateTime.now();
+        }
         if (valoresIniciales['categoria'] != null) {
           final catStr = valoresIniciales['categoria'].toString();
-          if (!categoriasDisponibles.contains(catStr)) categoriasDisponibles.add(catStr);
+          if (!categoriasDisponibles.contains(catStr)) {
+            categoriasDisponibles.add(catStr);
+          }
           categoriaSeleccionada = catStr;
         }
-        if (valoresIniciales['boleta_url'] != null) boletaUrl = valoresIniciales['boleta_url'];
+        if (valoresIniciales['boleta_url'] != null) {
+          boletaUrl = valoresIniciales['boleta_url'];
+        }
         if (valoresIniciales['amigos'] != null) {
           esCompartido = true;
           final List<dynamic> preAmigos = valoresIniciales['amigos'];
           for (final a in preAmigos) {
             amigosCompartidos.add({'nombre': a['nombre'], 'monto': a['monto']});
             nombreControllers.add(TextEditingController(text: a['nombre']));
-            montoControllers.add(TextEditingController(text: a['monto'].toString()));
+            montoControllers.add(
+              TextEditingController(text: a['monto'].toString()),
+            );
           }
         }
       }
@@ -10624,7 +11147,8 @@ textInputAction: TextInputAction.done,
             final isDark = Theme.of(context).brightness == Brightness.dark;
             Future<void> guardar() async {
               final pendingTag = etiquetaController.text.trim();
-              if (pendingTag.isNotEmpty && !etiquetasSeleccionadas.contains(pendingTag)) {
+              if (pendingTag.isNotEmpty &&
+                  !etiquetasSeleccionadas.contains(pendingTag)) {
                 etiquetasSeleccionadas.add(pendingTag);
               }
 
@@ -10826,447 +11350,553 @@ textInputAction: TextInputAction.done,
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
                   ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      // Header
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Handle
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? colorTipo.shade900.withAlpha(80)
-                                  : colorTipo.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              esGasto
-                                  ? Icons.arrow_downward_rounded
-                                  : Icons.arrow_upward_rounded,
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? colorTipo.shade200
-                                  : colorTipo.shade700,
-                              size: 20,
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            esEdicion ? 'Editar $tipo' : 'Nuevo $tipo',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                        ),
+                        // Header
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? colorTipo.shade900.withAlpha(80)
+                                    : colorTipo.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                esGasto
+                                    ? Icons.arrow_downward_rounded
+                                    : Icons.arrow_upward_rounded,
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? colorTipo.shade200
+                                    : colorTipo.shade700,
+                                size: 20,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Concepto
-                      TextField(
-textInputAction: TextInputAction.done,
-                        controller: _itemController,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                        decoration: InputDecoration(
-                          hintText: '¿En qué se usó?',
-                          labelText: 'Concepto',
-                          prefixIcon: Icon(
-                            Icons.edit_note,
-                            color: colorTipo.shade400,
-                          ),
-                          suffixIcon: aiSuggesting
-                              ? Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.purple.shade300,
-                                    ),
-                                  ),
-                                )
-                              : aiSuggested
-                              ? Icon(
-                                  Icons.auto_awesome,
-                                  size: 18,
-                                  color: Colors.purple.shade300,
-                                )
-                              : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: isDark
-                              ? Colors.white.withAlpha(15)
-                              : Colors.grey.shade100,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                        ),
-                        onChanged: !esTransferencia && !esEdicion
-                            ? (value) {
-                                aiDebounce?.cancel();
-                                aiDebounce = Timer(
-                                  const Duration(milliseconds: 600),
-                                  () async {
-                                    if (value.trim().length < 3) return;
-                                    setStateSB(() => aiSuggesting = true);
-                                    final suggested = await _aiService
-                                        .suggestCategory(
-                                          value.trim(),
-                                          categoriasDisponibles,
-                                        );
-                                    if (suggested != null && context.mounted) {
-                                      setStateSB(() {
-                                        categoriaSeleccionada = suggested;
-                                        aiSuggesting = false;
-                                        aiSuggested = true;
-                                      });
-                                    } else if (context.mounted) {
-                                      setStateSB(() => aiSuggesting = false);
-                                    }
-                                  },
-                                );
-                              }
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Detalle
-                      TextField(
-textInputAction: TextInputAction.done,
-                        controller: _detalleController,
-                        decoration: InputDecoration(
-                          hintText: 'Notas adicionales...',
-                          labelText: 'Detalle (opcional)',
-                          prefixIcon: Icon(
-                            Icons.description_outlined,
-                            color: colorTipo.shade400,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: isDark
-                              ? Colors.white.withAlpha(15)
-                              : Colors.grey.shade100,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                        ),
-                        maxLines: 2,
-                        minLines: 1,
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Monto
-                      TextField(
-textInputAction: TextInputAction.done,
-                        controller: _montoController,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: colorTipo.shade400,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Monto',
-                          prefixIcon: Icon(
-                            Icons.numbers_rounded,
-                            color: colorTipo.shade400,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: colorTipo.withAlpha(isDark ? 20 : 10),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Categoría label
-                      if (!esTransferencia) ...[
-                        const Text(
-                          'Categoría',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: categoriasDisponibles.map((cat) {
-                            final isSelected = categoriaSeleccionada == cat;
-                            return ChoiceChip(
-                              avatar: _iconoCategoria(
-                                cat,
-                                size: 18,
-                                color: isSelected
-                                    ? Colors.white
-                                    : colorTipo.shade600,
+                            const SizedBox(width: 10),
+                            Text(
+                              esEdicion ? 'Editar $tipo' : 'Nuevo $tipo',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
-                              label: Text(cat),
-                              selected: isSelected,
-                              selectedColor: colorTipo.shade400,
-                              backgroundColor:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.grey.shade800
-                                  : Colors.grey.shade100,
-                              labelStyle: TextStyle(
-                                color: isSelected
-                                    ? Colors.white
-                                    : (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.grey.shade300
-                                          : Colors.black87),
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                              onSelected: (selected) {
-                                if (selected) {
-                                  setStateSB(() {
-                                    categoriaSeleccionada = cat;
-                                    subcategoriaSeleccionada = null;
-                                  });
-                                }
-                              },
-                            );
-                        }).toList(),
+                            ),
+                          ],
                         ),
-                        
-                        // Selector de Subcategoria (si aplica)
-                        if (categoriaSeleccionada != null) ...[
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Subcategoría',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed: () async {
-                                  final controller = TextEditingController();
-                                  final result = await showDialog<String>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Nueva Subcategoría'),
-                                      content: TextField(
-                                        controller: controller,
-                                        autofocus: true,
-                                        decoration: const InputDecoration(hintText: 'Ej. Bencina, Supermercado...'),
+                        const SizedBox(height: 16),
+
+                        // Concepto
+                        TextField(
+                          textInputAction: TextInputAction.done,
+                          controller: _itemController,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            hintText: '¿En qué se usó?',
+                            labelText: 'Concepto',
+                            prefixIcon: Icon(
+                              Icons.edit_note,
+                              color: colorTipo.shade400,
+                            ),
+                            suffixIcon: aiSuggesting
+                                ? Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.purple.shade300,
                                       ),
-                                      actions: [
-                                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-                                        FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Añadir')),
-                                      ],
                                     ),
-                                  );
-                                  if (result != null && result.trim().isNotEmpty) {
-                                    widget.settingsController.addSubcategory(categoriaSeleccionada!, result);
-                                    setStateSB(() => subcategoriaSeleccionada = result.trim());
-                                  }
-                                },
-                                icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Añadir'),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              ),
-                            ],
+                                  )
+                                : aiSuggested
+                                ? Icon(
+                                    Icons.auto_awesome,
+                                    size: 18,
+                                    color: Colors.purple.shade300,
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? Colors.white.withAlpha(15)
+                                : Colors.grey.shade100,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          if ((settings.activeSubcategories[categoriaSeleccionada] ?? []).isNotEmpty)
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: settings.activeSubcategories[categoriaSeleccionada]!.map((sub) {
-                                final isSelected = subcategoriaSeleccionada == sub;
-                                return ChoiceChip(
-                                  label: Text(sub),
-                                  selected: isSelected,
-                                  selectedColor: colorTipo.shade400,
-                                  backgroundColor: Theme.of(context).brightness == Brightness.dark
-                                      ? Colors.grey.shade800
-                                      : Colors.grey.shade100,
-                                  labelStyle: TextStyle(
-                                    color: isSelected
-                                        ? Colors.white
-                                        : (Theme.of(context).brightness == Brightness.dark
-                                            ? Colors.grey.shade300
-                                            : Colors.black87),
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  ),
-                                  onSelected: (selected) {
-                                    setStateSB(() {
-                                      if (selected) {
-                                        subcategoriaSeleccionada = sub;
-                                      } else {
-                                        subcategoriaSeleccionada = null;
+                          onChanged: !esTransferencia && !esEdicion
+                              ? (value) {
+                                  aiDebounce?.cancel();
+                                  aiDebounce = Timer(
+                                    const Duration(milliseconds: 600),
+                                    () async {
+                                      if (value.trim().length < 3) return;
+                                      setStateSB(() => aiSuggesting = true);
+                                      final suggested = await _aiService
+                                          .suggestCategory(
+                                            value.trim(),
+                                            categoriasDisponibles,
+                                          );
+                                      if (suggested != null &&
+                                          context.mounted) {
+                                        setStateSB(() {
+                                          categoriaSeleccionada = suggested;
+                                          aiSuggesting = false;
+                                          aiSuggested = true;
+                                        });
+                                      } else if (context.mounted) {
+                                        setStateSB(() => aiSuggesting = false);
                                       }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            )
-                          else
-                            const Text('No hay subcategorías. ¡Crea una!', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        ],
-                        
+                                    },
+                                  );
+                                }
+                              : null,
+                        ),
                         const SizedBox(height: 14),
 
-                        const Text(
-                          'Etiquetas',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                        // Detalle
+                        TextField(
+                          textInputAction: TextInputAction.done,
+                          controller: _detalleController,
+                          decoration: InputDecoration(
+                            hintText: 'Notas adicionales...',
+                            labelText: 'Detalle (opcional)',
+                            prefixIcon: Icon(
+                              Icons.description_outlined,
+                              color: colorTipo.shade400,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? Colors.white.withAlpha(15)
+                                : Colors.grey.shade100,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
+                          maxLines: 2,
+                          minLines: 1,
                         ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withAlpha(15) : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(16),
+                        const SizedBox(height: 14),
+
+                        // Monto
+                        TextField(
+                          textInputAction: TextInputAction.done,
+                          controller: _montoController,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: colorTipo.shade400,
                           ),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              ...etiquetasSeleccionadas.map((tag) => Chip(
-                                    label: Text(tag, style: const TextStyle(fontSize: 12)),
-                                    deleteIcon: const Icon(Icons.close, size: 14),
+                          decoration: InputDecoration(
+                            labelText: 'Monto',
+                            prefixIcon: Icon(
+                              Icons.numbers_rounded,
+                              color: colorTipo.shade400,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: colorTipo.withAlpha(isDark ? 20 : 10),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Categoría label
+                        if (!esTransferencia) ...[
+                          const Text(
+                            'Categoría',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: categoriasDisponibles.map((cat) {
+                              final isSelected = categoriaSeleccionada == cat;
+                              return ChoiceChip(
+                                avatar: _iconoCategoria(
+                                  cat,
+                                  size: 18,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : colorTipo.shade600,
+                                ),
+                                label: Text(cat),
+                                selected: isSelected,
+                                selectedColor: colorTipo.shade400,
+                                backgroundColor:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade100,
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : (Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.grey.shade300
+                                            : Colors.black87),
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setStateSB(() {
+                                      categoriaSeleccionada = cat;
+                                      subcategoriaSeleccionada = null;
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+
+                          // Selector de Subcategoria (si aplica)
+                          if (categoriaSeleccionada != null) ...[
+                            const SizedBox(height: 14),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Subcategoría',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final controller = TextEditingController();
+                                    final result = await showDialog<String>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Nueva Subcategoría'),
+                                        content: TextField(
+                                          controller: controller,
+                                          autofocus: true,
+                                          decoration: const InputDecoration(
+                                            hintText:
+                                                'Ej. Bencina, Supermercado...',
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: const Text('Cancelar'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () => Navigator.pop(
+                                              context,
+                                              controller.text,
+                                            ),
+                                            child: const Text('Añadir'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (result != null &&
+                                        result.trim().isNotEmpty) {
+                                      widget.settingsController.addSubcategory(
+                                        categoriaSeleccionada!,
+                                        result,
+                                      );
+                                      setStateSB(
+                                        () => subcategoriaSeleccionada = result
+                                            .trim(),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Añadir'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 0,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if ((settings
+                                        .activeSubcategories[categoriaSeleccionada] ??
+                                    [])
+                                .isNotEmpty)
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: settings
+                                    .activeSubcategories[categoriaSeleccionada]!
+                                    .map((sub) {
+                                      final isSelected =
+                                          subcategoriaSeleccionada == sub;
+                                      return ChoiceChip(
+                                        label: Text(sub),
+                                        selected: isSelected,
+                                        selectedColor: colorTipo.shade400,
+                                        backgroundColor:
+                                            Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.grey.shade800
+                                            : Colors.grey.shade100,
+                                        labelStyle: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : (Theme.of(context).brightness ==
+                                                        Brightness.dark
+                                                    ? Colors.grey.shade300
+                                                    : Colors.black87),
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                        onSelected: (selected) {
+                                          setStateSB(() {
+                                            if (selected) {
+                                              subcategoriaSeleccionada = sub;
+                                            } else {
+                                              subcategoriaSeleccionada = null;
+                                            }
+                                          });
+                                        },
+                                      );
+                                    })
+                                    .toList(),
+                              )
+                            else
+                              const Text(
+                                'No hay subcategorías. ¡Crea una!',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                          ],
+
+                          const SizedBox(height: 14),
+
+                          const Text(
+                            'Etiquetas',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withAlpha(15)
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ...etiquetasSeleccionadas.map(
+                                  (tag) => Chip(
+                                    label: Text(
+                                      tag,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    deleteIcon: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                    ),
                                     onDeleted: () {
-                                      setStateSB(() => etiquetasSeleccionadas.remove(tag));
+                                      setStateSB(
+                                        () =>
+                                            etiquetasSeleccionadas.remove(tag),
+                                      );
                                     },
-                                    backgroundColor: colorTipo.withAlpha(isDark ? 30 : 15),
+                                    backgroundColor: colorTipo.withAlpha(
+                                      isDark ? 30 : 15,
+                                    ),
                                     side: BorderSide.none,
                                     visualDensity: VisualDensity.compact,
-                                  )),
-                              IntrinsicWidth(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(minWidth: 80),
-                                  child: KeyboardListener(
-                                    focusNode: FocusNode(), // Dummy node, events bubble up or we can just use etiquetaFocusNode? Actually, KeyboardListener requires its own node or it won't work well. Let's just use the built-in trick: Text is never truly empty.
-                                    // Let's use the zero-width space trick for ultimate reliability without focus node bugs.
-                                    // Wait, let's just use KeyboardListener with a shared focus node.
-                                    // Actually, Flutter 3.0+ recommends `Focus` widget for this.
-                                    child: Focus(
-                                      onKeyEvent: (node, event) {
-                                        if (event is KeyDownEvent && event.logicalKey.keyLabel == 'Backspace') {
-                                          if (etiquetaController.text.isEmpty && etiquetasSeleccionadas.isNotEmpty) {
-                                            setStateSB(() {
-                                              etiquetasSeleccionadas.removeLast();
-                                            });
-                                            return KeyEventResult.handled;
-                                          }
-                                        }
-                                        return KeyEventResult.ignored;
-                                      },
-                                      child: TextField(
-                                        controller: etiquetaController,
-                                        focusNode: etiquetaFocusNode,
-                                        decoration: const InputDecoration(
-                                          isDense: true,
-                                          border: InputBorder.none,
-                                          hintText: 'Escribe y presiona espacio...',
-                                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                        ),
-                                        style: const TextStyle(fontSize: 13),
-                                        textInputAction: TextInputAction.done,
-                                        onChanged: (val) {
-                                          if (val.endsWith(' ') && val.trim().isNotEmpty) {
-                                            final tag = val.trim();
-                                            if (!etiquetasSeleccionadas.contains(tag)) {
+                                  ),
+                                ),
+                                IntrinsicWidth(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 80,
+                                    ),
+                                    child: KeyboardListener(
+                                      focusNode:
+                                          FocusNode(), // Dummy node, events bubble up or we can just use etiquetaFocusNode? Actually, KeyboardListener requires its own node or it won't work well. Let's just use the built-in trick: Text is never truly empty.
+                                      // Let's use the zero-width space trick for ultimate reliability without focus node bugs.
+                                      // Wait, let's just use KeyboardListener with a shared focus node.
+                                      // Actually, Flutter 3.0+ recommends `Focus` widget for this.
+                                      child: Focus(
+                                        onKeyEvent: (node, event) {
+                                          if (event is KeyDownEvent &&
+                                              event.logicalKey.keyLabel ==
+                                                  'Backspace') {
+                                            if (etiquetaController
+                                                    .text
+                                                    .isEmpty &&
+                                                etiquetasSeleccionadas
+                                                    .isNotEmpty) {
                                               setStateSB(() {
-                                                etiquetasSeleccionadas.add(tag);
+                                                etiquetasSeleccionadas
+                                                    .removeLast();
                                               });
+                                              return KeyEventResult.handled;
                                             }
-                                            etiquetaController.clear();
-                                            etiquetaFocusNode.requestFocus();
                                           }
+                                          return KeyEventResult.ignored;
                                         },
-                                        onSubmitted: (val) {
-                                          final tag = val.trim();
-                                          if (tag.isNotEmpty && !etiquetasSeleccionadas.contains(tag)) {
-                                            setStateSB(() {
-                                              etiquetasSeleccionadas.add(tag);
+                                        child: TextField(
+                                          controller: etiquetaController,
+                                          focusNode: etiquetaFocusNode,
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            border: InputBorder.none,
+                                            hintText:
+                                                'Escribe y presiona espacio...',
+                                            hintStyle: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey,
+                                            ),
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 8,
+                                                ),
+                                          ),
+                                          style: const TextStyle(fontSize: 13),
+                                          textInputAction: TextInputAction.done,
+                                          onChanged: (val) {
+                                            if (val.endsWith(' ') &&
+                                                val.trim().isNotEmpty) {
+                                              final tag = val.trim();
+                                              if (!etiquetasSeleccionadas
+                                                  .contains(tag)) {
+                                                setStateSB(() {
+                                                  etiquetasSeleccionadas.add(
+                                                    tag,
+                                                  );
+                                                });
+                                              }
                                               etiquetaController.clear();
                                               etiquetaFocusNode.requestFocus();
-                                            });
-                                          }
-                                        },
+                                            }
+                                          },
+                                          onSubmitted: (val) {
+                                            final tag = val.trim();
+                                            if (tag.isNotEmpty &&
+                                                !etiquetasSeleccionadas
+                                                    .contains(tag)) {
+                                              setStateSB(() {
+                                                etiquetasSeleccionadas.add(tag);
+                                                etiquetaController.clear();
+                                                etiquetaFocusNode
+                                                    .requestFocus();
+                                              });
+                                            }
+                                          },
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        // Sugerencias de etiquetas
-                        if (etiquetasDisponibles.where((t) => !etiquetasSeleccionadas.contains(t)).isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: etiquetasDisponibles
-                                  .where((tag) => !etiquetasSeleccionadas.contains(tag))
-                                  .map((tag) => Padding(
-                                        padding: const EdgeInsets.only(right: 6.0),
+                          // Sugerencias de etiquetas
+                          if (etiquetasDisponibles
+                              .where((t) => !etiquetasSeleccionadas.contains(t))
+                              .isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: etiquetasDisponibles
+                                    .where(
+                                      (tag) =>
+                                          !etiquetasSeleccionadas.contains(tag),
+                                    )
+                                    .map(
+                                      (tag) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 6.0,
+                                        ),
                                         child: ActionChip(
-                                          label: Text('+ $tag', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                          label: Text(
+                                            '+ $tag',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
                                           backgroundColor: Colors.transparent,
                                           visualDensity: VisualDensity.compact,
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                            side: BorderSide(color: Colors.grey.withAlpha(50)),
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                            side: BorderSide(
+                                              color: Colors.grey.withAlpha(50),
+                                            ),
                                           ),
                                           onPressed: () {
                                             setStateSB(() {
@@ -11274,35 +11904,70 @@ textInputAction: TextInputAction.done,
                                             });
                                           },
                                         ),
-                                      ))
-                                  .toList(),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
                             ),
-                          ),
+                          ],
+                          const SizedBox(height: 14),
                         ],
-                        const SizedBox(height: 14),
-                      ],
 
-                      // Fecha y Cuenta
-                      Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () async {
-                                FocusScope.of(context).unfocus();
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: fechaSeleccionada,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime(2035),
-                                );
-                                if (picked != null) {
-                                  setStateSB(() => fechaSeleccionada = picked);
-                                }
-                              },
-                              child: InputDecorator(
+                        // Fecha y Cuenta
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () async {
+                                  FocusScope.of(context).unfocus();
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: fechaSeleccionada,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2035),
+                                  );
+                                  if (picked != null) {
+                                    setStateSB(
+                                      () => fechaSeleccionada = picked,
+                                    );
+                                  }
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: 'Fecha',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    filled: true,
+                                    fillColor: isDark
+                                        ? Colors.white.withAlpha(15)
+                                        : Colors.grey.shade100,
+                                    suffixIcon: Icon(
+                                      Icons.calendar_month_rounded,
+                                      size: 18,
+                                      color: colorTipo.shade400,
+                                    ),
+                                    isDense: true,
+                                  ),
+                                  child: Text(
+                                    '${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: cuentaSeleccionada,
                                 decoration: InputDecoration(
-                                  labelText: 'Fecha',
+                                  labelText: esTransferencia
+                                      ? 'Cuenta Origen'
+                                      : 'Cuenta',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
                                     borderSide: BorderSide.none,
@@ -11311,437 +11976,433 @@ textInputAction: TextInputAction.done,
                                   fillColor: isDark
                                       ? Colors.white.withAlpha(15)
                                       : Colors.grey.shade100,
-                                  suffixIcon: Icon(
-                                    Icons.calendar_month_rounded,
-                                    size: 18,
-                                    color: colorTipo.shade400,
-                                  ),
                                   isDense: true,
                                 ),
-                                child: Text(
-                                  '${fechaSeleccionada.day}/${fechaSeleccionada.month}/${fechaSeleccionada.year}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                items: cuentasDisponibles
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(
+                                          c,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setStateSB(() => cuentaSeleccionada = value);
+                                },
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: cuentaSeleccionada,
-                              decoration: InputDecoration(
-                                labelText: esTransferencia
-                                    ? 'Cuenta Origen'
-                                    : 'Cuenta',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                                filled: true,
-                                fillColor: isDark
-                                    ? Colors.white.withAlpha(15)
-                                    : Colors.grey.shade100,
-                                isDense: true,
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        if (esTransferencia) ...[
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            initialValue: cuentaDestinoSeleccionada,
+                            decoration: InputDecoration(
+                              labelText: 'Cuenta Destino',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              items: cuentasDisponibles
-                                  .map(
-                                    (c) => DropdownMenuItem(
-                                      value: c,
-                                      child: Text(
-                                        c,
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
+                              filled: true,
+                              fillColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.grey.shade900
+                                  : Colors.grey.shade50,
+                              isDense: true,
+                            ),
+                            items: cuentasDisponibles
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(
+                                      c,
+                                      style: const TextStyle(fontSize: 13),
                                     ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                if (value == null) return;
-                                setStateSB(() => cuentaSeleccionada = value);
-                              },
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setStateSB(
+                                () => cuentaDestinoSeleccionada = value,
+                              );
+                            },
+                          ),
+                        ] else if (settings.hasCreditCard) ...[
+                          const SizedBox(height: 12),
+                          // Método de pago
+                          SegmentedButton<bool>(
+                            segments: const [
+                              ButtonSegment<bool>(
+                                value: false,
+                                label: Text('Débito'),
+                                icon: Icon(
+                                  Icons.account_balance_wallet,
+                                  size: 18,
+                                ),
+                              ),
+                              ButtonSegment<bool>(
+                                value: true,
+                                label: Text('Crédito'),
+                                icon: Icon(Icons.credit_card, size: 18),
+                              ),
+                            ],
+                            selected: {esCredito},
+                            onSelectionChanged: (s) =>
+                                setStateSB(() => esCredito = s.first),
+                            style: ButtonStyle(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      if (esTransferencia) ...[
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: cuentaDestinoSeleccionada,
-                          decoration: InputDecoration(
-                            labelText: 'Cuenta Destino',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.grey.shade900
-                                : Colors.grey.shade50,
-                            isDense: true,
+                        if (esGasto) ...[
+                          const SizedBox(height: 12),
+                          SwitchListTile(
+                            title: const Text('Compartir gasto con amigos'),
+                            value: esCompartido,
+                            onChanged: (val) {
+                              setStateSB(() {
+                                esCompartido = val;
+                                if (val && amigosCompartidos.isEmpty) {
+                                  amigosCompartidos.add({
+                                    'nombre': '',
+                                    'monto': '',
+                                  });
+                                  nombreControllers.add(
+                                    TextEditingController(),
+                                  );
+                                  montoControllers.add(TextEditingController());
+                                }
+                              });
+                            },
+                            contentPadding: EdgeInsets.zero,
+                            activeThumbColor: colorTipo.shade400,
                           ),
-                          items: cuentasDisponibles
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    c,
-                                    style: const TextStyle(fontSize: 13),
+                          if (esCompartido) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Amigos',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          final montoTotal =
+                                              int.tryParse(
+                                                _montoController.text.trim(),
+                                              ) ??
+                                              0;
+                                          if (montoTotal > 0 &&
+                                              amigosCompartidos.isNotEmpty) {
+                                            final partes =
+                                                amigosCompartidos.length +
+                                                1; // yo + amigos
+                                            final porPersona =
+                                                (montoTotal / partes).round();
+                                            setStateSB(() {
+                                              for (
+                                                int i = 0;
+                                                i < amigosCompartidos.length;
+                                                i++
+                                              ) {
+                                                amigosCompartidos[i]['monto'] =
+                                                    porPersona.toString();
+                                                montoControllers[i].text =
+                                                    porPersona.toString();
+                                              }
+                                            });
+                                          }
+                                        },
+                                        icon: const Icon(
+                                          Icons.pie_chart,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Partes iguales'),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setStateSB(() => cuentaDestinoSeleccionada = value);
-                          },
-                        ),
-                      ] else if (settings.hasCreditCard) ...[
-                        const SizedBox(height: 12),
-                        // Método de pago
-                        SegmentedButton<bool>(
-                          segments: const [
-                            ButtonSegment<bool>(
-                              value: false,
-                              label: Text('Débito'),
-                              icon: Icon(
-                                Icons.account_balance_wallet,
-                                size: 18,
+                                  ...amigosCompartidos.asMap().entries.map((
+                                    entry,
+                                  ) {
+                                    final idx = entry.key;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8.0,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 2,
+                                            child: TextField(
+                                              textInputAction:
+                                                  TextInputAction.done,
+                                              controller:
+                                                  nombreControllers[idx],
+                                              decoration: const InputDecoration(
+                                                hintText: 'Nombre',
+                                                isDense: true,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            flex: 1,
+                                            child: TextField(
+                                              textInputAction:
+                                                  TextInputAction.done,
+                                              controller: montoControllers[idx],
+                                              decoration: const InputDecoration(
+                                                hintText: 'Monto',
+                                                prefixText: '\$ ',
+                                                isDense: true,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                              ],
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.remove_circle,
+                                              color: Colors.red,
+                                            ),
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.only(
+                                              left: 8,
+                                            ),
+                                            onPressed: () {
+                                              HapticFeedback.lightImpact();
+                                              setStateSB(() {
+                                                amigosCompartidos.removeAt(idx);
+                                                nombreControllers[idx]
+                                                    .dispose();
+                                                nombreControllers.removeAt(idx);
+                                                montoControllers[idx].dispose();
+                                                montoControllers.removeAt(idx);
+                                                if (amigosCompartidos.isEmpty) {
+                                                  esCompartido = false;
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      setStateSB(() {
+                                        amigosCompartidos.add({
+                                          'nombre': '',
+                                          'monto': '',
+                                        });
+                                        nombreControllers.add(
+                                          TextEditingController(),
+                                        );
+                                        montoControllers.add(
+                                          TextEditingController(),
+                                        );
+                                      });
+                                    },
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Agregar amigo'),
+                                  ),
+                                ],
                               ),
                             ),
-                            ButtonSegment<bool>(
-                              value: true,
-                              label: Text('Crédito'),
-                              icon: Icon(Icons.credit_card, size: 18),
-                            ),
                           ],
-                          selected: {esCredito},
-                          onSelectionChanged: (s) =>
-                              setStateSB(() => esCredito = s.first),
-                          style: ButtonStyle(
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
+                        ],
+                        const SizedBox(height: 20),
+
+                        // Toggle: Movimiento Proyectado
+                        if (!esTransferencia) ...[
+                          GestureDetector(
+                            onTap: () => setStateSB(
+                              () => esFantasmaForm = !esFantasmaForm,
+                            ),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: esFantasmaForm
+                                    ? (isDark
+                                          ? Colors.purple.shade900.withAlpha(80)
+                                          : Colors.purple.shade50)
+                                    : (isDark
+                                          ? Colors.white.withAlpha(8)
+                                          : Colors.grey.shade50),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: esFantasmaForm
+                                      ? (isDark
+                                            ? Colors.purple.shade600
+                                            : Colors.purple.shade200)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Mov. proyectado',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: esFantasmaForm
+                                          ? (isDark
+                                                ? Colors.purpleAccent.shade100
+                                                : Colors.purple.shade800)
+                                          : (isDark
+                                                ? Colors.grey.shade400
+                                                : Colors.grey.shade600),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Switch.adaptive(
+                                    value: esFantasmaForm,
+                                    onChanged: (v) =>
+                                        setStateSB(() => esFantasmaForm = v),
+                                    thumbColor: WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.selected)
+                                          ? Colors.purple.shade400
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                      if (esGasto) ...[
-                        const SizedBox(height: 12),
-                        SwitchListTile(
-                          title: const Text('Compartir gasto con amigos'),
-                          value: esCompartido,
-                          onChanged: (val) {
-                            setStateSB(() {
-                              esCompartido = val;
-                              if (val && amigosCompartidos.isEmpty) {
-                                amigosCompartidos.add({
-                                  'nombre': '',
-                                  'monto': '',
-                                });
-                                nombreControllers.add(TextEditingController());
-                                montoControllers.add(TextEditingController());
-                              }
-                            });
-                          },
-                          contentPadding: EdgeInsets.zero,
-                          activeThumbColor: colorTipo.shade400,
-                        ),
-                        if (esCompartido) ...[
+                          const SizedBox(height: 12),
+                        ],
+                        if (boletaUrl != null) ...[
+                          const SizedBox(height: 12),
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.grey.shade800
-                                  : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text(
-                                      'Amigos',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        final montoTotal =
-                                            int.tryParse(
-                                              _montoController.text.trim(),
-                                            ) ??
-                                            0;
-                                        if (montoTotal > 0 &&
-                                            amigosCompartidos.isNotEmpty) {
-                                          final partes =
-                                              amigosCompartidos.length +
-                                              1; // yo + amigos
-                                          final porPersona =
-                                              (montoTotal / partes).round();
-                                          setStateSB(() {
-                                            for (
-                                              int i = 0;
-                                              i < amigosCompartidos.length;
-                                              i++
-                                            ) {
-                                              amigosCompartidos[i]['monto'] =
-                                                  porPersona.toString();
-                                              montoControllers[i].text =
-                                                  porPersona.toString();
-                                            }
-                                          });
-                                        }
-                                      },
-                                      icon: const Icon(
-                                        Icons.pie_chart,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Partes iguales'),
-                                    ),
-                                  ],
-                                ),
-                                ...amigosCompartidos.asMap().entries.map((
-                                  entry,
-                                ) {
-                                  final idx = entry.key;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          flex: 2,
-                                          child: TextField(
-textInputAction: TextInputAction.done,
-                                            controller: nombreControllers[idx],
-                                            decoration: const InputDecoration(
-                                              hintText: 'Nombre',
-                                              isDense: true,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          flex: 1,
-                                          child: TextField(
-textInputAction: TextInputAction.done,
-                                            controller: montoControllers[idx],
-                                            decoration: const InputDecoration(
-                                              hintText: 'Monto',
-                                              prefixText: '\$ ',
-                                              isDense: true,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                            ],
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.remove_circle,
-                                            color: Colors.red,
-                                          ),
-                                          constraints: const BoxConstraints(),
-                                          padding: const EdgeInsets.only(
-                                            left: 8,
-                                          ),
-                                          onPressed: () {
-                                            HapticFeedback.lightImpact();
-                                            setStateSB(() {
-                                              amigosCompartidos.removeAt(idx);
-                                              nombreControllers[idx].dispose();
-                                              nombreControllers.removeAt(idx);
-                                              montoControllers[idx].dispose();
-                                              montoControllers.removeAt(idx);
-                                              if (amigosCompartidos.isEmpty) {
-                                                esCompartido = false;
-                                              }
-                                            });
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    setStateSB(() {
-                                      amigosCompartidos.add({
-                                        'nombre': '',
-                                        'monto': '',
-                                      });
-                                      nombreControllers.add(
-                                        TextEditingController(),
-                                      );
-                                      montoControllers.add(
-                                        TextEditingController(),
-                                      );
-                                    });
-                                  },
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Agregar amigo'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                      const SizedBox(height: 20),
-
-                      // Toggle: Movimiento Proyectado
-                      if (!esTransferencia) ...[
-                        GestureDetector(
-                          onTap: () => setStateSB(
-                            () => esFantasmaForm = !esFantasmaForm,
-                          ),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: esFantasmaForm
-                                  ? (isDark
-                                        ? Colors.purple.shade900.withAlpha(80)
-                                        : Colors.purple.shade50)
-                                  : (isDark
-                                        ? Colors.white.withAlpha(8)
-                                        : Colors.grey.shade50),
+                              color: isDark
+                                  ? Colors.grey.shade900
+                                  : Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: esFantasmaForm
-                                    ? (isDark
-                                          ? Colors.purple.shade600
-                                          : Colors.purple.shade200)
-                                    : Colors.transparent,
+                                color: Colors.grey.withAlpha(50),
                               ),
                             ),
                             child: Row(
                               children: [
-                                Text(
-                                  'Mov. proyectado',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: esFantasmaForm
-                                        ? (isDark
-                                              ? Colors.purpleAccent.shade100
-                                              : Colors.purple.shade800)
-                                        : (isDark
-                                              ? Colors.grey.shade400
-                                              : Colors.grey.shade600),
+                                const Icon(Icons.receipt, color: Colors.blue),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Text(
+                                    'Boleta adjunta',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                                const Spacer(),
-                                Switch.adaptive(
-                                  value: esFantasmaForm,
-                                  onChanged: (v) =>
-                                      setStateSB(() => esFantasmaForm = v),
-                                  thumbColor: WidgetStateProperty.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? Colors.purple.shade400
-                                        : null,
-                                  ),
+                                TextButton(
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => Dialog(
+                                        insetPadding: EdgeInsets.zero,
+                                        backgroundColor: Colors.transparent,
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            InteractiveViewer(
+                                              child: Image.network(boletaUrl!),
+                                            ),
+                                            Positioned(
+                                              top: 40,
+                                              right: 20,
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 30,
+                                                ),
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('Ver Boleta'),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (boletaUrl != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.withAlpha(50)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.receipt, color: Colors.blue),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Text('Boleta adjunta', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 12),
+                        ],
+                        // Botón guardar
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            onPressed: guardar,
+                            icon: Icon(esEdicion ? Icons.save : Icons.check),
+                            label: Text(
+                              esEdicion ? 'Guardar cambios' : 'Registrar $tipo',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) => Dialog(
-                                      insetPadding: EdgeInsets.zero,
-                                      backgroundColor: Colors.transparent,
-                                      child: Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          InteractiveViewer(
-                                            child: Image.network(boletaUrl!),
-                                          ),
-                                          Positioned(
-                                            top: 40,
-                                            right: 20,
-                                            child: IconButton(
-                                              icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                                              onPressed: () => Navigator.pop(ctx),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: const Text('Ver Boleta'),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      // Botón guardar
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                          onPressed: guardar,
-                          icon: Icon(esEdicion ? Icons.save : Icons.check),
-                          label: Text(
-                            esEdicion ? 'Guardar cambios' : 'Registrar $tipo',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colorTipo.shade400,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorTipo.shade400,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 30), // Espacio extra para barra inferior o scroll
-                    ],
+                        const SizedBox(
+                          height: 30,
+                        ), // Espacio extra para barra inferior o scroll
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
-      );
-    },
-  );
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _construirPaginaCredito(List<Map<String, dynamic>> todosLosDatos) {
@@ -11816,11 +12477,14 @@ textInputAction: TextInputAction.done,
         .inDays;
     final esMesActualVisualizado =
         _mesVisualizado.year == now.year && _mesVisualizado.month == now.month;
-    
+
     final fechaCorteFacturado = curStart.subtract(const Duration(days: 1));
-    final vencimientoFacturado = _proximoVencimientoTarjeta(fechaCorteFacturado, dueDay);
+    final vencimientoFacturado = _proximoVencimientoTarjeta(
+      fechaCorteFacturado,
+      dueDay,
+    );
     final vencimientoFacturadoFinDia = _finDelDia(vencimientoFacturado);
-    
+
     final mostrarFacturadosYAbonos =
         esMesActualVisualizado && !now.isAfter(vencimientoFacturadoFinDia);
 
@@ -12063,7 +12727,10 @@ textInputAction: TextInputAction.done,
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green.withAlpha(isDark ? 25 : 12),
                         borderRadius: BorderRadius.circular(10),
@@ -12071,7 +12738,11 @@ textInputAction: TextInputAction.done,
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle_outline, size: 16, color: Colors.green.shade600),
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                            color: Colors.green.shade600,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -12079,15 +12750,22 @@ textInputAction: TextInputAction.done,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.green.shade200 : Colors.green.shade800,
+                                color: isDark
+                                    ? Colors.green.shade200
+                                    : Colors.green.shade800,
                               ),
                             ),
                           ),
                           InkWell(
                             onTap: () {
-                              widget.settingsController.setLastManualBillingClose(null);
+                              widget.settingsController
+                                  .setLastManualBillingClose(null);
                             },
-                            child: Icon(Icons.undo, size: 16, color: Colors.grey.shade500),
+                            child: Icon(
+                              Icons.undo,
+                              size: 16,
+                              color: Colors.grey.shade500,
+                            ),
                           ),
                         ],
                       ),
@@ -12098,14 +12776,27 @@ textInputAction: TextInputAction.done,
                         Expanded(
                           child: OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: isDark ? Colors.amber.shade200 : Colors.amber.shade800,
-                              side: BorderSide(color: isDark ? Colors.amber.shade700 : Colors.amber.shade300),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              foregroundColor: isDark
+                                  ? Colors.amber.shade200
+                                  : Colors.amber.shade800,
+                              side: BorderSide(
+                                color: isDark
+                                    ? Colors.amber.shade700
+                                    : Colors.amber.shade300,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            onPressed: () => _confirmarCierreCiclo(porFacturarPendiente),
+                            onPressed: () =>
+                                _confirmarCierreCiclo(porFacturarPendiente),
                             icon: const Icon(Icons.event_available, size: 20),
-                            label: const Text('Cerrar ciclo ahora', style: TextStyle(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                            label: const Text(
+                              'Cerrar ciclo ahora',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       if (!yaSeManualClose && porFacturarPendiente > 0)
@@ -12114,23 +12805,45 @@ textInputAction: TextInputAction.done,
                         Expanded(
                           child: OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: isDark ? Colors.amber.shade200 : Colors.amber.shade800,
-                              side: BorderSide(color: isDark ? Colors.amber.shade700 : Colors.amber.shade300),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              foregroundColor: isDark
+                                  ? Colors.amber.shade200
+                                  : Colors.amber.shade800,
+                              side: BorderSide(
+                                color: isDark
+                                    ? Colors.amber.shade700
+                                    : Colors.amber.shade300,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: _mostrarConfiguracionFechas,
                             icon: const Icon(Icons.settings, size: 20),
-                            label: const Text('Configurar fechas de TC', style: TextStyle(fontWeight: FontWeight.w700)),
+                            label: const Text(
+                              'Configurar fechas de TC',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
                           ),
                         )
                       else
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: isDark ? Colors.amber.shade200 : Colors.amber.shade800,
-                            side: BorderSide(color: isDark ? Colors.amber.shade700 : Colors.amber.shade300),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            foregroundColor: isDark
+                                ? Colors.amber.shade200
+                                : Colors.amber.shade800,
+                            side: BorderSide(
+                              color: isDark
+                                  ? Colors.amber.shade700
+                                  : Colors.amber.shade300,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 16,
+                            ),
                           ),
                           onPressed: _mostrarConfiguracionFechas,
                           child: const Icon(Icons.settings, size: 20),
@@ -12694,7 +13407,8 @@ textInputAction: TextInputAction.done,
                           _textoMonto((m['monto'] as num).toInt()),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).brightness == Brightness.dark
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
                                 ? Colors.white
                                 : Colors.deepOrange.shade700,
                           ),
@@ -12748,7 +13462,8 @@ textInputAction: TextInputAction.done,
                           _textoMonto((m['monto'] as num).toInt()),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).brightness == Brightness.dark
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
                                 ? Colors.white
                                 : Colors.green.shade700,
                           ),
@@ -13347,14 +14062,14 @@ textInputAction: TextInputAction.done,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-textInputAction: TextInputAction.done,
+                      textInputAction: TextInputAction.done,
                       controller: nameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Nombre (ej. Crédito Coche)',
                       ),
                     ),
                     TextField(
-textInputAction: TextInputAction.done,
+                      textInputAction: TextInputAction.done,
                       controller: amountCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Monto Cuota',
@@ -13363,7 +14078,7 @@ textInputAction: TextInputAction.done,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     TextField(
-textInputAction: TextInputAction.done,
+                      textInputAction: TextInputAction.done,
                       controller: installmentsCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Total Cuotas',
@@ -13372,7 +14087,7 @@ textInputAction: TextInputAction.done,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     TextField(
-textInputAction: TextInputAction.done,
+                      textInputAction: TextInputAction.done,
                       controller: paymentDayCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Día de pago (1-31)',
@@ -13533,7 +14248,9 @@ textInputAction: TextInputAction.done,
             'monto': p['monto'],
             'categoria': p['categoria'],
             'cuenta': p['cuenta'],
-            'tipo': (p['tipo'] == 'Cuota' || p['tipo'] == 'Ahorro') ? 'Gasto' : p['tipo'],
+            'tipo': (p['tipo'] == 'Cuota' || p['tipo'] == 'Ahorro')
+                ? 'Gasto'
+                : p['tipo'],
           });
 
           // 2. Calcular nueva fecha
@@ -13647,7 +14364,7 @@ class _DialogoTextoState extends State<_DialogoTexto> {
     return AlertDialog(
       title: Text(widget.titulo),
       content: TextField(
-textInputAction: TextInputAction.done,
+        textInputAction: TextInputAction.done,
         controller: _controller,
         decoration: InputDecoration(labelText: widget.etiqueta),
       ),
@@ -13709,7 +14426,7 @@ class _DialogoEnteroState extends State<_DialogoEntero> {
     return AlertDialog(
       title: Text(widget.titulo),
       content: TextField(
-textInputAction: TextInputAction.done,
+        textInputAction: TextInputAction.done,
         controller: _controller,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -14705,7 +15422,7 @@ class _SimuladorCompraSheetState extends State<_SimuladorCompraSheet> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
-textInputAction: TextInputAction.done,
+      textInputAction: TextInputAction.done,
       controller: controller,
       keyboardType: isNumber
           ? (isDecimal
@@ -15356,114 +16073,117 @@ textInputAction: TextInputAction.done,
           ),
         ),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.bar_chart,
-                size: 20,
-                color: isDark ? Colors.deepPurple.shade200 : Colors.deepPurple,
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Proyección de flujo mensual',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.bar_chart,
+                  size: 20,
+                  color: isDark
+                      ? Colors.deepPurple.shade200
+                      : Colors.deepPurple,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Leyenda
-          Row(
-            children: [
-              _leyenda(Colors.green.shade400, 'Sin compra'),
-              const SizedBox(width: 16),
-              _leyenda(Colors.deepPurple.shade400, 'Con compra'),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 160,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: datos.map((p) {
-                final flujoSin = p['flujoSin'] as int;
-                final flujoCon = p['flujoCon'] as int;
-                final label = p['label'] as String;
-
-                final alturaSin = ((flujoSin.abs() / maxAbs) * 90) + 4;
-                final alturaCon = ((flujoCon.abs() / maxAbs) * 90) + 4;
-
-                final colorSin = flujoSin >= 0
-                    ? Colors.green.shade400
-                    : Colors.red.shade300;
-                final colorCon = flujoCon >= 0
-                    ? Colors.deepPurple.shade400
-                    : Colors.red.shade600;
-
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: alturaSin,
-                              decoration: BoxDecoration(
-                                color: colorSin,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            const SizedBox(width: 2),
-                            Container(
-                              width: 8,
-                              height: alturaCon,
-                              decoration: BoxDecoration(
-                                color: colorCon,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          label.split(' ')[0], // Solo mes corto
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Proyección de flujo mensual',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          if (total > maxVisible)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Mostrando primeros $maxVisible de $total meses',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey.shade500,
-                  fontStyle: FontStyle.italic,
                 ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Leyenda
+            Row(
+              children: [
+                _leyenda(Colors.green.shade400, 'Sin compra'),
+                const SizedBox(width: 16),
+                _leyenda(Colors.deepPurple.shade400, 'Con compra'),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 160,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: datos.map((p) {
+                  final flujoSin = p['flujoSin'] as int;
+                  final flujoCon = p['flujoCon'] as int;
+                  final label = p['label'] as String;
+
+                  final alturaSin = ((flujoSin.abs() / maxAbs) * 90) + 4;
+                  final alturaCon = ((flujoCon.abs() / maxAbs) * 90) + 4;
+
+                  final colorSin = flujoSin >= 0
+                      ? Colors.green.shade400
+                      : Colors.red.shade300;
+                  final colorCon = flujoCon >= 0
+                      ? Colors.deepPurple.shade400
+                      : Colors.red.shade600;
+
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: alturaSin,
+                                decoration: BoxDecoration(
+                                  color: colorSin,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Container(
+                                width: 8,
+                                height: alturaCon,
+                                decoration: BoxDecoration(
+                                  color: colorCon,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            label.split(' ')[0], // Solo mes corto
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-        ],
+            if (total > maxVisible)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Mostrando primeros $maxVisible de $total meses',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   Widget _leyenda(Color color, String label) {
