@@ -85,6 +85,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   List<Map<String, dynamic>> _recurrentes = [];
   int _metasRefreshNonce = 0;
 
+  int _totalPorCobrar = 0;
+  StreamSubscription<List<Map<String, dynamic>>>? _porCobrarSub;
+
   // AI Insights state
   final AiInsightsService _aiService = AiInsightsService(
     apiKey: AppSecrets.openAiApiKey,
@@ -270,6 +273,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   @override
   void initState() {
     super.initState();
+    _porCobrarSub = _porCobrarStream.listen((data) {
+      if (!mounted) return;
+      int total = data.fold<int>(
+        0,
+        (sum, item) => sum + (item['monto'] as num? ?? 0).toInt(),
+      );
+      setState(() {
+        _totalPorCobrar = total;
+      });
+    });
     WidgetsBinding.instance.addObserver(this);
     widget.settingsController.addListener(_onSettingsChanged);
     _cuentaController.text = widget.settingsController.settings.defaultAccount;
@@ -310,6 +323,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   @override
   void dispose() {
+    _porCobrarSub?.cancel();
     widget.settingsController.removeListener(_onSettingsChanged);
     WidgetsBinding.instance.removeObserver(this);
     widget.settingsController.removeListener(_onSettingsChanged);
@@ -2819,39 +2833,91 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                             letterSpacing: -1.5,
                           ),
                         ),
-                        // ── Saldo Proyectado (visible solo si hay fantasmas) ──
-                        if (hayFantasmas) ...[
+                        // ── Saldo Proyectado (Fantasmas + Cuentas por cobrar) ──
+                        if (hayFantasmas || _totalPorCobrar > 0) ...[
                           const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A2E),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.purple.shade800.withAlpha(120),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.auto_awesome,
-                                  size: 11,
-                                  color: Colors.purpleAccent.shade100,
+                          GestureDetector(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: const Color(0xFF1A1A2E),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(
+                                      color: Colors.purple.shade800.withAlpha(120),
+                                    ),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.auto_awesome,
+                                        color: Colors.purpleAccent.shade100,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Flexible(
+                                        child: Text(
+                                          'Liquidez Proyectada',
+                                          style: TextStyle(color: Colors.white, fontSize: 16),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  content: Text(
+                                    hayFantasmas
+                                        ? 'Proyectado al ${ultimoFantasmaFecha!.day}/${ultimoFantasmaFecha.month}:\n${formatoMoneda(saldoProyectado - saldoCreditoUtilizado + _totalPorCobrar)}${_totalPorCobrar > 0 ? '\n\n(Incluye ${formatoMoneda(_totalPorCobrar)} por cobrar)' : ''}'
+                                        : 'Proyectado:\n${formatoMoneda(saldoProyectado - saldoCreditoUtilizado + _totalPorCobrar)}${_totalPorCobrar > 0 ? '\n\n(Incluye ${formatoMoneda(_totalPorCobrar)} por cobrar)' : ''}',
+                                    style: TextStyle(
+                                      color: Colors.purpleAccent.shade100,
+                                      fontSize: 15,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Entendido', style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  'Proyectado al ${ultimoFantasmaFecha!.day}/${ultimoFantasmaFecha.month}: ${formatoMoneda(saldoProyectado - saldoCreditoUtilizado)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A2E),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: Colors.purple.shade800.withAlpha(120),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome,
+                                    size: 11,
                                     color: Colors.purpleAccent.shade100,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      hayFantasmas
+                                          ? 'Proyectado al ${ultimoFantasmaFecha!.day}/${ultimoFantasmaFecha.month}: ${formatoMoneda(saldoProyectado - saldoCreditoUtilizado + _totalPorCobrar)}'
+                                          : 'Proyectado: ${formatoMoneda(saldoProyectado - saldoCreditoUtilizado + _totalPorCobrar)}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.purpleAccent.shade100,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -8469,7 +8535,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       (sum, m) => sum + (m['monto'] as num).toInt(),
                     );
 
-                    if (presupuestoCat == 0 && gastadoCat == 0 && subs.isEmpty) {
+                    if (presupuestoCat == 0 &&
+                        gastadoCat == 0 &&
+                        subs.isEmpty) {
                       return const SizedBox();
                     }
 

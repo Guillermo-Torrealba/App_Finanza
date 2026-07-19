@@ -76,5 +76,7 @@
 		<string>Necesitamos acceso a tus fotos para que puedas elegir una boleta desde tu galería.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Necesitamos acceso al micrófono al grabar videos.</string>
-	\t<key>NSSpeechRecognitionUsageDescription</key>\n\t<string>Necesitamos reconocimiento de voz para que dictes tus gastos.</string>\n</dict>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Necesitamos reconocimiento de voz para que dictes tus gastos.</string>
+</dict>
 </plist>
