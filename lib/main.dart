@@ -15,20 +15,37 @@ import 'package:google_fonts/google_fonts.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializamos Firebase con la configuración generada
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    // Inicializamos Firebase con la configuración generada
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint("Error inicializando Firebase: $e");
+  }
 
-  await Supabase.initialize(
-    url: AppSecrets.supabaseUrl,
-    anonKey: AppSecrets.supabaseAnonKey,
-  );
+  try {
+    await Supabase.initialize(
+      url: AppSecrets.supabaseUrl,
+      anonKey: AppSecrets.supabaseAnonKey,
+    );
+  } catch (e) {
+    debugPrint("Error inicializando Supabase: $e");
+  }
 
-  // Inicializamos los listeners de notificaciones push
-  await PushNotificationService.init();
+  try {
+    // Inicializamos los listeners de notificaciones push
+    await PushNotificationService.init();
+  } catch (e) {
+    debugPrint("Error inicializando notificaciones push: $e");
+  }
 
-  final preferences = await SharedPreferences.getInstance();
-  final settingsController = SettingsController(preferences: preferences);
-  await settingsController.init();
+  late SettingsController settingsController;
+  try {
+    final preferences = await SharedPreferences.getInstance();
+    settingsController = SettingsController(preferences: preferences);
+    await settingsController.init();
+  } catch (e) {
+    debugPrint("Error inicializando configuraciones: $e");
+  }
 
   runApp(AppFinanzas(settingsController: settingsController));
 }
