@@ -216,6 +216,15 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
 
     setState(() => _isLoading = true);
     try {
+      // El reembolso debe entrar en la cuenta donde se originaron los gastos.
+      // Antes se guardaba siempre como "Otra", por lo que la pantalla
+      // principal lo excluía al filtrar las cuentas activas del usuario.
+      final cuentas = deudasGrupo
+          .map((deuda) => (deuda['gastos']?['cuenta'] ?? '').toString().trim())
+          .where((cuenta) => cuenta.isNotEmpty)
+          .toSet();
+      final cuentaIngreso = cuentas.isNotEmpty ? cuentas.first : 'Otra';
+
       for (var deuda in deudasGrupo) {
         await supabase
             .from('gastos_compartidos')
@@ -230,7 +239,7 @@ class _GastosCompartidosScreenState extends State<GastosCompartidosScreen> {
         'detalle': 'Reembolso por ${deudasGrupo.length} gastos compartidos',
         'monto': montoConfirmado,
         'categoria': 'Cuentas por Cobrar',
-        'cuenta': 'Otra',
+        'cuenta': cuentaIngreso,
         'tipo': 'Ingreso',
         'metodo_pago': 'Debito',
       });
