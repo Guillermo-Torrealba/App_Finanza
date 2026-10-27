@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app_secrets.dart';
+import 'app_config.dart';
 
 Future<void> main() async {
   // Para que funcione el plugin de Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: AppSecrets.supabaseUrl,
-    anonKey: AppSecrets.supabaseAnonKey,
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabasePublishableKey,
   );
   
   final supabase = Supabase.instance.client;

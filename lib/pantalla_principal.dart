@@ -26,9 +26,9 @@ import 'login_screen.dart';
 import 'pantalla_recurrentes.dart';
 import 'gastos_compartidos_screen.dart';
 import 'ai_insights_service.dart';
-import 'app_secrets.dart';
 import 'package:image_picker/image_picker.dart';
 import 'receipt_scanner_service.dart';
+import 'receipt_image.dart';
 import 'divisor_cuenta_screen.dart';
 import 'gastos_pendientes_screen.dart';
 
@@ -89,9 +89,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   StreamSubscription<List<Map<String, dynamic>>>? _porCobrarSub;
 
   // AI Insights state
-  final AiInsightsService _aiService = AiInsightsService(
-    apiKey: AppSecrets.openAiApiKey,
-  );
+  final AiInsightsService _aiService = AiInsightsService();
   AiInsightsResult? _aiResult;
   bool _aiLoading = false;
   String? _aiError;
@@ -12408,7 +12406,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                           alignment: Alignment.center,
                                           children: [
                                             InteractiveViewer(
-                                              child: Image.network(boletaUrl!),
+                                              child: ReceiptImage(reference: boletaUrl!),
                                             ),
                                             Positioned(
                                               top: 40,

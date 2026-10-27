@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'app_settings.dart';
-import 'app_secrets.dart';
+import 'app_config.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
@@ -22,14 +22,15 @@ Future<void> main() async {
     debugPrint("Error inicializando Firebase: $e");
   }
 
-  try {
-    await Supabase.initialize(
-      url: AppSecrets.supabaseUrl,
-      anonKey: AppSecrets.supabaseAnonKey,
+  if (!AppConfig.isConfigured) {
+    throw StateError(
+      'Falta configurar SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para compilar la app.',
     );
-  } catch (e) {
-    debugPrint("Error inicializando Supabase: $e");
   }
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabasePublishableKey,
+  );
 
   try {
     // Inicializamos los listeners de notificaciones push
