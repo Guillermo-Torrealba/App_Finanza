@@ -31,7 +31,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           _PolicySection(
             title: 'Proveedores',
             body:
-                'Supabase presta autenticación, base de datos, almacenamiento y funciones de servidor. OpenAI procesa las solicitudes de IA que inicias. Si usas el bot financiero de WhatsApp, Meta procesa los mensajes y audios que envías; el bot consulta los movimientos asociados a tu teléfono y puede enviar a OpenAI la pregunta y campos mínimos de movimientos para responder. Firebase Cloud Messaging entrega notificaciones si las habilitas. Cada proveedor puede procesar datos para prestar su servicio conforme a sus condiciones y políticas.',
+                'Supabase presta autenticación, base de datos, almacenamiento y funciones de servidor. OpenAI procesa las solicitudes de IA que inicias. Si usas el bot financiero de WhatsApp, Meta procesa los mensajes y audios que envías; el servicio envía audios a OpenAI para transcribirlos y puede enviar texto escrito o transcrito para interpretar movimientos. Para responder preguntas envía la pregunta, datos de movimientos (fecha, tipo, concepto, monto y categoría) y resúmenes agregados. El contexto técnico no incluye deliberadamente tu teléfono, cuenta ni identificador de usuario, pero el texto, audio o concepto que compartas podrían incluir datos personales o sensibles. Firebase Cloud Messaging entrega notificaciones si las habilitas. Cada proveedor puede procesar datos para prestar su servicio conforme a sus condiciones y políticas.',
           ),
           _PolicySection(
             title: 'Almacenamiento de boletas: pendiente de cierre',
