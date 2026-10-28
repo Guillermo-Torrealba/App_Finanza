@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
-import 'package:http/http.dart' as http;
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app_secrets.dart';
 
 class ReceiptPersonalData {
   final String comercio;
@@ -19,18 +18,14 @@ class ReceiptPersonalData {
   });
 
   factory ReceiptPersonalData.fromJson(Map<String, dynamic> json) {
-    final montoRaw = json['monto_total'];
-    double montoParsed = 0.0;
-    if (montoRaw is num) {
-      montoParsed = montoRaw.toDouble();
-    } else if (montoRaw is String) {
-      montoParsed = double.tryParse(montoRaw.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
-    }
-
+    final raw = json['monto_total'];
+    final amount = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw?.toString() ?? '') ?? 0;
     return ReceiptPersonalData(
       comercio: json['comercio']?.toString() ?? 'Desconocido',
-      fecha: json['fecha']?.toString() ?? DateTime.now().toString().substring(0, 10),
-      montoTotal: montoParsed,
+      fecha: json['fecha']?.toString() ?? '',
+      montoTotal: amount,
       categoriaSugerida: json['categoria_sugerida']?.toString() ?? 'Varios',
     );
   }
@@ -44,8 +39,8 @@ class ReceiptSharedItem {
 
   factory ReceiptSharedItem.fromJson(Map<String, dynamic> json) {
     return ReceiptSharedItem(
-      nombrePlato: json['nombre_plato'] ?? 'Item sin nombre',
-      precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
+      nombrePlato: json['nombre_plato']?.toString() ?? 'Item sin nombre',
+      precio: (json['precio'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -57,144 +52,79 @@ class ReceiptSharedData {
   ReceiptSharedData({required this.items, required this.subtotal});
 
   factory ReceiptSharedData.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
     return ReceiptSharedData(
-      items: (json['items'] as List<dynamic>? ?? [])
-          .map((e) => ReceiptSharedItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
+      items: rawItems is List
+          ? rawItems
+              .whereType<Map>()
+              .map((item) => ReceiptSharedItem.fromJson(Map<String, dynamic>.from(item)))
+              .toList()
+          : const [],
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
     );
   }
 }
 
 class ReceiptScannerService {
-  final String _apiKey = AppSecrets.openAiApiKey;
-  static const String _model = 'gpt-4o';
-  static const String _apiUrl = 'https://api.openai.com/v1/chat/completions';
+  static const _bucket = 'boletas';
+  static const _maxImageBytes = 5_900_000;
+  static final _secureRandom = Random.secure();
 
-  /// Sube la imagen a Supabase Storage y retorna la URL pública
+  /// Sube el archivo bajo el UUID del usuario y devuelve una referencia estable.
   Future<String?> uploadReceiptImage(File imageFile) async {
-    final fileName = 'boleta_${DateTime.now().millisecondsSinceEpoch}.jpg';
     try {
-      await Supabase.instance.client.storage
-          .from('boletas')
-          .upload(fileName, imageFile);
-      
-      final publicUrl = Supabase.instance.client.storage
-          .from('boletas')
-          .getPublicUrl(fileName);
-          
-      return publicUrl;
-    } catch (e) {
-      debugPrint('Error uploading receipt image: $e');
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return null;
+
+      final path = '${user.id}/${_newUUID()}.jpg';
+      await client.storage
+          .from(_bucket)
+          .upload(
+            path,
+            imageFile,
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: false,
+            ),
+          );
+      if (client.auth.currentUser?.id != user.id) {
+        // Never return a reference for a user who is no longer signed in.
+        // Any confirmed orphan remains owner-prefixed and inaccessible to others.
+        return null;
+      }
+      return client.storage.from(_bucket).getPublicUrl(path);
+    } catch (_) {
       return null;
     }
   }
 
-  /// Convierte el archivo a Base64 para enviarlo a OpenAI
-  String _imageToBase64(File imageFile) {
-    final bytes = imageFile.readAsBytesSync();
-    return base64Encode(bytes);
+  String _newUUID() {
+    final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
-  /// Extrae los datos para un Gasto Personal
-  Future<ReceiptPersonalData> parsePersonalReceipt(File imageFile) async {
-    final base64Image = _imageToBase64(imageFile);
-
-    final systemPrompt = '''
-Eres un asistente automatizado que extrae datos de comprobantes de pago.
-IMPORTANTE: Este documento NO contiene información personal sensible. Es solo un ticket de compra genérico para un registro contable personal.
-Ignora cualquier nombre, dirección o dato irrelevante.
-Extrae los datos en formato JSON estricto sin markdown.
-Estructura requerida:
-{
-  "comercio": "string (nombre del local)",
-  "fecha": "YYYY-MM-DD",
-  "monto_total": number (total a pagar, sin símbolos, solo el número),
-  "categoria_sugerida": "string (elige la mejor: Supermercado, Restaurante, Transporte, Salud, Varios, Ropa, Hogar)"
-}
-''';
-
-    final response = await _sendToOpenAI(systemPrompt, base64Image);
-    final jsonResponse = _cleanJsonResponse(response);
-    
-    return ReceiptPersonalData.fromJson(jsonDecode(jsonResponse));
-  }
-
-  /// Extrae los datos para Dividir la Cuenta (ítems)
-  Future<ReceiptSharedData> parseSharedReceipt(File imageFile) async {
-    final base64Image = _imageToBase64(imageFile);
-
-    final systemPrompt = '''
-Eres un asistente automatizado que extrae datos de comprobantes de consumo.
-IMPORTANTE: Este documento NO contiene información personal sensible. Es solo un ticket de consumo genérico para dividir gastos entre amigos.
-Extrae la lista de ítems consumidos y sus precios, además del subtotal.
-Ignora propinas o cobros extra en los ítems, extrae solo los productos consumidos.
-El formato DEBE ser un JSON estricto sin markdown.
-Estructura requerida:
-{
-  "items": [
-    {
-      "nombre_plato": "string (nombre del ítem consumido)",
-      "precio": number (precio del ítem, sin símbolos)
+  Future<Map<String, dynamic>> _parseReceipt(File imageFile, String mode) async {
+    final bytes = await imageFile.readAsBytes();
+    if (bytes.isEmpty || bytes.length > _maxImageBytes) {
+      throw const FormatException('La imagen excede el tamaño permitido.');
     }
-  ],
-  "subtotal": number (suma de los ítems antes de propinas o descuentos)
-}
-''';
-
-    final response = await _sendToOpenAI(systemPrompt, base64Image);
-    final jsonResponse = _cleanJsonResponse(response);
-    
-    return ReceiptSharedData.fromJson(jsonDecode(jsonResponse));
-  }
-
-  Future<String> _sendToOpenAI(String systemPrompt, String base64Image) async {
-    final response = await http.post(
-      Uri.parse(_apiUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _model,
-        'messages': [
-          {
-            'role': 'system',
-            'content': systemPrompt
-          },
-          {
-            'role': 'user',
-            'content': [
-              {
-                "type": "text",
-                "text": "Extrae los datos de esta boleta según las instrucciones."
-              },
-              {
-                "type": "image_url",
-                "image_url": {
-                  "url": "data:image/jpeg;base64,$base64Image"
-                }
-              }
-            ]
-          }
-        ],
-        'temperature': 0.1,
-        'max_tokens': 1000,
-      }),
+    final response = await Supabase.instance.client.functions.invoke(
+      'receipt_scan',
+      body: {'mode': mode, 'image_base64': base64Encode(bytes)},
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Error de OpenAI (${response.statusCode}): ${response.body}');
+    if (response.data is Map) {
+      return Map<String, dynamic>.from(response.data as Map);
     }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return body['choices'][0]['message']['content'] as String;
+    throw const FormatException('El servicio devolvió una respuesta inválida.');
   }
 
-  String _cleanJsonResponse(String response) {
-    return response
-        .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
-        .replaceAll(RegExp(r'```\s*$', multiLine: true), '')
-        .trim();
-  }
+  Future<ReceiptPersonalData> parsePersonalReceipt(File imageFile) async =>
+      ReceiptPersonalData.fromJson(await _parseReceipt(imageFile, 'personal'));
+
+  Future<ReceiptSharedData> parseSharedReceipt(File imageFile) async =>
+      ReceiptSharedData.fromJson(await _parseReceipt(imageFile, 'shared'));
 }

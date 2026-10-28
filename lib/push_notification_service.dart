@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint("Notificación recibida en background: ${message.notification?.title}");
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage _) async {
+  // Notification content can contain private financial information.
 }
 
 class PushNotificationService {
@@ -38,7 +38,6 @@ class PushNotificationService {
 
     // 4. Escuchar mensajes cuando la App está abierta
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Notificación recibida en primer plano: ${message.notification?.title}');
       if (message.notification != null) {
         _localNotifications.show(
           message.hashCode,
@@ -89,7 +88,6 @@ class PushNotificationService {
         String? token = await _messaging.getToken(vapidKey: _vapidKey);
         
         if (token != null) {
-          debugPrint('Este es tu FCM Token: $token');
           await _guardarTokenEnSupabase(token);
           
           if (context.mounted) {
@@ -109,8 +107,8 @@ class PushNotificationService {
           }
       }
       return false;
-    } catch (e) {
-      debugPrint('Error configurando notificaciones: $e');
+    } catch (_) {
+      debugPrint('Error configurando notificaciones.');
       if (context.mounted) {
         String mensajeError = 'Error: No soportado en este dispositivo (Windows). PRUEBA EN WEB/IOS.';
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
@@ -140,9 +138,8 @@ class PushNotificationService {
           'fcm_token': token,
           'updated_at': DateTime.now().toIso8601String(),
         });
-        debugPrint('¡Token guardado exitosamente en Supabase!');
-      } catch (e) {
-        debugPrint('Error guardando token en Supabase: $e');
+      } catch (_) {
+        debugPrint('Error guardando token de notificaciones.');
       }
     }
   }

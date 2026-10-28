@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app_secrets.dart';
+import 'app_config.dart';
 
 Future<void> main() async {
   // Para que funcione el plugin de Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: AppSecrets.supabaseUrl,
-    anonKey: AppSecrets.supabaseAnonKey,
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabasePublishableKey,
   );
   
   final supabase = Supabase.instance.client;
@@ -21,9 +21,6 @@ Future<void> main() async {
       .order('fecha', ascending: false)
       .limit(50);
       
-  debugPrint('Last 50 movements:');
-  for (var r in response) {
-    debugPrint('${r['fecha']} | ${r['cuenta']} | ${r['item']} | ${r['categoria']} | ${r['tipo']} | ${r['monto']}');
-  }
+  debugPrint('Movimientos obtenidos: ${response.length}.');
   exit(0);
 }

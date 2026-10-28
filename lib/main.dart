@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'app_settings.dart';
-import 'app_secrets.dart';
+import 'app_config.dart';
+import 'secure_supabase_storage.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
@@ -19,23 +22,41 @@ Future<void> main() async {
     // Inicializamos Firebase con la configuración generada
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
-    debugPrint("Error inicializando Firebase: $e");
+    debugPrint("Error inicializando Firebase (${e.runtimeType}).");
   }
 
-  try {
-    await Supabase.initialize(
-      url: AppSecrets.supabaseUrl,
-      anonKey: AppSecrets.supabaseAnonKey,
+  if (!AppConfig.isConfigured) {
+    throw StateError(
+      'Falta configurar SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para compilar la app.',
     );
-  } catch (e) {
-    debugPrint("Error inicializando Supabase: $e");
   }
+  final useSecureMobileStorage = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+  final FlutterAuthClientOptions authOptions;
+  if (useSecureMobileStorage) {
+    final secureAuthStorage = SecureSupabaseStorage(
+      persistSessionKey:
+          'sb-${Uri.parse(AppConfig.supabaseUrl).host.split('.').first}-auth-token',
+    );
+    authOptions = FlutterAuthClientOptions(
+      localStorage: secureAuthStorage,
+      pkceAsyncStorage: secureAuthStorage,
+    );
+  } else {
+    authOptions = const FlutterAuthClientOptions();
+  }
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabasePublishableKey,
+    authOptions: authOptions,
+  );
 
   try {
     // Inicializamos los listeners de notificaciones push
     await PushNotificationService.init();
   } catch (e) {
-    debugPrint("Error inicializando notificaciones push: $e");
+    debugPrint("Error inicializando notificaciones push (${e.runtimeType}).");
   }
 
   late SettingsController settingsController;
@@ -44,7 +65,7 @@ Future<void> main() async {
     settingsController = SettingsController(preferences: preferences);
     await settingsController.init();
   } catch (e) {
-    debugPrint("Error inicializando configuraciones: $e");
+    debugPrint("Error inicializando configuraciones (${e.runtimeType}).");
   }
 
   runApp(AppFinanzas(settingsController: settingsController));
@@ -54,7 +75,6 @@ class AppFinanzas extends StatelessWidget {
   const AppFinanzas({super.key, required this.settingsController});
 
   final SettingsController settingsController;
-
 
   @override
   Widget build(BuildContext context) {
