@@ -15,6 +15,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'dart:ui';
 import 'dart:math';
 import 'package:shimmer/shimmer.dart';
+import 'package:crypto/crypto.dart';
 // speech_to_text removed – Windows plugin (beta) breaks native build.
 // Voice input gracefully disabled on unsupported platforms.
 
@@ -32,6 +33,7 @@ import 'receipt_image.dart';
 import 'divisor_cuenta_screen.dart';
 import 'gastos_pendientes_screen.dart';
 import 'privacy_policy_screen.dart';
+import 'app_config.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -9212,47 +9214,33 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   String _generarTokenAleatorio() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random.secure();
-    return String.fromCharCodes(
-      Iterable.generate(
-        32,
-        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
-      ),
-    );
+    return List<int>.generate(32, (_) => random.nextInt(256))
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Future<void> _mostrarConfiguracionApplePay() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    // Primero intentamos recuperar el token existente para no hacer múltiples
-    String token = '';
+    bool isConfigured = false;
     try {
       final res = await supabase
           .from('webhook_tokens')
-          .select('token')
+          .select('token_hash')
           .eq('user_id', user.id)
           .maybeSingle();
-
-      if (res != null) {
-        token = res['token'] as String;
-      } else {
-        token = _generarTokenAleatorio();
-        await supabase.from('webhook_tokens').insert({
-          'user_id': user.id,
-          'token': token,
-        });
-      }
+      if (!mounted || supabase.auth.currentUser?.id != user.id) return;
+      isConfigured = res != null;
     } catch (e) {
-      if (mounted) {
+      if (mounted && supabase.auth.currentUser?.id == user.id) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Error'),
             content: const Text(
-              'Asegúrate de haber corrido el script SQL en Supabase para crear la tabla webhook_tokens antes de configurar esto.',
+              'No se pudo consultar la configuración segura del Atajo. Actualiza la base de datos antes de usar esta opción.',
             ),
             actions: [
               TextButton(
@@ -9266,65 +9254,149 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       return;
     }
 
-    final endpointUrl =
-        'https://xycshsxqcfypgffnqmxb.supabase.co/rest/v1/rpc/registrar_gasto_webhook';
+    final endpointUrl = Uri.parse(AppConfig.supabaseUrl)
+        .resolve('/functions/v1/apple_pay_webhook')
+        .toString();
+    String? generatedToken;
+    String? errorMessage;
+    bool isSaving = false;
 
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Atajo de Apple Pay'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Sigue estas instrucciones en tu iPhone:\n'
-                '1. Abre la app "Atajos" (Shortcuts) y ve a la pestaña "Automatización".\n'
-                '2. Presiona "+" y elige "Transacción". Selecciona tu tarjeta y elige "Cuando el pago se realice".\n'
-                '3. Agrega la acción "Obtener contenido de URL".\n'
-                '4. Pega esta URL en el campo URL:',
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                endpointUrl,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => PopScope(
+          canPop: !isSaving,
+          child: AlertDialog(
+          title: const Text('Atajo de Apple Pay'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'En Atajos crea una automatización de transacción y agrega Obtener contenido de URL. Usa POST, esta URL y un cuerpo JSON.',
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '5. Expande las opciones de la acción y cambia el Método a "POST".\n'
-                '6. Define la Cabecera (Header):\n'
-                '   - Clave: apikey\n'
-                '   - Texto: (tu clave anon pública de Supabase)\n'
-                '7. En "Cuerpo de la solicitud" selecciona JSON y agrega 3 valores:\n'
-                '   - p_token (Texto) : Tu Token Secreto\n'
-                '   - p_monto (Número) : Selecciona la variable "Importe"\n'
-                '   - p_comercio (Texto) : Selecciona la variable "Comerciante"\n'
-                '\n8. Agrega una acción final "Mostrar Notificación" y escribe: "¡Gasto en Apple Pay guardado en A revisar!"\n\n'
-                'Tu Token Secreto es:',
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                token,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Colors.redAccent,
+                const SizedBox(height: 8),
+                SelectableText(endpointUrl),
+                const SizedBox(height: 8),
+                const Text('Encabezado apikey:'),
+                SelectableText(AppConfig.supabasePublishableKey),
+                const SizedBox(height: 8),
+                const Text(
+                  'Cuerpo JSON:\n'
+                  'token: token generado\n'
+                  'monto: variable Importe\n'
+                  'comercio: variable Comerciante',
                 ),
+                const SizedBox(height: 8),
+                if (isConfigured && generatedToken == null)
+                  const Text(
+                    'Ya existe un token y el servidor no permite recuperarlo. Rotarlo invalida el anterior; actualiza el Atajo inmediatamente.',
+                  ),
+                if (generatedToken != null) ...[
+                  const Text(
+                    'Copia ahora el token. Solo se muestra en esta pantalla y no se guarda en claro.',
+                  ),
+                  SelectableText(
+                    generatedToken!,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ],
+                if (errorMessage != null)
+                  Text(errorMessage!, style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+            FilledButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      setDialogState(() => isSaving = true);
+                      try {
+                        if (isConfigured) {
+                          final confirmed = await showDialog<bool>(
+                            context: ctx,
+                            builder: (confirmContext) => AlertDialog(
+                              title: const Text('Rotar token del Atajo'),
+                              content: const Text(
+                                'El token anterior dejará de funcionar. Actualiza la URL y el cuerpo JSON del Atajo inmediatamente.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, true),
+                                  child: const Text('Rotar'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                        }
+                        if (supabase.auth.currentUser?.id != user.id) {
+                          throw StateError('La sesión cambió');
+                        }
+
+                        final newToken = _generarTokenAleatorio();
+                        final tokenHash =
+                            sha256.convert(utf8.encode(newToken)).toString();
+                        await supabase.from('webhook_tokens').upsert(
+                          {
+                            'user_id': user.id,
+                            'token_hash': tokenHash,
+                          },
+                          onConflict: 'user_id',
+                        );
+                        if (!ctx.mounted || !mounted) return;
+                        if (supabase.auth.currentUser?.id != user.id) {
+                          setDialogState(() {
+                            errorMessage =
+                                'La sesión cambió. Vuelve a abrir la configuración y revisa el token.';
+                          });
+                          return;
+                        }
+                        setDialogState(() {
+                          isConfigured = true;
+                          generatedToken = newToken;
+                          errorMessage = null;
+                        });
+                      } catch (_) {
+                        if (!ctx.mounted || !mounted) return;
+                        setDialogState(() {
+                          errorMessage =
+                              'No se pudo guardar el token. Inténtalo de nuevo.';
+                        });
+                      } finally {
+                        if (ctx.mounted && mounted) {
+                          setDialogState(() => isSaving = false);
+                        }
+                      }
+                    },
+              child: Text(
+                isSaving
+                    ? 'Guardando…'
+                    : isConfigured
+                        ? 'Rotar token'
+                        : 'Generar token',
               ),
-            ],
+            ),
+          ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
-          ),
-        ],
       ),
     );
   }
