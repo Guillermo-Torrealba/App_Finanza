@@ -19,7 +19,7 @@ Future<void> main() async {
     // Inicializamos Firebase con la configuración generada
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
-    debugPrint("Error inicializando Firebase: $e");
+    debugPrint("Error inicializando Firebase (${e.runtimeType}).");
   }
 
   if (!AppConfig.isConfigured) {
@@ -36,7 +36,7 @@ Future<void> main() async {
     // Inicializamos los listeners de notificaciones push
     await PushNotificationService.init();
   } catch (e) {
-    debugPrint("Error inicializando notificaciones push: $e");
+    debugPrint("Error inicializando notificaciones push (${e.runtimeType}).");
   }
 
   late SettingsController settingsController;
@@ -45,7 +45,7 @@ Future<void> main() async {
     settingsController = SettingsController(preferences: preferences);
     await settingsController.init();
   } catch (e) {
-    debugPrint("Error inicializando configuraciones: $e");
+    debugPrint("Error inicializando configuraciones (${e.runtimeType}).");
   }
 
   runApp(AppFinanzas(settingsController: settingsController));

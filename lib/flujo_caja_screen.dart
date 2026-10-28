@@ -223,7 +223,7 @@ class _FlujoCajaScreenState extends State<FlujoCajaScreen> {
 
       _calcularFlujoYCaja();
     } catch (e) {
-      debugPrint('Error cargando datos de flujo de caja: $e');
+      debugPrint('Error cargando datos de flujo de caja (${e.runtimeType}).');
     } finally {
       if (mounted) {
         setState(() => _cargando = false);

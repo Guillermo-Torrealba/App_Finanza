@@ -6,9 +6,14 @@ import 'pantalla_principal.dart';
 import 'app_settings.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.settingsController});
+  const LoginScreen({
+    super.key,
+    required this.settingsController,
+    this.initialMessage,
+  });
 
   final SettingsController settingsController;
+  final String? initialMessage;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -22,6 +27,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _isSignUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final message = widget.initialMessage;
+    if (message != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      });
+    }
+  }
 
   Future<void> _submit() async {
     setState(() {
@@ -55,12 +74,10 @@ class _LoginScreenState extends State<LoginScreen> {
               'user_id': user.id, // El ID que acaba de crear Supabase
               'celular': cleanPhone, // El número limpio
             });
-            debugPrint(
-              "✅ ¡Bot vinculado con éxito para el usuario ${user.email}!",
-            );
+            debugPrint("Vinculación con el bot completada.");
           } catch (botError) {
             debugPrint(
-              "⚠️ Error vinculando bot (pero el usuario se creó): $botError",
+              "No se pudo vincular el bot (${botError.runtimeType}); la cuenta sí se creó.",
             );
             // No detenemos el flujo si esto falla, pero queda en consola
           }
@@ -152,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
               if (_isSignUp) ...[
                 TextField(
-textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.done,
                   controller: _nameController,
                   decoration: const InputDecoration(
                     labelText: 'Nombre Completo',
@@ -163,7 +180,7 @@ textInputAction: TextInputAction.done,
                 ),
                 const SizedBox(height: 16),
                 TextField(
-textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.done,
                   controller: _phoneController,
                   decoration: const InputDecoration(
                     labelText: 'Teléfono (Ej: 569...)', // Recordatorio visual
@@ -176,7 +193,7 @@ textInputAction: TextInputAction.done,
                 const SizedBox(height: 16),
               ],
               TextField(
-textInputAction: TextInputAction.done,
+                textInputAction: TextInputAction.done,
                 controller: _emailController,
                 decoration: const InputDecoration(
                   labelText: 'Correo electrónico',
@@ -188,7 +205,7 @@ textInputAction: TextInputAction.done,
               ),
               const SizedBox(height: 16),
               TextField(
-textInputAction: TextInputAction.done,
+                textInputAction: TextInputAction.done,
                 controller: _passwordController,
                 decoration: const InputDecoration(
                   labelText: 'Contraseña',

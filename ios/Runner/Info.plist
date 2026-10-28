@@ -31,11 +31,11 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Usamos Face ID para desbloquear tu app de finanzas.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Necesitamos acceso al micrófono al grabar videos.</string>
+	<string>El micrófono se usa para dictar movimientos financieros con reconocimiento local en iOS compatible.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Necesitamos acceso a tus fotos para que puedas elegir una boleta desde tu galería.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Necesitamos reconocimiento de voz para que dictes tus gastos.</string>
+	<string>El reconocimiento local de iOS convierte tu dictado en texto; el audio no se envía a los servidores de la app.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

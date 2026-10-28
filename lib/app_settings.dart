@@ -479,8 +479,8 @@ class SettingsController extends ChangeNotifier {
       );
       // Fire-and-forget sync
       syncToCloud();
-    } catch (e, stack) {
-      debugPrint('Error saving settings: $e\n$stack');
+    } catch (e, _) {
+      debugPrint('Error saving settings (${e.runtimeType}).');
     }
   }
 
@@ -530,8 +530,8 @@ class SettingsController extends ChangeNotifier {
     _settings = updated;
     try {
       notifyListeners();
-    } catch (e, stack) {
-      debugPrint('Error in notifyListeners (UI Rebuild?): $e\n$stack');
+    } catch (e, _) {
+      debugPrint('Error in notifyListeners (${e.runtimeType}).');
     }
     _saveSettings(); // Fire-and-forget inside
   }

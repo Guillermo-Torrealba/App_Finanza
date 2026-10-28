@@ -31,6 +31,7 @@ import 'receipt_scanner_service.dart';
 import 'receipt_image.dart';
 import 'divisor_cuenta_screen.dart';
 import 'gastos_pendientes_screen.dart';
+import 'privacy_policy_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -78,6 +79,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
 
   bool _bloqueada = false;
   bool _desbloqueando = false;
+  bool _eliminandoCuenta = false;
   bool _alertasExpandidas = true;
   DateTime? _pausedAt;
   List<String> _cuentasSeleccionadas = [];
@@ -315,7 +317,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             .toList();
       }
     } catch (e) {
-      debugPrint('Error leyendo cache: $e');
+      debugPrint('Error leyendo cache (${e.runtimeType}).');
     }
   }
 
@@ -1794,7 +1796,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         });
       }
     } catch (e) {
-      debugPrint('Error AI proactive alerts: $e');
+      debugPrint('Error AI proactive alerts (${e.runtimeType}).');
     }
   }
 
@@ -1915,7 +1917,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         _mostrarResumenSemanal(summary, datosSemana);
       }
     } catch (e) {
-      debugPrint('Error weekly summary: $e');
+      debugPrint('Error weekly summary (${e.runtimeType}).');
     }
   }
 
@@ -2362,7 +2364,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         }),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            debugPrint('Realtime Stream Error: ${snapshot.error}');
+            debugPrint(
+              'Realtime Stream Error (${snapshot.error?.runtimeType}).',
+            );
             final isDark = Theme.of(context).brightness == Brightness.dark;
             return Center(
               child: Column(
@@ -2843,7 +2847,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     side: BorderSide(
-                                      color: Colors.purple.shade800.withAlpha(120),
+                                      color: Colors.purple.shade800.withAlpha(
+                                        120,
+                                      ),
                                     ),
                                   ),
                                   title: Row(
@@ -2856,7 +2862,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                       const Flexible(
                                         child: Text(
                                           'Liquidez Proyectada',
-                                          style: TextStyle(color: Colors.white, fontSize: 16),
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -2874,7 +2883,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   actions: [
                                     TextButton(
                                       onPressed: () => Navigator.pop(context),
-                                      child: const Text('Entendido', style: TextStyle(color: Colors.white)),
+                                      child: const Text(
+                                        'Entendido',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -7064,6 +7076,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () async {
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
                     await supabase.auth.signOut();
                     if (context.mounted) {
                       Navigator.of(context).pushReplacement(
@@ -7089,14 +7103,39 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 ),
                 const SizedBox(height: 16),
                 const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('Política de privacidad'),
+                  subtitle: const Text(
+                    'Datos utilizados y cómo solicitar eliminación',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
+                    );
+                  },
+                ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red.shade900,
                     side: BorderSide(color: Colors.red.shade900),
                   ),
-                  onPressed: _eliminarCuentaUsuario,
-                  icon: const Icon(Icons.person_remove_outlined),
-                  label: const Text('Eliminar cuenta permanentemente'),
+                  onPressed: _eliminandoCuenta ? null : _eliminarCuentaUsuario,
+                  icon: _eliminandoCuenta
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.person_remove_outlined),
+                  label: Text(
+                    _eliminandoCuenta
+                        ? 'Eliminando cuenta…'
+                        : 'Eliminar cuenta permanentemente',
+                  ),
                 ),
               ],
             ),
@@ -7164,7 +7203,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       }),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          debugPrint('Metas Stream Error: ${snapshot.error}');
+          debugPrint('Metas Stream Error (${snapshot.error?.runtimeType}).');
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -9375,6 +9414,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   }
 
   Future<void> _eliminarCuentaUsuario() async {
+    if (_eliminandoCuenta) return;
     final ok = await _confirmar(
       titulo: 'Eliminar Cuenta Permanentemente',
       mensaje:
@@ -9391,42 +9431,62 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
       return;
     }
 
+    if (supabase.auth.currentUser == null) {
+      _mostrarSnack('Inicia sesión nuevamente para eliminar la cuenta.');
+      return;
+    }
+
+    setState(() => _eliminandoCuenta = true);
     try {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      // Intentar borrar todos los datos vinculados (si RLS lo permite, normalmente el user_id está en RLS)
-      await supabase.from('gastos').delete().eq('user_id', userId);
-      try {
-        await supabase.from('recurrentes').delete().eq('user_id', userId);
-        await supabase.from('metas_ahorro').delete().eq('user_id', userId);
-      } catch (_) {
-        // ignora si estas tablas no existen
-      }
-
-      // Resetear configuraciones locales
-      await widget.settingsController.resetSettings();
-
-      // Llamar al backend para eliminar el auth user si está configurado
-      try {
-        await supabase.rpc('delete_user');
-      } catch (_) {
-        // En algunos setups no hay un call delete_user definido.
-      }
-
-      await supabase.auth.signOut();
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                LoginScreen(settingsController: widget.settingsController),
-          ),
+      final response = await supabase.functions.invoke('delete_account');
+      if (response.status < 200 ||
+          response.status >= 300 ||
+          response.data is! Map ||
+          response.data['ok'] != true) {
+        throw const FormatException(
+          'La solicitud de eliminación no se confirmó.',
         );
       }
-    } catch (e) {
-      _mostrarSnack('Error al eliminar cuenta: $e');
+    } catch (_) {
+      if (mounted) {
+        _mostrarSnack(
+          'No se confirmó la eliminación. La sesión sigue abierta; inténtalo nuevamente.',
+        );
+        setState(() => _eliminandoCuenta = false);
+      }
+      return;
     }
+
+    // The server has confirmed deletion. Clear local-only preferences and PIN,
+    // then remove this device's session even if remote revocation is unavailable.
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    var localCleanupFailed = false;
+    try {
+      await widget.settingsController.resetSettings();
+      await widget.settingsController.clearPin();
+    } catch (_) {
+      localCleanupFailed = true;
+    }
+    try {
+      // gotrue removes the local session before its best-effort server request.
+      await supabase.auth.signOut(scope: SignOutScope.local);
+    } catch (_) {
+      // The account is already deleted; the local session was cleared first.
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => LoginScreen(
+          settingsController: widget.settingsController,
+          initialMessage: localCleanupFailed
+              ? 'Cuenta eliminada. No se pudieron borrar todas las preferencias locales de este dispositivo.'
+              : 'Tu cuenta y los datos asociados fueron eliminados.',
+        ),
+      ),
+      (_) => false,
+    );
   }
 
   Future<void> _mostrarDialogoMigracionCredito() async {
@@ -10183,7 +10243,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    'Escribe o dicta tu gasto en lenguaje natural',
+                                    'El dictado local requiere iOS; el texto se envía al pulsar analizar',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF888888),
@@ -10360,10 +10420,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
             }
 
             Future<void> toggleListening() async {
-              if (Platform.isWindows || Platform.isLinux) {
+              if (!Platform.isIOS) {
                 setStateSB(
                   () => errorMsg =
-                      'Entrada por voz no soportada en este sistema.',
+                      'El dictado local está disponible solo en iOS compatible. Puedes escribir el movimiento.',
                 );
                 return;
               }
@@ -10375,17 +10435,20 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                 bool available = await speech.initialize(
                   onStatus: (status) {
                     if (status == 'done' || status == 'notListening') {
-                      setStateSB(() => isListening = false);
-                      if (quickController.text.isNotEmpty) {
-                        procesarTexto(quickController.text);
-                      }
+                      setStateSB(() {
+                        isListening = false;
+                        if (quickController.text.isNotEmpty) {
+                          errorMsg =
+                              'Dictado listo. Revisa el texto y pulsa el botón de análisis para enviarlo a la IA.';
+                        }
+                      });
                     }
                   },
                   onError: (errorNotification) {
                     setStateSB(() {
                       isListening = false;
                       errorMsg =
-                          'Error de micrófono: ${errorNotification.errorMsg}';
+                          'No se pudo usar el dictado local. Puedes escribir el movimiento.';
                     });
                   },
                 );
@@ -10401,6 +10464,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                         quickController.text = result.recognizedWords;
                       });
                     },
+                    listenOptions: SpeechListenOptions(
+                      onDevice: true,
+                      listenMode: ListenMode.dictation,
+                      cancelOnError: true,
+                    ),
                   );
                 } else {
                   setStateSB(
@@ -10509,7 +10577,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Escribe o dicta tu gasto. Ej: "15 lucas en uber ayer"',
+                          'El dictado local requiere iOS. Revisa el texto antes de enviarlo a la IA.',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark
@@ -12406,7 +12474,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
                                           alignment: Alignment.center,
                                           children: [
                                             InteractiveViewer(
-                                              child: ReceiptImage(reference: boletaUrl!),
+                                              child: ReceiptImage(
+                                                reference: boletaUrl!,
+                                              ),
                                             ),
                                             Positioned(
                                               top: 40,
@@ -14370,7 +14440,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         }
       }
     } catch (e) {
-      debugPrint('Error chequeando recurrentes: $e');
+      debugPrint('Error chequeando recurrentes (${e.runtimeType}).');
     }
     _cargarRecurrentes();
   }
@@ -14390,7 +14460,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
         });
       }
     } catch (e) {
-      debugPrint('Error cargando recurrentes: $e');
+      debugPrint('Error cargando recurrentes (${e.runtimeType}).');
     }
   }
 }

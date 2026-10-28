@@ -21,9 +21,6 @@ Future<void> main() async {
       .order('fecha', ascending: false)
       .limit(50);
       
-  debugPrint('Last 50 movements:');
-  for (var r in response) {
-    debugPrint('${r['fecha']} | ${r['cuenta']} | ${r['item']} | ${r['categoria']} | ${r['tipo']} | ${r['monto']}');
-  }
+  debugPrint('Movimientos obtenidos: ${response.length}.');
   exit(0);
 }
