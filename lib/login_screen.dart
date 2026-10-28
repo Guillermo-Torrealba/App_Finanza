@@ -23,7 +23,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
 
   bool _isLoading = false;
   bool _isSignUp = false;
@@ -50,43 +49,18 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_isSignUp) {
         // 1. REGISTRO EN SUPABASE AUTH
-        final AuthResponse res = await Supabase.instance.client.auth.signUp(
+        await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           data: {
             'full_name': _nameController.text.trim(),
-            'phone': _phoneController.text.trim(),
           },
         );
-
-        // 2. VINCULACIÓN AUTOMÁTICA CON EL BOT (NUEVO) 🤖🔗
-        // Si el registro fue exitoso y tenemos usuario y teléfono...
-        final user = res.user;
-        final rawPhone = _phoneController.text.trim();
-
-        if (user != null && rawPhone.isNotEmpty) {
-          // Limpieza básica del número (quita espacios, guiones y signos +)
-          // Para asegurar que coincida con lo que ve WhatsApp (solo números)
-          final cleanPhone = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-
-          try {
-            await Supabase.instance.client.from('usuarios_bot').upsert({
-              'user_id': user.id, // El ID que acaba de crear Supabase
-              'celular': cleanPhone, // El número limpio
-            });
-            debugPrint("Vinculación con el bot completada.");
-          } catch (botError) {
-            debugPrint(
-              "No se pudo vincular el bot (${botError.runtimeType}); la cuenta sí se creó.",
-            );
-            // No detenemos el flujo si esto falla, pero queda en consola
-          }
-        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Cuenta creada y vinculada. Inicia sesión.'),
+              content: Text('Cuenta creada. Inicia sesión.'),
             ),
           );
           setState(() {
@@ -144,7 +118,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
@@ -177,18 +150,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: Icon(Icons.person),
                   ),
                   textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  textInputAction: TextInputAction.done,
-                  controller: _phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Teléfono (Ej: 569...)', // Recordatorio visual
-                    hintText: '56912345678',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
-                  ),
-                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 16),
               ],

@@ -26,12 +26,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
           _PolicySection(
             title: 'Funciones de inteligencia artificial',
             body:
-                'Cuando eliges una función de IA, la app puede enviar a Supabase y OpenAI el texto que escribiste, categorías y cuentas disponibles, un resumen financiero agregado o la imagen completa de una boleta, según la función utilizada. El análisis de voz en iOS solicita reconocimiento local; la transcripción queda en la pantalla y no se envía a la IA hasta que pulses el botón de análisis. Si iOS no permite reconocimiento local, el dictado falla y puedes escribir el texto.',
+                'Cuando eliges una función de IA, la app puede enviar a Supabase y OpenAI el texto que escribiste, categorías y cuentas disponibles, campos de movimientos (fecha, concepto, monto y categoría), un resumen financiero agregado o la imagen completa de una boleta, según la función. El análisis de voz en iOS solicita reconocimiento local; la transcripción queda en la pantalla y no se envía a la IA hasta que pulses el botón de análisis. Si iOS no permite reconocimiento local, el dictado falla y puedes escribir el texto.',
           ),
           _PolicySection(
             title: 'Proveedores',
             body:
-                'Supabase presta autenticación, base de datos, almacenamiento y funciones de servidor. OpenAI procesa las solicitudes de IA que inicias. Firebase Cloud Messaging entrega notificaciones si las habilitas. Cada proveedor puede procesar datos para prestar su servicio conforme a sus condiciones y políticas.',
+                'Supabase presta autenticación, base de datos, almacenamiento y funciones de servidor. OpenAI procesa las solicitudes de IA que inicias. Si usas el bot financiero de WhatsApp, Meta procesa los mensajes y audios que envías; el bot consulta los movimientos asociados a tu teléfono y puede enviar a OpenAI la pregunta y campos mínimos de movimientos para responder. Firebase Cloud Messaging entrega notificaciones si las habilitas. Cada proveedor puede procesar datos para prestar su servicio conforme a sus condiciones y políticas.',
           ),
           _PolicySection(
             title: 'Almacenamiento de boletas: pendiente de cierre',

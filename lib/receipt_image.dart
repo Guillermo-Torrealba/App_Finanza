@@ -36,7 +36,10 @@ class _ReceiptImageState extends State<ReceiptImage> {
     }
     final uri = Uri.tryParse(reference);
     final project = Uri.tryParse(AppConfig.supabaseUrl);
-    if (uri == null || project == null || uri.scheme != 'https' || uri.origin != project.origin) {
+    if (uri == null ||
+        project == null ||
+        uri.scheme != 'https' ||
+        uri.origin != project.origin) {
       throw const FormatException('La boleta no pertenece a este proyecto.');
     }
     final segments = uri.pathSegments;
@@ -58,9 +61,15 @@ class _ReceiptImageState extends State<ReceiptImage> {
         throw const FormatException('La ruta de boleta no es válida.');
       }
       final path = objectSegments.join('/');
-      return Supabase.instance.client.storage
+      final signedUrl = await Supabase.instance.client.storage
           .from('boletas')
           .createSignedUrl(path, 600);
+      if (Supabase.instance.client.auth.currentUser?.id != user.id) {
+        throw const FormatException(
+          'La sesión cambió mientras se abría la boleta.',
+        );
+      }
+      return signedUrl;
     }
 
     // Flat public URLs are legacy references. Keep them readable only during

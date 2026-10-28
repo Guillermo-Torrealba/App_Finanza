@@ -78,7 +78,9 @@ class ReceiptScannerService {
       if (user == null) return null;
 
       final path = '${user.id}/${_newUUID()}.jpg';
-      await client.storage.from(_bucket).upload(
+      await client.storage
+          .from(_bucket)
+          .upload(
             path,
             imageFile,
             fileOptions: const FileOptions(
@@ -86,6 +88,11 @@ class ReceiptScannerService {
               upsert: false,
             ),
           );
+      if (client.auth.currentUser?.id != user.id) {
+        // Never return a reference for a user who is no longer signed in.
+        // Any confirmed orphan remains owner-prefixed and inaccessible to others.
+        return null;
+      }
       return client.storage.from(_bucket).getPublicUrl(path);
     } catch (_) {
       return null;

@@ -16,7 +16,9 @@ Si configuras la integración bancaria opcional, Google Apps Script procesa los 
 
 Supabase proporciona autenticación, base de datos, almacenamiento y funciones de servidor. Firebase Cloud Messaging entrega notificaciones cuando las habilitas. Google procesa Gmail y Apps Script cuando activas esa integración.
 
-Cuando solicitas una función de inteligencia artificial, la app envía a OpenAI a través de funciones autenticadas de Supabase los datos necesarios: texto que escribiste, categorías y cuentas disponibles, resúmenes financieros agregados o la imagen completa de una boleta, según la función. No se incluye la clave privada de OpenAI en el cliente.
+Cuando solicitas una función de inteligencia artificial, la app envía a OpenAI a través de funciones autenticadas de Supabase los datos necesarios: texto que escribiste, categorías y cuentas disponibles, campos de movimientos (fecha, concepto, monto y categoría), resúmenes financieros agregados o la imagen completa de una boleta, según la función. No se incluye la clave privada de OpenAI en el cliente.
+
+Si usas el bot financiero de WhatsApp asociado, Meta procesa los mensajes y audios que envías. El bot busca los movimientos vinculados a tu número y, para responder preguntas, comparte con OpenAI la pregunta y los campos mínimos de movimientos (fecha, concepto, monto y categoría); no envía el detalle libre, la cuenta ni el identificador de usuario en ese contexto.
 
 En iOS compatible, el dictado solicita reconocimiento en el dispositivo. El audio no se envía a Apple ni a los servidores de la app; si el reconocimiento local no está disponible, el dictado falla. La transcripción queda en pantalla y solo se envía a la IA cuando confirmas la acción de análisis.
 

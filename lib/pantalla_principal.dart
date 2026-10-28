@@ -9214,7 +9214,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal>
   String _generarTokenAleatorio() {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
+    final random = Random.secure();
     return String.fromCharCodes(
       Iterable.generate(
         32,

@@ -28,3 +28,18 @@ Las subidas nuevas usan `boletas/<UUID del usuario>/<UUID del archivo>.jpg`.
 La política actual de producción rechaza las subidas a raíz que hace la app
 Flutter antigua. El bucket todavía es público para lectura hasta desplegar una
 versión compatible y migrar los registros y archivos históricos.
+
+## Sesión móvil
+
+En iOS y Android, las sesiones Supabase y los verificadores PKCE se guardan en
+`flutter_secure_storage` (Keychain en iOS y almacenamiento Android cifrado).
+Al primer inicio, la app copia las credenciales v2 existentes desde
+`SharedPreferences`, verifica la copia segura y luego elimina la copia antigua.
+Si no puede verificar la migración, el cliente falla al iniciar Auth en vez de
+continuar escribiendo una sesión en texto claro. Android excluye el archivo de
+Auth de respaldos y transferencias de dispositivo.
+
+Web y escritorio conservan el almacenamiento predeterminado de Supabase; no
+deben tratarse como almacenamiento seguro de una app móvil ni desplegarse con
+un secreto de servidor. El bucket público también sigue siendo un bloqueo de
+publicación hasta completar el cutover y conciliar las boletas históricas.

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,6 +8,7 @@ import 'firebase_options.dart';
 
 import 'app_settings.dart';
 import 'app_config.dart';
+import 'secure_supabase_storage.dart';
 import 'login_screen.dart';
 import 'pantalla_principal.dart';
 import 'onboarding_screen.dart';
@@ -27,9 +30,26 @@ Future<void> main() async {
       'Falta configurar SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para compilar la app.',
     );
   }
+  final useSecureMobileStorage = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+  final FlutterAuthClientOptions authOptions;
+  if (useSecureMobileStorage) {
+    final secureAuthStorage = SecureSupabaseStorage(
+      persistSessionKey:
+          'sb-${Uri.parse(AppConfig.supabaseUrl).host.split('.').first}-auth-token',
+    );
+    authOptions = FlutterAuthClientOptions(
+      localStorage: secureAuthStorage,
+      pkceAsyncStorage: secureAuthStorage,
+    );
+  } else {
+    authOptions = const FlutterAuthClientOptions();
+  }
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabasePublishableKey,
+    authOptions: authOptions,
   );
 
   try {
@@ -55,7 +75,6 @@ class AppFinanzas extends StatelessWidget {
   const AppFinanzas({super.key, required this.settingsController});
 
   final SettingsController settingsController;
-
 
   @override
   Widget build(BuildContext context) {
