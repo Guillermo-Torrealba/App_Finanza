@@ -46,7 +46,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           _PolicySection(
             title: 'Contacto y publicación',
             body:
-                'El correo o canal de contacto del responsable y la URL pública de esta política están pendientes de definir. Deben completarse antes de enviar la app a App Store.',
+                'Para consultas de privacidad o soporte: gntorrealbam@gmail.com. La URL pública de esta política aún debe publicarse y agregarse a App Store Connect antes del envío.',
           ),
         ],
       ),
